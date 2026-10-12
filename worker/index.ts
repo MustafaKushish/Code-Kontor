@@ -16,6 +16,9 @@ import {
   validateEmployee, type Employee,
 } from "../shared/accounting";
 import { decryptField, encryptField, isEncrypted } from "./crypto";
+import { billingEnabled, cancelForDeletion, countUsers, createCheckout, createPortal, getSubscription, handleStripeEvent, syncSubscription, trialEnd } from "./billing";
+import { verifyWebhook } from "./stripe";
+import { daysLeft, hasAccess, quote } from "../shared/billing";
 import { newRecoveryCodes, newTotpSecret, normalizeRecoveryCode, otpauthUrl, verifyTotp } from "./totp";
 import type { CompanyProfile } from "../shared/company";
 
@@ -35,6 +38,10 @@ export interface Env {
   MAIL_FROM?: string;
   /** Schlüssel für zusätzlich verschlüsselte Felder (IBAN, Zwei-Faktor). Wird beim Veröffentlichen einmalig erzeugt. */
   DATA_KEY?: string;
+  /** Stripe für das Abo (sk_test_… oder sk_live_…). Ohne Schlüssel gibt es keine Bezahlung und keine Sperre. */
+  STRIPE_SECRET_KEY?: string;
+  /** Signatur-Geheimnis des Stripe-Webhooks (whsec_…). */
+  STRIPE_WEBHOOK_SECRET?: string;
 }
 
 type Role = "owner" | "admin" | "staff";
@@ -211,6 +218,7 @@ app.post("/auth/register", async (c) => {
     c.env.PLATFORM_DB.prepare(
       "INSERT INTO users (id, tenant_id, email, name, role, password_hash) VALUES (?, ?, ?, ?, 'owner', ?)",
     ).bind(userId, tenantId, email, name, await hashPassword(body.password as string)),
+    c.env.PLATFORM_DB.prepare("INSERT INTO subscriptions (tenant_id, status, trial_ends_at) VALUES (?, 'trialing', ?)").bind(tenantId, trialEnd()),
   ]);
 
   // Eigene Datenbank des Kunden anlegen und mit dem Firmennamen vorbelegen
@@ -375,8 +383,25 @@ app.post("/auth/invite/:token", async (c) => {
     c.env.PLATFORM_DB.prepare("DELETE FROM invites WHERE id = ?").bind(invite.id),
   ]);
   audit(c, invite.tenantId, { id: userId, name }, "inviteAccepted", { email: invite.email, role: invite.role });
+  c.executionCtx.waitUntil(tenantDb(c.env, invite.tenantId).installedApps().then((apps) => syncSubscription(c.env, invite.tenantId, apps)));
   await startSession(c, userId);
   return c.json({ ok: true }, 201);
+});
+
+// ---------- Stripe meldet Zahlungen (ohne Anmeldung, mit Signatur) ----------
+
+app.post("/billing/webhook", async (c) => {
+  const secret = c.env.STRIPE_WEBHOOK_SECRET;
+  if (!secret) return fail(c, "notFound", 404);
+  const payload = await c.req.text();
+  if (!(await verifyWebhook(payload, c.req.header("Stripe-Signature"), secret))) return fail(c, "forbidden", 400);
+  try {
+    await handleStripeEvent(c.env, JSON.parse(payload));
+  } catch (error) {
+    console.error("stripe webhook", error);
+    return c.json({ ok: false }, 500);
+  }
+  return c.json({ received: true });
 });
 
 // ---------- Ab hier nur mit Anmeldung ----------
@@ -414,12 +439,34 @@ const requireRole = (...roles: Role[]) =>
     await next();
   };
 
+// Nach Ende der Testphase ohne Abo: alles lesbar und exportierbar, aber keine Änderungen mehr (nur wenn Stripe eingerichtet ist).
+const ALWAYS_ALLOWED = ["/api/billing/", "/api/auth/", "/api/account/"];
+app.use("*", async (c, next) => {
+  if (c.req.method === "GET" || !billingEnabled(c.env) || ALWAYS_ALLOWED.some((p) => c.req.path.startsWith(p))) return next();
+  const sub = await getSubscription(c.env, c.get("user").tenantId);
+  if (!hasAccess(sub.status, sub.trialEndsAt)) return fail(c, "subscriptionRequired", 402);
+  await next();
+});
+
+/** Kurzfassung des Abos für die Kopfzeile (Hinweis auf Testphase oder Sperre). */
+async function billingSummary(c: Ctx) {
+  if (!billingEnabled(c.env)) return null;
+  const sub = await getSubscription(c.env, c.get("user").tenantId);
+  return { status: sub.status, daysLeft: daysLeft(sub.trialEndsAt), access: hasAccess(sub.status, sub.trialEndsAt) };
+}
+
+/** Abo an geänderte Systeme oder Benutzerzahl anpassen, im Hintergrund. */
+function resyncBilling(c: Ctx) {
+  const tenantId = c.get("user").tenantId;
+  c.executionCtx.waitUntil(tenantDb(c.env, tenantId).installedApps().then((apps) => syncSubscription(c.env, tenantId, apps)));
+}
+
 app.get("/me", async (c) => {
   const user = c.get("user");
   const db = tenantDb(c.env, user.tenantId);
   const company = await loadCompany(c.env, user.tenantId);
   const setupComplete = !!company && Object.keys(validateCompany(company)).length === 0;
-  return c.json({ user, setupComplete, installedApps: await db.installedApps(), mailEnabled: mailEnabled(c.env) });
+  return c.json({ user, setupComplete, installedApps: await db.installedApps(), mailEnabled: mailEnabled(c.env), billing: await billingSummary(c) });
 });
 
 // ---------- Eigenes Konto ----------
@@ -544,6 +591,7 @@ app.post("/account/delete-company", requireRole("owner"), async (c) => {
   if (!row || !(await verifyPassword(typeof body.password === "string" ? body.password : "", row.password_hash)))
     return fail(c, "currentPasswordWrong", 400);
   if (text(body.companyName) !== user.tenantName) return fail(c, "companyNameMismatch", 400);
+  await cancelForDeletion(c.env, user.tenantId);
   await tenantDb(c.env, user.tenantId).destroy();
   const db = c.env.PLATFORM_DB;
   const users = "SELECT id FROM users WHERE tenant_id = ?";
@@ -552,6 +600,7 @@ app.post("/account/delete-company", requireRole("owner"), async (c) => {
     db.prepare(`DELETE FROM user_tokens WHERE user_id IN (${users})`).bind(user.tenantId),
     db.prepare(`DELETE FROM login_challenges WHERE user_id IN (${users})`).bind(user.tenantId),
     db.prepare("DELETE FROM invites WHERE tenant_id = ?").bind(user.tenantId),
+    db.prepare("DELETE FROM subscriptions WHERE tenant_id = ?").bind(user.tenantId),
     db.prepare("DELETE FROM users WHERE tenant_id = ?").bind(user.tenantId),
     db.prepare("DELETE FROM tenants WHERE id = ?").bind(user.tenantId),
   ]);
@@ -599,6 +648,7 @@ app.post("/apps/:id", requireRole("owner", "admin"), async (c) => {
   const db = tenantDb(c.env, c.get("user").tenantId);
   await db.installApp(catalogApp.id);
   audit(c, c.get("user").tenantId, c.get("user"), "appInstalled", { app: catalogApp.id });
+  resyncBilling(c);
   return c.json({ installedApps: await db.installedApps() });
 });
 
@@ -606,6 +656,7 @@ app.delete("/apps/:id", requireRole("owner", "admin"), async (c) => {
   const db = tenantDb(c.env, c.get("user").tenantId);
   await db.uninstallApp(c.req.param("id") ?? "");
   audit(c, c.get("user").tenantId, c.get("user"), "appUninstalled", { app: c.req.param("id") });
+  resyncBilling(c);
   return c.json({ installedApps: await db.installedApps() });
 });
 
@@ -681,6 +732,7 @@ app.delete("/users/:id", requireRole("owner", "admin"), async (c) => {
   if (target.role === "admin" && me.role !== "owner") return fail(c, "ownerOnlyRemoveAdmins", 403);
   await c.env.PLATFORM_DB.prepare("DELETE FROM users WHERE id = ?").bind(target.id).run();
   audit(c, me.tenantId, me, "userRemoved", { userId: target.id });
+  resyncBilling(c);
   return c.json({ ok: true });
 });
 
@@ -802,6 +854,58 @@ app.post("/accounting/month/:month/send", accounting, async (c) => {
   if (!sent) return fail(c, "mailFailed", 502);
   audit(c, user.tenantId, user, "monthSent", { month, email: advisor.email });
   return c.json({ ok: true, to: advisor.email });
+});
+
+// ---------- Abo ----------
+
+app.get("/billing", requireRole("owner", "admin"), async (c) => {
+  const user = c.get("user");
+  const sub = await getSubscription(c.env, user.tenantId);
+  const [apps, users] = await Promise.all([tenantDb(c.env, user.tenantId).installedApps(), countUsers(c.env, user.tenantId)]);
+  return c.json({
+    enabled: billingEnabled(c.env),
+    status: sub.status,
+    trialEndsAt: sub.trialEndsAt,
+    daysLeft: daysLeft(sub.trialEndsAt),
+    access: hasAccess(sub.status, sub.trialEndsAt),
+    interval: sub.interval,
+    currentPeriodEnd: sub.currentPeriodEnd,
+    cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
+    hasCustomer: !!sub.customerId,
+    users,
+    quotes: { month: quote(apps, users, "month"), year: quote(apps, users, "year") },
+  });
+});
+
+app.post("/billing/checkout", requireRole("owner"), async (c) => {
+  const user = c.get("user");
+  if (!billingEnabled(c.env)) return fail(c, "billingNotConfigured", 400);
+  const body = await readBody(c);
+  const apps = await tenantDb(c.env, user.tenantId).installedApps();
+  if (apps.length === 0) return fail(c, "noSystems", 400);
+  try {
+    const url = await createCheckout(c.env, {
+      tenantId: user.tenantId, tenantName: user.tenantName, email: user.email, installedApps: apps,
+      interval: body.interval === "year" ? "year" : "month", origin: new URL(c.req.url).origin,
+    });
+    return c.json({ url });
+  } catch (error) {
+    console.error("billing checkout", error);
+    return fail(c, "paymentFailed", 502);
+  }
+});
+
+app.post("/billing/portal", requireRole("owner"), async (c) => {
+  const user = c.get("user");
+  if (!billingEnabled(c.env)) return fail(c, "billingNotConfigured", 400);
+  const sub = await getSubscription(c.env, user.tenantId);
+  if (!sub.customerId) return fail(c, "notFound", 404);
+  try {
+    return c.json({ url: await createPortal(c.env, sub.customerId, new URL(c.req.url).origin) });
+  } catch (error) {
+    console.error("billing portal", error);
+    return fail(c, "paymentFailed", 502);
+  }
 });
 
 // ---------- Adressvorschläge ----------

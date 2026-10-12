@@ -35,7 +35,7 @@ npm run typecheck
 ## Bei Cloudflare veröffentlichen
 
 **Automatisch über GitHub:** Jeder Push auf `main` (und den Arbeitsbranch) veröffentlicht die App über `.github/workflows/deploy.yml`.
-Dafür braucht das Repository die Secrets `CLOUDFLARE_API_TOKEN` und `CLOUDFLARE_ACCOUNT_ID`, für den KI-Assistenten zusätzlich `GEMINI_API_KEY`, für den E-Mail-Versand `RESEND_API_KEY` und `MAIL_FROM` (z. B. `Code Kontor <noreply@deine-domain.de>`, die Domain muss bei Resend bestätigt sein).
+Dafür braucht das Repository die Secrets `CLOUDFLARE_API_TOKEN` und `CLOUDFLARE_ACCOUNT_ID`, für den KI-Assistenten zusätzlich `GEMINI_API_KEY`, für den E-Mail-Versand `RESEND_API_KEY` und `MAIL_FROM` (z. B. `Code Kontor <noreply@deine-domain.de>`, die Domain muss bei Resend bestätigt sein), für die Abo-Bezahlung `STRIPE_SECRET_KEY` (`sk_test_…` zum Testen, später `sk_live_…`). Den Stripe-Webhook legt das Veröffentlichen selbst an (Adresse aus der Repository-Variable `APP_URL`, sonst `https://codekontor.net`).
 Die Plattform-Datenbank wird beim ersten Lauf automatisch angelegt. Die Adresse steht danach in der Zusammenfassung des Laufs.
 
 **Von Hand:**

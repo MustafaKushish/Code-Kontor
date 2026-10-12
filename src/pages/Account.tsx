@@ -4,6 +4,7 @@ import { Download, History, KeyRound, LogOut, MailWarning, MonitorSmartphone, Sh
 import { api, type Me } from "../api";
 import { Field } from "../components";
 import { useI18n } from "../i18n";
+import { BillingCard } from "./Billing";
 
 /** Bestätigungslink erneut senden. */
 function useResend() {
@@ -372,6 +373,7 @@ export function AccountPage({ me, onChanged }: { me: Me; onChanged: () => void }
         </div>
       </header>
       <div className="columns two">
+        {isManager && <BillingCard me={me} />}
         <AccountCard me={me} />
         <TwoFactorCard me={me} onChanged={onChanged} />
         <DevicesCard />

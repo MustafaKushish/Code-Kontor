@@ -57,6 +57,8 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           MAIL_FROM: ${{ secrets.MAIL_FROM }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          APP_URL: ${{ vars.APP_URL || 'https://codekontor.net' }}
         run: |
           # Die Geheimnisse gehen zusammen mit der neuen Version online (wrangler deploy --secrets-file).
           # Fehlende Einträge lassen vorhandene Geheimnisse unverändert.
@@ -76,6 +78,14 @@ jobs:
             echo "::warning::Kein GEMINI_API_KEY in den Repository-Secrets. Der KI-Assistent zeigt „noch nicht eingerichtet“."; fi
           if [ -n "$RESEND_API_KEY" ] && [ -n "$MAIL_FROM" ]; then add RESEND_API_KEY "$RESEND_API_KEY"; add MAIL_FROM "$MAIL_FROM"; else
             echo "::warning::Kein RESEND_API_KEY oder MAIL_FROM in den Repository-Secrets. E-Mails werden nicht gesendet."; fi
+          if [ -n "$STRIPE_SECRET_KEY" ]; then
+            add STRIPE_SECRET_KEY "$STRIPE_SECRET_KEY"
+            HAS=0; echo "$SECRETS" | grep -q '"STRIPE_WEBHOOK_SECRET"' && HAS=1
+            WHSEC=$(HAS_SECRET=$HAS node scripts/ensure-stripe-webhook.mjs)
+            if [ -n "$WHSEC" ]; then echo "::add-mask::$WHSEC"; add STRIPE_WEBHOOK_SECRET "$WHSEC"; fi
+          else
+            echo "::warning::Kein STRIPE_SECRET_KEY in den Repository-Secrets. Die Abo-Bezahlung ist aus, niemand wird gesperrt."
+          fi
           echo "Geheimnisse für diese Version: $(jq -r 'keys | join(", ")' "$FILE")"
       - name: Veröffentlichen
         run: |

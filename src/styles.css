@@ -817,3 +817,15 @@ input[aria-invalid="true"] { border-color: var(--error); }
   .page-tabs button { flex: 1; justify-content: center; padding: 9px 6px; font-size: 0.86rem; }
   .page-tabs button svg { display: none; }
 }
+
+/* ---------- Abo ---------- */
+.billing-card .billing-status { margin: 0; }
+.billing-interval { max-width: 460px; }
+.billing-interval small { font-weight: 500; color: var(--brand); }
+.price-table { width: 100%; border-collapse: collapse; }
+.price-table td, .price-table th { padding: 10px 0; text-align: start; }
+.price-table td:last-child, .price-table th:last-child { text-align: end; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.price-table tbody tr + tr td { border-top: 1px solid var(--line); }
+.price-table tfoot th { border-top: 2px solid var(--line-strong); font-size: 1.05rem; }
+.price-table .pill { margin-inline-start: 8px; }
+.billing-actions { flex-wrap: wrap; gap: 10px; }

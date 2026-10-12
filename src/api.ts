@@ -28,4 +28,6 @@ export interface Me {
   setupComplete: boolean;
   mailEnabled: boolean;
   installedApps: string[];
+  /** Nur gesetzt, wenn die Bezahlung eingerichtet ist */
+  billing: { status: "trialing" | "active" | "past_due" | "canceled" | "expired"; daysLeft: number; access: boolean } | null;
 }
