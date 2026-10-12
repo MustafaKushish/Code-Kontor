@@ -742,3 +742,25 @@ a.tile:hover { transform: translateY(-3px); box-shadow: var(--shadow-lift); }
 .invite-link { display: flex; gap: 8px; align-items: stretch; }
 .invite-link input { flex: 1; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85rem; }
 .list-title { margin: 0; padding: 14px 18px 4px; font-size: 0.85rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+.columns.two { grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); }
+.wide-card { grid-column: 1 / -1; }
+.button.danger { color: var(--error); border-color: color-mix(in srgb, var(--error) 35%, var(--line)); }
+.button.danger:hover:not(:disabled) { background: color-mix(in srgb, var(--error) 10%, transparent); }
+.button.danger:disabled { opacity: 0.45; cursor: default; }
+.danger-zone { margin-top: 6px; padding-top: 18px; border-top: 1px solid var(--line); }
+.danger-zone .card-subtitle svg { color: var(--error); }
+.totp-setup { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
+.totp-setup img { border-radius: 12px; background: #fff; padding: 6px; image-rendering: pixelated; border: 1px solid var(--line); }
+.totp-secret { font-size: 0.95rem; letter-spacing: 0.06em; word-break: break-all; background: var(--panel-2); padding: 8px 10px; border-radius: 10px; }
+.recovery-codes { list-style: none; margin: 0; padding: 14px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 20px; background: var(--panel-2); border-radius: 14px; }
+.recovery-codes code { font-size: 1rem; letter-spacing: 0.05em; }
+.device-list { display: grid; }
+.device-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.device-row:first-child { border-top: none; }
+.device-row strong { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.audit-list { list-style: none; margin: 0; padding: 0; display: grid; max-height: 520px; overflow-y: auto; }
+.audit-list li { display: grid; grid-template-columns: 170px 1fr; gap: 12px; padding: 9px 0; border-top: 1px solid var(--line); font-size: 0.92rem; }
+.audit-list li:first-child { border-top: none; }
+.audit-list li.warn strong { color: var(--error); }
+.audit-list time { color: var(--muted); font-variant-numeric: tabular-nums; }
+@media (max-width: 600px) { .audit-list li { grid-template-columns: 1fr; gap: 2px; } }

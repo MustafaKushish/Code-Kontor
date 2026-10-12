@@ -57,6 +57,17 @@ jobs:
           npx wrangler deploy | tee deploy.log
           URL=$(grep -oE 'https://[a-zA-Z0-9.-]+\.workers\.dev' deploy.log | head -1)
           echo "### Code Kontor ist online: $URL" >> "$GITHUB_STEP_SUMMARY"
+      - name: Schlüssel für verschlüsselte Felder sicherstellen
+        run: |
+          # Einmalig erzeugen und nie überschreiben: ohne diesen Schlüssel lassen sich IBAN und Zwei-Faktor-Geheimnisse nicht mehr lesen.
+          # Bricht ab, wenn die Liste nicht gelesen werden kann, damit nie ein vorhandener Schlüssel ersetzt wird.
+          SECRETS=$(npx wrangler secret list --format json)
+          if echo "$SECRETS" | grep -q '"DATA_KEY"'; then
+            echo "DATA_KEY ist vorhanden."
+          else
+            openssl rand -base64 32 | tr -d '\n' | npx wrangler secret put DATA_KEY
+            echo "DATA_KEY wurde neu erzeugt."
+          fi
       - name: Gemini-Schlüssel hinterlegen
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}

@@ -11,6 +11,9 @@ import { fail } from "./errors";
 import { cityForPostalCode, suggestAddresses } from "./geo";
 import { askAssistant, DAILY_QUESTION_LIMIT, parseConversation } from "./assistant";
 import { mailEnabled, renderMail, sendMail, type MailKind } from "./mail";
+import { decryptField, encryptField, isEncrypted } from "./crypto";
+import { newRecoveryCodes, newTotpSecret, normalizeRecoveryCode, otpauthUrl, verifyTotp } from "./totp";
+import type { CompanyProfile } from "../shared/company";
 
 export { TenantDatabase };
 
@@ -26,6 +29,8 @@ export interface Env {
   RESEND_API_KEY?: string;
   /** Absender, z. B. "Code Kontor <noreply@code-kontor.de>". */
   MAIL_FROM?: string;
+  /** Schlüssel für zusätzlich verschlüsselte Felder (IBAN, Zwei-Faktor). Wird beim Veröffentlichen einmalig erzeugt. */
+  DATA_KEY?: string;
 }
 
 type Role = "owner" | "admin" | "staff";
@@ -37,6 +42,7 @@ interface SessionUser {
   name: string;
   role: Role;
   emailVerified: boolean;
+  twoFactor: boolean;
 }
 
 type App = { Bindings: Env; Variables: { user: SessionUser; sessionHash: string } };
@@ -60,11 +66,12 @@ function tenantDb(env: Env, tenantId: string) {
 async function startSession(c: Ctx, userId: string) {
   const token = newSessionToken();
   const expires = new Date(Date.now() + SESSION_DAYS * 86_400_000);
+  const now = new Date().toISOString();
   await c.env.PLATFORM_DB.batch([
     // Abgelaufene Sitzungen dieses Benutzers aufräumen
-    c.env.PLATFORM_DB.prepare("DELETE FROM sessions WHERE user_id = ? AND expires_at <= ?").bind(userId, new Date().toISOString()),
-    c.env.PLATFORM_DB.prepare("INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)")
-      .bind(await hashToken(token), userId, expires.toISOString()),
+    c.env.PLATFORM_DB.prepare("DELETE FROM sessions WHERE user_id = ? AND expires_at <= ?").bind(userId, now),
+    c.env.PLATFORM_DB.prepare("INSERT INTO sessions (token_hash, user_id, expires_at, created_at, last_seen_at, user_agent) VALUES (?, ?, ?, ?, ?, ?)")
+      .bind(await hashToken(token), userId, expires.toISOString(), now, now, (c.req.header("User-Agent") ?? "").slice(0, 300)),
   ]);
   setCookie(c, SESSION_COOKIE, token, {
     httpOnly: true,
@@ -136,6 +143,47 @@ async function findInvite(c: Ctx, token: string) {
     .first<{ id: string; tenantId: string; email: string; name: string; role: "admin" | "staff"; companyName: string }>();
 }
 
+/** Protokoll-Eintrag in der Datenbank der Firma. Fehler beim Protokollieren stoppen die Aktion nicht. */
+function audit(c: Ctx, tenantId: string, who: { id: string; name: string } | null, action: string, detail?: Record<string, unknown>) {
+  const done = tenantDb(c.env, tenantId)
+    .logEvent({ userId: who?.id ?? null, userName: who?.name ?? null, action, detail })
+    .catch((err) => console.error("[audit]", err));
+  c.executionCtx.waitUntil(done);
+}
+
+const SENSITIVE_COMPANY_FIELDS = ["iban", "bic"] as const;
+
+/** Firmendaten lesen; IBAN und BIC werden entschlüsselt. Alte, noch offene Werte werden dabei verschlüsselt. */
+async function loadCompany(env: Env, tenantId: string): Promise<CompanyProfile | null> {
+  const db = tenantDb(env, tenantId);
+  const stored = await db.getCompany();
+  if (!stored) return null;
+  const company = { ...stored };
+  let needsUpgrade = false;
+  for (const field of SENSITIVE_COMPANY_FIELDS) {
+    const value = company[field];
+    if (!value) continue;
+    if (!isEncrypted(value) && env.DATA_KEY) needsUpgrade = true;
+    company[field] = await decryptField(env.DATA_KEY, value);
+  }
+  if (needsUpgrade) await storeCompany(env, tenantId, company);
+  return company;
+}
+
+async function storeCompany(env: Env, tenantId: string, company: CompanyProfile) {
+  const stored = { ...company };
+  for (const field of SENSITIVE_COMPANY_FIELDS) stored[field] = await encryptField(env.DATA_KEY, stored[field]);
+  await tenantDb(env, tenantId).saveCompany(stored);
+}
+
+const LOGIN_CHALLENGE_MINUTES = 10;
+
+/** Benutzer anmelden und Anmeldung protokollieren. */
+async function completeLogin(c: Ctx, user: { id: string; name: string; tenantId: string }, method: string) {
+  await startSession(c, user.id);
+  audit(c, user.tenantId, user, "login", { method, device: (c.req.header("User-Agent") ?? "").slice(0, 160) });
+}
+
 // ---------- Anmeldung ----------
 
 app.post("/auth/register", async (c) => {
@@ -163,7 +211,8 @@ app.post("/auth/register", async (c) => {
 
   // Eigene Datenbank des Kunden anlegen und mit dem Firmennamen vorbelegen
   const db = tenantDb(c.env, tenantId);
-  await db.saveCompany({ ...sanitizeCompany({ name: companyName, email }) });
+  await storeCompany(c.env, tenantId, sanitizeCompany({ name: companyName, email }));
+  audit(c, tenantId, { id: userId, name }, "accountCreated");
 
   c.executionCtx.waitUntil(sendUserLink(c, "verify", { id: userId, email, name }, langOf(body)));
   await startSession(c, userId);
@@ -176,17 +225,70 @@ app.post("/auth/login", async (c) => {
   const password = typeof body.password === "string" ? body.password : "";
   const keys = attemptKeys(email, c.req.header("CF-Connecting-IP"));
   if (await isLocked(c.env.PLATFORM_DB, keys)) return fail(c, "tooManyAttempts", 429);
-  const user = await c.env.PLATFORM_DB.prepare("SELECT id, password_hash FROM users WHERE email = ?")
+  const user = await c.env.PLATFORM_DB.prepare("SELECT id, name, tenant_id AS tenantId, password_hash, totp_secret FROM users WHERE email = ?")
     .bind(email)
-    .first<{ id: string; password_hash: string }>();
+    .first<{ id: string; name: string; tenantId: string; password_hash: string; totp_secret: string | null }>();
   // Auch ohne passenden Benutzer ein Passwort prüfen, damit die Antwortzeit nicht verrät, ob es die E-Mail gibt.
   const valid = await verifyPassword(password, user?.password_hash ?? DUMMY_PASSWORD_HASH);
   if (!user || !valid) {
     await recordFailure(c.env.PLATFORM_DB, keys);
+    if (user) audit(c, user.tenantId, user, "loginFailed", { ip: c.req.header("CF-Connecting-IP") ?? null });
     return fail(c, "wrongCredentials", 401);
   }
   await clearFailures(c.env.PLATFORM_DB, email);
-  await startSession(c, user.id);
+  if (user.totp_secret) {
+    // Passwort stimmt, jetzt fehlt noch der Code aus der Authenticator-App
+    const ticket = newSessionToken();
+    await c.env.PLATFORM_DB.batch([
+      c.env.PLATFORM_DB.prepare("DELETE FROM login_challenges WHERE user_id = ? OR expires_at <= ?").bind(user.id, nowIso()),
+      c.env.PLATFORM_DB.prepare("INSERT INTO login_challenges (token_hash, user_id, expires_at) VALUES (?, ?, ?)")
+        .bind(await hashToken(ticket), user.id, new Date(Date.now() + LOGIN_CHALLENGE_MINUTES * 60_000).toISOString()),
+    ]);
+    return c.json({ twoFactor: true, ticket });
+  }
+  await completeLogin(c, user, "password");
+  return c.json({ ok: true });
+});
+
+// Zweiter Schritt: Code aus der App oder ein Notfall-Code
+app.post("/auth/login/2fa", async (c) => {
+  const body = await readBody(c);
+  const ticket = text(body.ticket);
+  const code = text(body.code);
+  if (!/^[0-9a-f]{64}$/.test(ticket)) return fail(c, "linkInvalid", 400);
+  const hash = await hashToken(ticket);
+  const row = await c.env.PLATFORM_DB.prepare(
+    `SELECT u.id, u.name, u.tenant_id AS tenantId, u.totp_secret, u.recovery_codes, l.attempts
+       FROM login_challenges l JOIN users u ON u.id = l.user_id
+      WHERE l.token_hash = ? AND l.expires_at > ?`,
+  )
+    .bind(hash, nowIso())
+    .first<{ id: string; name: string; tenantId: string; totp_secret: string | null; recovery_codes: string | null; attempts: number }>();
+  if (!row || !row.totp_secret) return fail(c, "loginExpired", 400);
+  if (row.attempts >= 5) {
+    await c.env.PLATFORM_DB.prepare("DELETE FROM login_challenges WHERE token_hash = ?").bind(hash).run();
+    return fail(c, "loginExpired", 400);
+  }
+
+  let method = "";
+  if (await verifyTotp(await decryptField(c.env.DATA_KEY, row.totp_secret), code)) method = "2fa";
+  else {
+    const codes = JSON.parse(row.recovery_codes ?? "[]") as string[];
+    const codeHash = await hashToken(normalizeRecoveryCode(code));
+    if (codes.includes(codeHash)) {
+      method = "recoveryCode";
+      await c.env.PLATFORM_DB.prepare("UPDATE users SET recovery_codes = ? WHERE id = ?")
+        .bind(JSON.stringify(codes.filter((h) => h !== codeHash)), row.id)
+        .run();
+    }
+  }
+  if (!method) {
+    await c.env.PLATFORM_DB.prepare("UPDATE login_challenges SET attempts = attempts + 1 WHERE token_hash = ?").bind(hash).run();
+    audit(c, row.tenantId, row, "loginFailed", { step: "2fa" });
+    return fail(c, "codeWrong", 400);
+  }
+  await c.env.PLATFORM_DB.prepare("DELETE FROM login_challenges WHERE token_hash = ?").bind(hash).run();
+  await completeLogin(c, row, method);
   return c.json({ ok: true });
 });
 
@@ -228,14 +330,19 @@ app.post("/auth/reset", async (c) => {
   if (problem) return fail(c, problem, 400);
   const userId = await useUserToken(c, "reset", text(body.token));
   if (!userId) return fail(c, "linkInvalid", 400);
-  const user = await c.env.PLATFORM_DB.prepare("SELECT email FROM users WHERE id = ?").bind(userId).first<{ email: string }>();
+  const user = await c.env.PLATFORM_DB.prepare("SELECT id, email, name, tenant_id AS tenantId FROM users WHERE id = ?")
+    .bind(userId)
+    .first<{ id: string; email: string; name: string; tenantId: string }>();
   await c.env.PLATFORM_DB.batch([
     // Wer den Link aus der E-Mail nutzt, hat die Adresse damit auch bestätigt
     c.env.PLATFORM_DB.prepare("UPDATE users SET password_hash = ?, email_verified_at = COALESCE(email_verified_at, ?) WHERE id = ?")
       .bind(await hashPassword(body.password as string), nowIso(), userId),
     c.env.PLATFORM_DB.prepare("DELETE FROM sessions WHERE user_id = ?").bind(userId),
   ]);
-  if (user) await clearFailures(c.env.PLATFORM_DB, user.email);
+  if (user) {
+    await clearFailures(c.env.PLATFORM_DB, user.email);
+    audit(c, user.tenantId, user, "passwordReset");
+  }
   await startSession(c, userId);
   return c.json({ ok: true });
 });
@@ -263,6 +370,7 @@ app.post("/auth/invite/:token", async (c) => {
     ).bind(userId, invite.tenantId, invite.email, name, invite.role, await hashPassword(body.password as string), nowIso()),
     c.env.PLATFORM_DB.prepare("DELETE FROM invites WHERE id = ?").bind(invite.id),
   ]);
+  audit(c, invite.tenantId, { id: userId, name }, "inviteAccepted", { email: invite.email, role: invite.role });
   await startSession(c, userId);
   return c.json({ ok: true }, 201);
 });
@@ -274,18 +382,25 @@ app.use("*", async (c, next) => {
   if (!token) return fail(c, "notLoggedIn", 401);
   const user = await c.env.PLATFORM_DB.prepare(
     `SELECT u.id, u.tenant_id AS tenantId, t.name AS tenantName, u.email, u.name, u.role,
-            u.email_verified_at IS NOT NULL AS emailVerified
+            u.email_verified_at IS NOT NULL AS emailVerified, u.totp_secret IS NOT NULL AS twoFactor, s.last_seen_at AS lastSeen
        FROM sessions s JOIN users u ON u.id = s.user_id JOIN tenants t ON t.id = u.tenant_id
       WHERE s.token_hash = ? AND s.expires_at > ?`,
   )
     .bind(await hashToken(token), new Date().toISOString())
-    .first<SessionUser>();
+    .first<SessionUser & { lastSeen: string | null }>();
   if (!user) {
     deleteCookie(c, SESSION_COOKIE, { path: "/" });
     return fail(c, "sessionExpired", 401);
   }
-  c.set("user", { ...user, emailVerified: !!user.emailVerified });
-  c.set("sessionHash", await hashToken(token));
+  const { lastSeen, ...rest } = user;
+  c.set("user", { ...rest, emailVerified: !!user.emailVerified, twoFactor: !!user.twoFactor });
+  const sessionHash = await hashToken(token);
+  c.set("sessionHash", sessionHash);
+  // „Zuletzt aktiv“ für die Geräte-Übersicht, höchstens alle 10 Minuten schreiben
+  if (!lastSeen || Date.now() - Date.parse(lastSeen) > 10 * 60_000)
+    c.executionCtx.waitUntil(
+      c.env.PLATFORM_DB.prepare("UPDATE sessions SET last_seen_at = ? WHERE token_hash = ?").bind(nowIso(), sessionHash).run(),
+    );
   await next();
 });
 
@@ -298,7 +413,7 @@ const requireRole = (...roles: Role[]) =>
 app.get("/me", async (c) => {
   const user = c.get("user");
   const db = tenantDb(c.env, user.tenantId);
-  const company = await db.getCompany();
+  const company = await loadCompany(c.env, user.tenantId);
   const setupComplete = !!company && Object.keys(validateCompany(company)).length === 0;
   return c.json({ user, setupComplete, installedApps: await db.installedApps(), mailEnabled: mailEnabled(c.env) });
 });
@@ -318,6 +433,125 @@ app.post("/account/password", async (c) => {
     // Alle anderen Geräte abmelden, dieses bleibt angemeldet
     c.env.PLATFORM_DB.prepare("DELETE FROM sessions WHERE user_id = ? AND token_hash != ?").bind(user.id, c.get("sessionHash")),
   ]);
+  audit(c, user.tenantId, user, "passwordChanged");
+  return c.json({ ok: true });
+});
+
+// Angemeldete Geräte
+app.get("/account/sessions", async (c) => {
+  const user = c.get("user");
+  const { results } = await c.env.PLATFORM_DB.prepare(
+    `SELECT substr(token_hash, 1, 16) AS id, created_at AS createdAt, last_seen_at AS lastSeen, user_agent AS userAgent, token_hash = ? AS current
+       FROM sessions WHERE user_id = ? AND expires_at > ? ORDER BY last_seen_at DESC`,
+  )
+    .bind(c.get("sessionHash"), user.id, nowIso())
+    .all<{ id: string; createdAt: string | null; lastSeen: string | null; userAgent: string | null; current: number }>();
+  return c.json({ sessions: results.map((r) => ({ ...r, current: !!r.current })) });
+});
+
+app.delete("/account/sessions/:id", async (c) => {
+  const user = c.get("user");
+  const id = c.req.param("id");
+  if (!/^[0-9a-f]{16}$/.test(id)) return fail(c, "notFound", 404);
+  await c.env.PLATFORM_DB.prepare("DELETE FROM sessions WHERE user_id = ? AND substr(token_hash, 1, 16) = ? AND token_hash != ?")
+    .bind(user.id, id, c.get("sessionHash"))
+    .run();
+  audit(c, user.tenantId, user, "deviceSignedOut");
+  return c.json({ ok: true });
+});
+
+app.post("/account/sessions/sign-out-others", async (c) => {
+  const user = c.get("user");
+  await c.env.PLATFORM_DB.prepare("DELETE FROM sessions WHERE user_id = ? AND token_hash != ?").bind(user.id, c.get("sessionHash")).run();
+  audit(c, user.tenantId, user, "allDevicesSignedOut");
+  return c.json({ ok: true });
+});
+
+// Zwei-Faktor-Anmeldung: Geheimnis erzeugen, mit erstem Code bestätigen, wieder ausschalten
+app.post("/account/2fa/setup", async (c) => {
+  const user = c.get("user");
+  const secret = newTotpSecret();
+  return c.json({ secret, url: otpauthUrl(secret, user.email) });
+});
+
+app.post("/account/2fa/enable", async (c) => {
+  const user = c.get("user");
+  const body = await readBody(c);
+  const secret = text(body.secret).toUpperCase();
+  if (!/^[A-Z2-7]{32}$/.test(secret) || !(await verifyTotp(secret, text(body.code)))) return fail(c, "codeWrong", 400);
+  const recoveryCodes = newRecoveryCodes();
+  const hashes = await Promise.all(recoveryCodes.map((code) => hashToken(normalizeRecoveryCode(code))));
+  await c.env.PLATFORM_DB.batch([
+    c.env.PLATFORM_DB.prepare("UPDATE users SET totp_secret = ?, recovery_codes = ? WHERE id = ?")
+      .bind(await encryptField(c.env.DATA_KEY, secret), JSON.stringify(hashes), user.id),
+    // Sicherheitshalber alle anderen Geräte abmelden
+    c.env.PLATFORM_DB.prepare("DELETE FROM sessions WHERE user_id = ? AND token_hash != ?").bind(user.id, c.get("sessionHash")),
+  ]);
+  audit(c, user.tenantId, user, "twoFactorOn");
+  return c.json({ recoveryCodes });
+});
+
+app.post("/account/2fa/disable", async (c) => {
+  const user = c.get("user");
+  const body = await readBody(c);
+  const row = await c.env.PLATFORM_DB.prepare("SELECT password_hash FROM users WHERE id = ?").bind(user.id).first<{ password_hash: string }>();
+  if (!row || !(await verifyPassword(typeof body.password === "string" ? body.password : "", row.password_hash)))
+    return fail(c, "currentPasswordWrong", 400);
+  await c.env.PLATFORM_DB.prepare("UPDATE users SET totp_secret = NULL, recovery_codes = NULL WHERE id = ?").bind(user.id).run();
+  audit(c, user.tenantId, user, "twoFactorOff");
+  return c.json({ ok: true });
+});
+
+// Protokoll der Firma
+app.get("/audit", requireRole("owner", "admin"), async (c) => {
+  const entries = await tenantDb(c.env, c.get("user").tenantId).auditLog(Number(c.req.query("limit") ?? 100));
+  return c.json({ entries });
+});
+
+// Datenexport (DSGVO): alles, was zu dieser Firma gespeichert ist
+app.get("/account/export", requireRole("owner"), async (c) => {
+  const user = c.get("user");
+  const db = c.env.PLATFORM_DB;
+  const [tenant, users, invites] = await Promise.all([
+    db.prepare("SELECT id, name, created_at AS createdAt FROM tenants WHERE id = ?").bind(user.tenantId).first(),
+    db.prepare("SELECT id, email, name, role, created_at AS createdAt, email_verified_at AS emailVerifiedAt, totp_secret IS NOT NULL AS twoFactor FROM users WHERE tenant_id = ?")
+      .bind(user.tenantId).all(),
+    db.prepare("SELECT email, name, role, created_at AS createdAt, expires_at AS expiresAt FROM invites WHERE tenant_id = ?").bind(user.tenantId).all(),
+  ]);
+  // Die Tabelle "settings" enthält die Firmendaten verschlüsselt; sie kommen unten entschlüsselt als "company" dazu.
+  const { settings: _settings, ...data } = (await tenantDb(c.env, user.tenantId).exportAll()) as Record<string, unknown[]>;
+  const company = await loadCompany(c.env, user.tenantId);
+  audit(c, user.tenantId, user, "dataExported");
+  const file = { exportedAt: nowIso(), tenant, company, users: users.results, invites: invites.results, data };
+  return new Response(JSON.stringify(file, null, 2), {
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Content-Disposition": `attachment; filename="code-kontor-export-${nowIso().slice(0, 10)}.json"`,
+      "Cache-Control": "no-store",
+    },
+  });
+});
+
+// Firma mit allen Daten endgültig löschen (nur Inhaber, mit Passwort und Firmenname)
+app.post("/account/delete-company", requireRole("owner"), async (c) => {
+  const user = c.get("user");
+  const body = await readBody(c);
+  const row = await c.env.PLATFORM_DB.prepare("SELECT password_hash FROM users WHERE id = ?").bind(user.id).first<{ password_hash: string }>();
+  if (!row || !(await verifyPassword(typeof body.password === "string" ? body.password : "", row.password_hash)))
+    return fail(c, "currentPasswordWrong", 400);
+  if (text(body.companyName) !== user.tenantName) return fail(c, "companyNameMismatch", 400);
+  await tenantDb(c.env, user.tenantId).destroy();
+  const db = c.env.PLATFORM_DB;
+  const users = "SELECT id FROM users WHERE tenant_id = ?";
+  await db.batch([
+    db.prepare(`DELETE FROM sessions WHERE user_id IN (${users})`).bind(user.tenantId),
+    db.prepare(`DELETE FROM user_tokens WHERE user_id IN (${users})`).bind(user.tenantId),
+    db.prepare(`DELETE FROM login_challenges WHERE user_id IN (${users})`).bind(user.tenantId),
+    db.prepare("DELETE FROM invites WHERE tenant_id = ?").bind(user.tenantId),
+    db.prepare("DELETE FROM users WHERE tenant_id = ?").bind(user.tenantId),
+    db.prepare("DELETE FROM tenants WHERE id = ?").bind(user.tenantId),
+  ]);
+  deleteCookie(c, SESSION_COOKIE, { path: "/" });
   return c.json({ ok: true });
 });
 
@@ -334,7 +568,7 @@ app.post("/account/verify-email", async (c) => {
 // ---------- Firmendaten ----------
 
 app.get("/company", async (c) => {
-  const company = await tenantDb(c.env, c.get("user").tenantId).getCompany();
+  const company = await loadCompany(c.env, c.get("user").tenantId);
   return c.json({ company });
 });
 
@@ -343,7 +577,11 @@ app.put("/company", requireRole("owner", "admin"), async (c) => {
   const company = sanitizeCompany(await readBody(c));
   const errors = validateCompany(company);
   if (Object.keys(errors).length) return fail(c, "checkFields", 400, { errors });
-  await tenantDb(c.env, user.tenantId).saveCompany(company);
+  const before = await loadCompany(c.env, user.tenantId);
+  await storeCompany(c.env, user.tenantId, company);
+  // Im Protokoll nur, welche Felder sich geändert haben, nicht die Werte
+  const changed = (Object.keys(company) as (keyof CompanyProfile)[]).filter((k) => before?.[k] !== company[k]);
+  if (changed.length) audit(c, user.tenantId, user, "companyChanged", { fields: changed });
   if (company.name !== user.tenantName)
     await c.env.PLATFORM_DB.prepare("UPDATE tenants SET name = ? WHERE id = ?").bind(company.name, user.tenantId).run();
   return c.json({ company });
@@ -356,12 +594,14 @@ app.post("/apps/:id", requireRole("owner", "admin"), async (c) => {
   if (!catalogApp) return fail(c, "unknownApp", 404);
   const db = tenantDb(c.env, c.get("user").tenantId);
   await db.installApp(catalogApp.id);
+  audit(c, c.get("user").tenantId, c.get("user"), "appInstalled", { app: catalogApp.id });
   return c.json({ installedApps: await db.installedApps() });
 });
 
 app.delete("/apps/:id", requireRole("owner", "admin"), async (c) => {
   const db = tenantDb(c.env, c.get("user").tenantId);
   await db.uninstallApp(c.req.param("id") ?? "");
+  audit(c, c.get("user").tenantId, c.get("user"), "appUninstalled", { app: c.req.param("id") });
   return c.json({ installedApps: await db.installedApps() });
 });
 
@@ -410,6 +650,7 @@ app.post("/invites", requireRole("owner", "admin"), async (c) => {
   ]);
   const link = appLink(c, `/einladung/${token}`);
   const sent = await mail(c, "invite", email, langOf(body), link, { name, inviter: me.name, company: me.tenantName });
+  audit(c, me.tenantId, me, "inviteCreated", { email, role });
   // Der Link wird nur dieses eine Mal angezeigt, damit man ihn notfalls selbst weitergeben kann.
   return c.json({ invite: { id, email, name, role, expiresAt: expires }, link, sent }, 201);
 });
@@ -421,6 +662,7 @@ app.delete("/invites/:id", requireRole("owner", "admin"), async (c) => {
   await c.env.PLATFORM_DB.prepare(`DELETE FROM invites WHERE id = ? AND tenant_id = ? AND role IN (${roles.map(() => "?").join(", ")})`)
     .bind(c.req.param("id"), me.tenantId, ...roles)
     .run();
+  audit(c, me.tenantId, me, "inviteWithdrawn");
   return c.json({ ok: true });
 });
 
@@ -434,6 +676,7 @@ app.delete("/users/:id", requireRole("owner", "admin"), async (c) => {
   if (target.role === "owner") return fail(c, "cannotRemoveOwner", 403);
   if (target.role === "admin" && me.role !== "owner") return fail(c, "ownerOnlyRemoveAdmins", 403);
   await c.env.PLATFORM_DB.prepare("DELETE FROM users WHERE id = ?").bind(target.id).run();
+  audit(c, me.tenantId, me, "userRemoved", { userId: target.id });
   return c.json({ ok: true });
 });
 

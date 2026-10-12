@@ -1,6 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { MonitorSmartphone, ShieldCheck, Sparkles } from "lucide-react";
-import { api } from "../api";
+import { api, ApiError } from "../api";
 import { AppIcon, Field, Logo } from "../components";
 import { CATALOG } from "../../shared/apps";
 import { useI18n } from "../i18n";
@@ -47,6 +47,8 @@ export function AuthPage({ onDone }: { onDone: () => void }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [forgotSent, setForgotSent] = useState(false);
+  const [ticket, setTicket] = useState("");
+  const [code, setCode] = useState("");
   const { t, errorText, lang } = useI18n();
   const set = (key: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [key]: e.target.value });
   const switchTo = (next: typeof mode) => {
@@ -63,16 +65,43 @@ export function AuthPage({ onDone }: { onDone: () => void }) {
       if (mode === "forgot") {
         await api("/auth/forgot", { method: "POST", body: { email: form.email, lang } });
         setForgotSent(true);
-      } else {
-        await api(`/auth/${mode}`, { method: "POST", body: { ...form, lang } });
+      } else if (ticket) {
+        await api("/auth/login/2fa", { method: "POST", body: { ticket, code } });
         onDone();
+      } else {
+        const r = await api<{ twoFactor?: boolean; ticket?: string }>(`/auth/${mode}`, { method: "POST", body: { ...form, lang } });
+        if (r.twoFactor && r.ticket) setTicket(r.ticket);
+        else onDone();
       }
     } catch (err) {
       setError(errorText(err));
+      // Abgelaufener Zwischenschritt: zurück zur Passwort-Eingabe
+      if (ticket && err instanceof ApiError && err.code === "loginExpired") {
+        setTicket("");
+        setCode("");
+      }
     } finally {
       setBusy(false);
     }
   };
+
+  if (ticket)
+    return (
+      <AuthLayout>
+        <div className="stack-sm">
+          <h2 className="display auth-title">{t("auth.codeTitle")}</h2>
+          <p className="muted">{t("auth.codeText")}</p>
+        </div>
+        <form onSubmit={submit} className="stack">
+          <Field label={t("auth.codeLabel")} hint={t("auth.codeHint")}>
+            <input value={code} onChange={(e) => setCode(e.target.value)} autoComplete="one-time-code" inputMode="text" autoFocus required />
+          </Field>
+          {error && <p className="error" role="alert">{error}</p>}
+          <button className="button primary block" disabled={busy}>{busy ? t("common.wait") : t("auth.codeSubmit")}</button>
+        </form>
+        <button type="button" className="text-button" onClick={() => { setTicket(""); setCode(""); setError(""); }}>{t("auth.backToLogin")}</button>
+      </AuthLayout>
+    );
 
   if (mode === "forgot")
     return (
