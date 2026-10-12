@@ -5,7 +5,12 @@ import { readFileSync, writeFileSync } from "node:fs";
 
 const NAME = "code-kontor-platform";
 const wrangler = (...args) => execFileSync("npx", ["wrangler", ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
-const find = () => JSON.parse(wrangler("d1", "list", "--json")).find((db) => db.name === NAME);
+// Wrangler schreibt manchmal Hinweise vor die JSON-Liste, deshalb nur den Teil von [ bis ] lesen.
+const list = () => {
+  const out = wrangler("d1", "list", "--json");
+  return JSON.parse(out.slice(out.indexOf("["), out.lastIndexOf("]") + 1));
+};
+const find = () => list().find((db) => db.name === NAME);
 
 let db = find();
 if (!db) {
