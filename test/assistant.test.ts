@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import Anthropic from "@anthropic-ai/sdk";
-import { askAssistant, parseConversation, systemPrompt } from "../worker/assistant";
+import { askAssistant, parseConversation, systemPrompt, type GeminiOptions } from "../worker/assistant";
 
 describe("KI-Assistent", () => {
   it("nimmt einen gültigen Verlauf an", () => {
@@ -34,69 +33,59 @@ describe("KI-Assistent", () => {
   });
 });
 
-// Antworten der Claude-API nachbauen, ohne echtes Netz.
-let lastRequest: { headers: Headers; body: Record<string, unknown> } | null = null;
-function fakeClient(events: object[]) {
-  const body = events.map((e) => `event: ${(e as { type: string }).type}\ndata: ${JSON.stringify(e)}\n\n`).join("");
-  return new Anthropic({
-    apiKey: "test",
-    maxRetries: 0,
-    fetch: async (_url: string | URL | Request, init?: RequestInit) => {
-      lastRequest = { headers: new Headers(init?.headers), body: JSON.parse(String(init?.body)) };
-      return new Response(body, { headers: { "content-type": "text/event-stream" } });
-    },
-  });
+// Antworten der Gemini-API nachbauen, ohne echtes Netz.
+let lastRequest: { url: string; headers: Headers; body: Record<string, unknown> } | null = null;
+function fakeGemini(chunks: object[], status = 200): GeminiOptions {
+  return {
+    apiKey: "test-key",
+    fetch: (async (url: string, init?: RequestInit) => {
+      lastRequest = { url: String(url), headers: new Headers(init?.headers), body: JSON.parse(String(init?.body)) };
+      if (status !== 200) return new Response("{}", { status });
+      return new Response(chunks.map((c) => `data: ${JSON.stringify(c)}\r\n\r\n`).join(""), { headers: { "content-type": "text/event-stream" } });
+    }) as typeof fetch,
+  };
 }
-
-const start = { type: "message_start", message: { id: "m", type: "message", role: "assistant", model: "claude-opus-5-5", content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 1, output_tokens: 0 } } };
-const text = (index: number, t: string) => [
-  { type: "content_block_start", index, content_block: { type: "text", text: "" } },
-  { type: "content_block_delta", index, delta: { type: "text_delta", text: t } },
-  { type: "content_block_stop", index },
-];
-const end = (stop_reason: string) => [
-  { type: "message_delta", delta: { stop_reason, stop_sequence: null }, usage: { output_tokens: 5 } },
-  { type: "message_stop" },
-];
+const part = (text: string, finishReason?: string) => ({ candidates: [{ content: { role: "model", parts: [{ text }] }, finishReason }] });
 const ctx = { companyName: "X", userName: "Y", role: "owner" as const, installedApps: [], lang: "de" };
 
-async function collect(client: Anthropic) {
+async function collect(options: GeminiOptions, messages = [{ role: "user" as const, content: "Hallo" }]) {
   const out = [];
-  for await (const e of askAssistant(client, ctx, [{ role: "user", content: "Hallo" }])) out.push(e);
+  for await (const e of askAssistant(options, ctx, messages)) out.push(e);
   return out;
 }
 
 describe("KI-Assistent: Antwortstrom", () => {
   it("gibt Text weiter und meldet das Ende", async () => {
-    expect(await collect(fakeClient([start, ...text(0, "Hallo!"), ...end("end_turn")]))).toEqual([
-      { type: "text", text: "Hallo!" },
-      { type: "done" },
+    const events = await collect(fakeGemini([part("Hal"), part("lo!", "STOP")]), [
+      { role: "user", content: "a" },
+      { role: "assistant", content: "b" },
+      { role: "user", content: "c" },
     ]);
-    expect(lastRequest?.body).toMatchObject({ model: "claude-opus-5-5", fallbacks: "default", stream: true });
-    expect(lastRequest?.headers.get("anthropic-beta")).toContain("server-side-fallback-2026-07-01");
+    expect(events).toEqual([{ type: "text", text: "Hal" }, { type: "text", text: "lo!" }, { type: "done" }]);
+    expect(lastRequest?.url).toContain("/models/gemini-2.5-flash:streamGenerateContent?alt=sse");
+    expect(lastRequest?.headers.get("x-goog-api-key")).toBe("test-key");
+    expect(lastRequest?.body.contents).toEqual([
+      { role: "user", parts: [{ text: "a" }] },
+      { role: "model", parts: [{ text: "b" }] },
+      { role: "user", parts: [{ text: "c" }] },
+    ]);
   });
 
-  it("verwirft angefangenen Text, wenn ein Ersatzmodell übernimmt", async () => {
-    const fallback = {
-      type: "content_block_start",
-      index: 1,
-      content_block: { type: "fallback", from: { model: "claude-opus-5-5" }, to: { model: "claude-opus-4-8" }, trigger: { type: "refusal" } },
-    };
-    const events = await collect(fakeClient([start, ...text(0, "Teil"), fallback, { type: "content_block_stop", index: 1 }, ...text(2, "Ganz"), ...end("end_turn")]));
-    expect(events).toEqual([{ type: "text", text: "Teil" }, { type: "reset" }, { type: "text", text: "Ganz" }, { type: "done" }]);
+  it("verwirft Text, wenn Gemini die Antwort sperrt", async () => {
+    expect(await collect(fakeGemini([part("Teil"), part("", "SAFETY")]))).toEqual([
+      { type: "text", text: "Teil" },
+      { type: "reset" },
+      { type: "error", code: "assistantRefused" },
+    ]);
+    expect(await collect(fakeGemini([{ promptFeedback: { blockReason: "SAFETY" } }]))).toEqual([
+      { type: "reset" },
+      { type: "error", code: "assistantRefused" },
+    ]);
   });
 
-  it("meldet eine Ablehnung als Fehler", async () => {
-    const events = await collect(fakeClient([start, ...end("refusal")]));
-    expect(events).toEqual([{ type: "reset" }, { type: "error", code: "assistantRefused" }]);
-  });
-
-  it("meldet Überlastung verständlich", async () => {
-    const client = new Anthropic({
-      apiKey: "test",
-      maxRetries: 0,
-      fetch: async () => new Response(JSON.stringify({ type: "error", error: { type: "rate_limit_error", message: "slow down" } }), { status: 429 }),
-    });
-    expect(await collect(client)).toEqual([{ type: "error", code: "assistantBusy" }]);
+  it("meldet Überlastung und falschen Schlüssel verständlich", async () => {
+    expect(await collect(fakeGemini([], 429))).toEqual([{ type: "error", code: "assistantBusy" }]);
+    expect(await collect(fakeGemini([], 403))).toEqual([{ type: "error", code: "assistantNotConfigured" }]);
+    expect(await collect(fakeGemini([], 500))).toEqual([{ type: "error", code: "assistantFailed" }]);
   });
 });

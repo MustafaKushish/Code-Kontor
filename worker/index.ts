@@ -6,7 +6,6 @@ import { TenantDatabase } from "./tenant";
 import { sanitizeCompany, validateCompany } from "../shared/company";
 import { findApp } from "../shared/apps";
 import { fail } from "./errors";
-import Anthropic from "@anthropic-ai/sdk";
 import { askAssistant, DAILY_QUESTION_LIMIT, parseConversation } from "./assistant";
 
 export { TenantDatabase };
@@ -15,8 +14,10 @@ export interface Env {
   PLATFORM_DB: D1Database;
   TENANT_DB: DurableObjectNamespace<TenantDatabase>;
   ASSETS: Fetcher;
-  /** Schlüssel für den KI-Assistenten, gesetzt mit `wrangler secret put ANTHROPIC_API_KEY`. */
-  ANTHROPIC_API_KEY?: string;
+  /** Schlüssel für den KI-Assistenten (Google Gemini), gesetzt mit `wrangler secret put GEMINI_API_KEY`. */
+  GEMINI_API_KEY?: string;
+  /** Optional anderes Gemini-Modell, z. B. "gemini-2.5-pro". */
+  GEMINI_MODEL?: string;
 }
 
 type Role = "owner" | "admin" | "staff";
@@ -244,7 +245,7 @@ app.post("/assistant", async (c) => {
   const body = await readBody(c);
   const messages = parseConversation(body.messages);
   if (!messages) return fail(c, "messageInvalid", 400);
-  const apiKey = c.env.ANTHROPIC_API_KEY;
+  const apiKey = c.env.GEMINI_API_KEY;
   if (!apiKey) return fail(c, "assistantNotConfigured", 503);
 
   const db = tenantDb(c.env, user.tenantId);
@@ -262,7 +263,7 @@ app.post("/assistant", async (c) => {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
-      for await (const event of askAssistant(new Anthropic({ apiKey }), context, messages)) controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
+      for await (const event of askAssistant({ apiKey, model: c.env.GEMINI_MODEL }, context, messages)) controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
       controller.close();
     },
   });

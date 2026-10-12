@@ -1,11 +1,11 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { CATALOG } from "../shared/apps";
 
 // KI-Assistent: beantwortet Fragen zu Code Kontor und zum Geschäftsalltag.
 // Heute für Inhaber und Team in der App; die öffentlichen Kundenseiten der
 // Module bekommen später eine eigene Variante mit anderem Systemprompt.
 
-export const MODEL = "claude-opus-5-5";
+/** Kostenloses Gemini-Modell; mit der Variable GEMINI_MODEL austauschbar. */
+export const DEFAULT_MODEL = "gemini-2.5-flash";
 export const DAILY_QUESTION_LIMIT = 50;
 const MAX_TURNS = 20;
 const MAX_MESSAGE_CHARS = 4000;
@@ -85,41 +85,78 @@ Always answer in ${language}, unless the user writes in another language; then a
 
 export type StreamEvent = { type: "text"; text: string } | { type: "reset" } | { type: "done" } | { type: "error"; code: string };
 
-/** Stellt die Frage an Claude und liefert die Antwort Stück für Stück. */
-export async function* askAssistant(client: Anthropic, ctx: AssistantContext, messages: ChatMessage[]): AsyncGenerator<StreamEvent> {
+export interface GeminiOptions {
+  apiKey: string;
+  model?: string;
+  /** Für Tests austauschbar. */
+  fetch?: typeof fetch;
+}
+
+interface GeminiChunk {
+  candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[];
+  promptFeedback?: { blockReason?: string };
+}
+
+const BLOCKED = new Set(["SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST", "SPII", "RECITATION"]);
+
+/** Stellt die Frage an Gemini und liefert die Antwort Stück für Stück. */
+export async function* askAssistant(options: GeminiOptions, ctx: AssistantContext, messages: ChatMessage[]): AsyncGenerator<StreamEvent> {
+  const model = options.model || DEFAULT_MODEL;
+  const doFetch = options.fetch ?? fetch;
+  let response: Response;
   try {
-    const stream = client.beta.messages.stream({
-      model: MODEL,
-      max_tokens: 4000,
-      system: systemPrompt(ctx),
-      messages,
-      output_config: { effort: "low" },
-      // Lehnt das Modell eine Frage aus Sicherheitsgründen ab, beantwortet sie
-      // serverseitig automatisch das von Anthropic empfohlene Ersatzmodell.
-      fallbacks: "default",
-      betas: ["server-side-fallback-2026-07-01"],
+    response = await doFetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": options.apiKey },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: systemPrompt(ctx) }] },
+        contents: messages.map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })),
+        generationConfig: { maxOutputTokens: 2048, temperature: 0.4 },
+      }),
     });
-    for await (const event of stream) {
-      if (event.type === "content_block_start" && event.content_block.type === "fallback") {
-        // Ein Ersatzmodell übernimmt: angefangenen Text verwerfen.
-        yield { type: "reset" };
-      } else if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
-        yield { type: "text", text: event.delta.text };
-      }
-    }
-    const final = await stream.finalMessage();
-    if (final.stop_reason === "refusal") {
-      yield { type: "reset" };
-      yield { type: "error", code: "assistantRefused" };
-      return;
-    }
-    yield { type: "done" };
   } catch (error) {
-    if (error instanceof Anthropic.RateLimitError) yield { type: "error", code: "assistantBusy" };
-    else if (error instanceof Anthropic.AuthenticationError) yield { type: "error", code: "assistantNotConfigured" };
-    else {
-      console.error("assistant", error);
-      yield { type: "error", code: "assistantFailed" };
+    console.error("assistant", error);
+    yield { type: "error", code: "assistantFailed" };
+    return;
+  }
+
+  if (!response.ok || !response.body) {
+    console.error("assistant", response.status, await response.text().catch(() => ""));
+    if (response.status === 429) yield { type: "error", code: "assistantBusy" };
+    else if (response.status === 401 || response.status === 403) yield { type: "error", code: "assistantNotConfigured" };
+    else yield { type: "error", code: "assistantFailed" };
+    return;
+  }
+
+  // Antwort kommt als Server-Sent Events: Zeilen "data: {...}".
+  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = "";
+  let blocked = false;
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += value;
+    const lines = buffer.split(/\r?\n/);
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      if (!line.startsWith("data:")) continue;
+      let chunk: GeminiChunk;
+      try {
+        chunk = JSON.parse(line.slice(5));
+      } catch {
+        continue;
+      }
+      if (chunk.promptFeedback?.blockReason) blocked = true;
+      const candidate = chunk.candidates?.[0];
+      if (candidate?.finishReason && BLOCKED.has(candidate.finishReason)) blocked = true;
+      const text = candidate?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
+      if (text && !blocked) yield { type: "text", text };
     }
   }
+  if (blocked) {
+    yield { type: "reset" };
+    yield { type: "error", code: "assistantRefused" };
+    return;
+  }
+  yield { type: "done" };
 }
