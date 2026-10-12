@@ -78,7 +78,11 @@ jobs:
             echo "::warning::Kein GEMINI_API_KEY in den Repository-Secrets. Der KI-Assistent zeigt „noch nicht eingerichtet“."; fi
           if [ -n "$RESEND_API_KEY" ] && [ -n "$MAIL_FROM" ]; then add RESEND_API_KEY "$RESEND_API_KEY"; add MAIL_FROM "$MAIL_FROM"; else
             echo "::warning::Kein RESEND_API_KEY oder MAIL_FROM in den Repository-Secrets. E-Mails werden nicht gesendet."; fi
-          if [ -n "$STRIPE_SECRET_KEY" ]; then
+          STRIPE_SECRET_KEY=$(printf '%s' "$STRIPE_SECRET_KEY" | tr -d ' \t\r\n"')
+          if [ -n "$STRIPE_SECRET_KEY" ] && ! echo "$STRIPE_SECRET_KEY" | grep -qE '^(sk|rk)_(test|live)_'; then
+            echo "::error::STRIPE_SECRET_KEY ist kein geheimer Stripe-Schlüssel. Er muss mit sk_test_ oder sk_live_ beginnen (Stripe → Entwickler → API-Schlüssel). Die Bezahlung bleibt aus."
+            STRIPE_SECRET_KEY=""
+          elif [ -n "$STRIPE_SECRET_KEY" ]; then
             add STRIPE_SECRET_KEY "$STRIPE_SECRET_KEY"
             HAS=0; echo "$SECRETS" | grep -q '"STRIPE_WEBHOOK_SECRET"' && HAS=1
             WHSEC=$(HAS_SECRET=$HAS node scripts/ensure-stripe-webhook.mjs)
