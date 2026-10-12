@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CornerDownLeft, LayoutDashboard, Search, Settings, ShieldCheck, Store, Users } from "lucide-react";
+import { Calculator, CornerDownLeft, LayoutDashboard, Search, Settings, ShieldCheck, Store, Users } from "lucide-react";
 import type { Me } from "../api";
 import { AppIcon } from "../components";
 import { navigate } from "../router";
@@ -29,6 +29,7 @@ export function CommandPalette({ me, open, onClose }: { me: Me; open: boolean; o
       { id: "account", label: t("nav.account"), hint: t("palette.page"), to: "/konto", icon: <ShieldCheck size={18} /> },
     ];
     if (me.user.role !== "staff") pages.push({ id: "team", label: t("nav.team"), hint: t("palette.page"), to: "/team", icon: <Users size={18} /> });
+    if (me.user.role !== "staff") pages.push({ id: "accounting", label: t("nav.accounting"), hint: t("palette.page"), to: "/buchhaltung", icon: <Calculator size={18} /> });
     const apps = CATALOG.map((app) => {
       const installed = me.installedApps.includes(app.id);
       return {

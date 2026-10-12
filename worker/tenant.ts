@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import type { CompanyProfile } from "../shared/company";
+import type { Advisor, Employee, MonthEntry } from "../shared/accounting";
 
 // Die eigene Datenbank eines Kunden. Jede Firma bekommt bei der Anmeldung
 // ein eigenes Durable Object mit eigener SQLite-Datenbank, getrennt von allen anderen.
@@ -15,6 +16,8 @@ const MIGRATIONS: string[] = [
      user_id TEXT, user_name TEXT, action TEXT NOT NULL, detail TEXT
    );
    CREATE INDEX audit_log_at ON audit_log(at);`,
+  `CREATE TABLE employees (id TEXT PRIMARY KEY, personnel_number INTEGER NOT NULL, data TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT (datetime('now')));
+   CREATE TABLE payroll_entries (employee_id TEXT NOT NULL, month TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY (employee_id, month));`,
 ];
 
 export interface AuditEntry {
@@ -69,6 +72,61 @@ export class TenantDatabase extends DurableObject<Record<string, never>> {
 
   async uninstallApp(appId: string): Promise<void> {
     this.sql.exec("DELETE FROM installed_apps WHERE app_id = ?", appId);
+  }
+
+  // ---------- Buchhaltung ----------
+
+  async listEmployees(): Promise<Employee[]> {
+    return this.sql
+      .exec<{ id: string; personnel_number: number; data: string }>("SELECT id, personnel_number, data FROM employees ORDER BY personnel_number")
+      .toArray()
+      .map((r) => ({ ...(JSON.parse(r.data) as Employee), id: r.id, personnelNumber: String(r.personnel_number) }));
+  }
+
+  /** Neue Person anlegen (bekommt die nächste Personalnummer ab 1001) oder bestehende ändern. */
+  async saveEmployee(id: string | null, data: Omit<Employee, "id" | "personnelNumber">): Promise<string> {
+    if (id) {
+      const done = this.sql.exec("UPDATE employees SET data = ?, updated_at = datetime('now') WHERE id = ?", JSON.stringify(data), id);
+      if (done.rowsWritten === 0) throw new Error("not found");
+      return id;
+    }
+    const newId = crypto.randomUUID();
+    const next = this.sql.exec<{ n: number | null }>("SELECT MAX(personnel_number) AS n FROM employees").one().n ?? 1000;
+    this.sql.exec("INSERT INTO employees (id, personnel_number, data) VALUES (?, ?, ?)", newId, next + 1, JSON.stringify(data));
+    return newId;
+  }
+
+  async deleteEmployee(id: string): Promise<void> {
+    this.sql.exec("DELETE FROM payroll_entries WHERE employee_id = ?", id);
+    this.sql.exec("DELETE FROM employees WHERE id = ?", id);
+  }
+
+  async monthEntries(month: string): Promise<MonthEntry[]> {
+    return this.sql.exec<{ data: string }>("SELECT data FROM payroll_entries WHERE month = ?", month).toArray().map((r) => JSON.parse(r.data) as MonthEntry);
+  }
+
+  async saveMonthEntries(month: string, entries: MonthEntry[]): Promise<void> {
+    this.ctx.storage.transactionSync(() => {
+      for (const e of entries)
+        this.sql.exec(
+          `INSERT INTO payroll_entries (employee_id, month, data) VALUES (?, ?, ?)
+           ON CONFLICT(employee_id, month) DO UPDATE SET data = excluded.data`,
+          e.employeeId, month, JSON.stringify(e),
+        );
+    });
+  }
+
+  async getAdvisor(): Promise<Advisor | null> {
+    const rows = this.sql.exec<{ value: string }>("SELECT value FROM settings WHERE key = 'advisor'").toArray();
+    return rows.length ? (JSON.parse(rows[0]!.value) as Advisor) : null;
+  }
+
+  async saveAdvisor(advisor: Advisor): Promise<void> {
+    this.sql.exec(
+      `INSERT INTO settings (key, value) VALUES ('advisor', ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`,
+      JSON.stringify(advisor),
+    );
   }
 
   /** Eintrag ins Protokoll: wer hat wann was getan. Einträge älter als 2 Jahre fallen weg. */

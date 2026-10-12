@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Laptop, LayoutDashboard, LogOut, Moon, Search, Settings, ShieldCheck, Store, Sun, Users } from "lucide-react";
+import { Calculator, Laptop, LayoutDashboard, LogOut, Moon, Search, Settings, ShieldCheck, Store, Sun, Users } from "lucide-react";
 import type { Me } from "../api";
 import { AppIcon, Avatar, Link, Logo } from "../components";
 import { useTheme, type ThemeChoice } from "../theme";
@@ -14,6 +14,7 @@ const NAV = [
   { to: "/", label: "nav.overview", short: "nav.startShort", icon: LayoutDashboard },
   { to: "/katalog", label: "nav.catalog", short: "nav.catalogShort", icon: Store },
   { to: "/team", label: "nav.team", short: "nav.team", icon: Users, managersOnly: true },
+  { to: "/buchhaltung", label: "nav.accounting", short: "nav.accountingShort", icon: Calculator, managersOnly: true },
   { to: "/einstellungen", label: "nav.company", short: "nav.company", icon: Settings },
   { to: "/konto", label: "nav.account", short: "nav.account", icon: ShieldCheck },
 ];

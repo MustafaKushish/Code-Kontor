@@ -11,6 +11,7 @@ import { AppDetail, InstalledApp } from "./pages/AppDetail";
 import { Team } from "./pages/Team";
 import { Settings } from "./pages/Settings";
 import { AccountPage } from "./pages/Account";
+import { AccountingPage } from "./pages/Accounting";
 import { findApp } from "../shared/apps";
 
 export function App() {
@@ -76,6 +77,8 @@ export function App() {
     page = <InstalledApp app={findApp(id)!} />;
   } else if (section === "team" && isManager) {
     page = <Team me={me} />;
+  } else if (section === "buchhaltung" && isManager) {
+    page = <AccountingPage me={me} />;
   } else if (section === "konto") {
     page = <AccountPage me={me} onChanged={refresh} />;
   } else if (section === "einstellungen") {

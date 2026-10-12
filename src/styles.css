@@ -764,3 +764,56 @@ a.tile:hover { transform: translateY(-3px); box-shadow: var(--shadow-lift); }
 .audit-list li.warn strong { color: var(--error); }
 .audit-list time { color: var(--muted); font-variant-numeric: tabular-nums; }
 @media (max-width: 600px) { .audit-list li { grid-template-columns: 1fr; gap: 2px; } }
+
+/* ---------- Buchhaltung ---------- */
+textarea {
+  width: 100%; font: inherit; padding: 12px 14px; resize: vertical;
+  border: 1px solid var(--line-strong); border-radius: 14px; background: var(--panel); color: var(--ink);
+}
+textarea:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand) 18%, transparent); }
+input[aria-invalid="true"] { border-color: var(--error); }
+.page-tabs {
+  display: flex; gap: 4px; padding: 4px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--line);
+  width: fit-content; max-width: 100%; overflow-x: auto; scrollbar-width: none;
+}
+.page-tabs button {
+  display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; border: none; background: none;
+  padding: 9px 16px; border-radius: 999px; font: inherit; font-weight: 600; color: var(--muted); cursor: pointer; transition: all 0.2s;
+}
+.page-tabs button.active { background: var(--panel); color: var(--ink); box-shadow: var(--shadow-sm); }
+.page-tabs button.active svg { color: var(--brand); }
+.toolbar { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+.toolbar > p { flex: 1; min-width: 220px; margin: 0; }
+.toolbar .field { min-width: 200px; }
+.section-title { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; font-size: 1.3rem; }
+.employee-row { width: 100%; border: none; background: none; font: inherit; color: inherit; text-align: start; cursor: pointer; }
+.list-card .empty { padding: 18px 14px; margin: 0; }
+.actions.spread { justify-content: space-between; }
+.month-card { padding: 8px; overflow-x: auto; }
+.month-card > p { padding: 14px; margin: 0; }
+.month-table { width: 100%; border-collapse: collapse; }
+.month-table th, .month-table td { padding: 8px 6px; text-align: start; vertical-align: middle; }
+.month-table thead th { font-size: 0.8rem; font-weight: 600; color: var(--muted); white-space: nowrap; }
+.month-table tbody tr + tr { border-top: 1px solid var(--line); }
+.month-table tbody th { display: grid; font-weight: 400; min-width: 140px; }
+.month-table input { padding: 9px 10px; border-radius: 10px; min-width: 70px; }
+.month-table td:last-child input { min-width: 160px; }
+.month-actions { flex-wrap: wrap; }
+@media (max-width: 760px) {
+  .month-table thead { display: none; }
+  .month-table, .month-table tbody, .month-table tr { display: block; }
+  .month-table tbody tr { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; padding: 12px 6px; }
+  .month-table tbody th { grid-column: 1 / -1; padding: 0; }
+  .month-table td { display: grid; gap: 4px; padding: 0; }
+  .month-table td::before { content: attr(data-label); font-size: 0.78rem; font-weight: 600; color: var(--muted); }
+  .month-table td:last-child { grid-column: 1 / -1; }
+  .month-table input, .month-table td:last-child input { min-width: 0; }
+  .form-grid { grid-template-columns: 1fr; }
+  .month-actions .button { flex: 1 1 auto; justify-content: center; }
+}
+@media (max-width: 900px) { .tab span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-inline: 2px; } }
+@media (max-width: 560px) {
+  .page-tabs { width: 100%; }
+  .page-tabs button { flex: 1; justify-content: center; padding: 9px 6px; font-size: 0.86rem; }
+  .page-tabs button svg { display: none; }
+}

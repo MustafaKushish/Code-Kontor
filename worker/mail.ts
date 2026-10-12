@@ -118,7 +118,30 @@ export interface MailConfig {
 export const mailEnabled = (env: MailConfig) => !!(env.RESEND_API_KEY && env.MAIL_FROM);
 
 /** Sendet die E-Mail. Gibt false zurück, wenn kein Versand eingerichtet ist oder er fehlschlägt. */
-export async function sendMail(env: MailConfig, to: string, content: MailContent, doFetch: typeof fetch = fetch): Promise<boolean> {
+export interface MailAttachment {
+  filename: string;
+  /** Inhalt als Base64 */
+  content: string;
+}
+
+/** Monatsmeldung an den Steuerberater. Bewusst auf Deutsch (Steuerberater in DE/AT/CH), sonst Englisch. */
+export function renderReportMail(lang: string, vars: { company: string; month: string; sender: string; replyTo: string }): MailContent {
+  const de = lang === "de" || !lang;
+  const subject = de ? `Monatsmeldung Lohn ${vars.month} – ${vars.company}` : `Monthly payroll report ${vars.month} – ${vars.company}`;
+  const text = de
+    ? `Guten Tag,\n\nanbei die Monatsmeldung für die Lohnabrechnung ${vars.month} von ${vars.company} (Stunden, Urlaub, Krankheit, Zuschläge) als CSV-Datei.\n\nRückfragen bitte an ${vars.sender} (${vars.replyTo}).\n\nGesendet mit Code Kontor`
+    : `Hello,\n\nattached is the monthly payroll report ${vars.month} for ${vars.company} (hours, vacation, sick days, bonuses) as a CSV file.\n\nFor questions please contact ${vars.sender} (${vars.replyTo}).\n\nSent with Code Kontor`;
+  const html = `<!doctype html><html><body style="font-family:Inter,Segoe UI,Arial,sans-serif;color:#12141c;line-height:1.55">${escapeHtml(text).replace(/\n/g, "<br>")}</body></html>`;
+  return { subject, text, html };
+}
+
+export async function sendMail(
+  env: MailConfig,
+  to: string,
+  content: MailContent,
+  doFetch: typeof fetch = fetch,
+  extra: { attachments?: MailAttachment[]; replyTo?: string } = {},
+): Promise<boolean> {
   if (!mailEnabled(env)) {
     console.log(`[mail] Kein Versand eingerichtet. An ${to}: ${content.subject}\n${content.text}`);
     return false;
@@ -126,7 +149,11 @@ export async function sendMail(env: MailConfig, to: string, content: MailContent
   const response = await doFetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from: env.MAIL_FROM, to: [to], subject: content.subject, text: content.text, html: content.html }),
+    body: JSON.stringify({
+      from: env.MAIL_FROM, to: [to], subject: content.subject, text: content.text, html: content.html,
+      ...(extra.attachments ? { attachments: extra.attachments } : {}),
+      ...(extra.replyTo ? { reply_to: extra.replyTo } : {}),
+    }),
   });
   if (!response.ok) console.error(`[mail] Versand fehlgeschlagen (${response.status}): ${await response.text().catch(() => "")}`);
   return response.ok;

@@ -10,7 +10,11 @@ import { findApp } from "../shared/apps";
 import { fail } from "./errors";
 import { cityForPostalCode, suggestAddresses } from "./geo";
 import { askAssistant, DAILY_QUESTION_LIMIT, parseConversation } from "./assistant";
-import { mailEnabled, renderMail, sendMail, type MailKind } from "./mail";
+import { mailEnabled, renderMail, renderReportMail, sendMail, type MailKind } from "./mail";
+import {
+  employedInMonth, isValidMonth, monthReportCsv, sanitizeAdvisor, sanitizeEmployee, sanitizeMonthEntry, SENSITIVE_EMPLOYEE_FIELDS,
+  validateEmployee, type Employee,
+} from "../shared/accounting";
 import { decryptField, encryptField, isEncrypted } from "./crypto";
 import { newRecoveryCodes, newTotpSecret, normalizeRecoveryCode, otpauthUrl, verifyTotp } from "./totp";
 import type { CompanyProfile } from "../shared/company";
@@ -451,7 +455,7 @@ app.get("/account/sessions", async (c) => {
 
 app.delete("/account/sessions/:id", async (c) => {
   const user = c.get("user");
-  const id = c.req.param("id");
+  const id = c.req.param("id") ?? "";
   if (!/^[0-9a-f]{16}$/.test(id)) return fail(c, "notFound", 404);
   await c.env.PLATFORM_DB.prepare("DELETE FROM sessions WHERE user_id = ? AND substr(token_hash, 1, 16) = ? AND token_hash != ?")
     .bind(user.id, id, c.get("sessionHash"))
@@ -678,6 +682,126 @@ app.delete("/users/:id", requireRole("owner", "admin"), async (c) => {
   await c.env.PLATFORM_DB.prepare("DELETE FROM users WHERE id = ?").bind(target.id).run();
   audit(c, me.tenantId, me, "userRemoved", { userId: target.id });
   return c.json({ ok: true });
+});
+
+// ---------- Buchhaltung (nur Inhaber und Admins) ----------
+
+async function loadEmployees(env: Env, tenantId: string): Promise<Employee[]> {
+  const list = await tenantDb(env, tenantId).listEmployees();
+  for (const e of list) for (const f of SENSITIVE_EMPLOYEE_FIELDS) e[f] = await decryptField(env.DATA_KEY, e[f]);
+  return list;
+}
+
+async function encryptEmployee(env: Env, data: Omit<Employee, "id" | "personnelNumber">) {
+  const out = { ...data };
+  for (const f of SENSITIVE_EMPLOYEE_FIELDS) out[f] = await encryptField(env.DATA_KEY, out[f]);
+  return out;
+}
+
+const accounting = requireRole("owner", "admin");
+
+app.get("/accounting/employees", accounting, async (c) => {
+  return c.json({ employees: await loadEmployees(c.env, c.get("user").tenantId) });
+});
+
+app.post("/accounting/employees", accounting, async (c) => {
+  const user = c.get("user");
+  const data = sanitizeEmployee(await readBody(c));
+  const errors = validateEmployee(data);
+  if (Object.keys(errors).length) return fail(c, "checkFields", 400, { errors });
+  const id = await tenantDb(c.env, user.tenantId).saveEmployee(null, await encryptEmployee(c.env, data));
+  audit(c, user.tenantId, user, "employeeAdded", { name: `${data.firstName} ${data.lastName}` });
+  return c.json({ id }, 201);
+});
+
+app.put("/accounting/employees/:id", accounting, async (c) => {
+  const user = c.get("user");
+  const data = sanitizeEmployee(await readBody(c));
+  const errors = validateEmployee(data);
+  if (Object.keys(errors).length) return fail(c, "checkFields", 400, { errors });
+  try {
+    await tenantDb(c.env, user.tenantId).saveEmployee(c.req.param("id") ?? "", await encryptEmployee(c.env, data));
+  } catch {
+    return fail(c, "notFound", 404);
+  }
+  audit(c, user.tenantId, user, "employeeChanged", { name: `${data.firstName} ${data.lastName}` });
+  return c.json({ ok: true });
+});
+
+app.delete("/accounting/employees/:id", accounting, async (c) => {
+  const user = c.get("user");
+  await tenantDb(c.env, user.tenantId).deleteEmployee(c.req.param("id") ?? "");
+  audit(c, user.tenantId, user, "employeeRemoved");
+  return c.json({ ok: true });
+});
+
+app.get("/accounting/advisor", accounting, async (c) => {
+  return c.json({ advisor: await tenantDb(c.env, c.get("user").tenantId).getAdvisor() });
+});
+
+app.put("/accounting/advisor", accounting, async (c) => {
+  const user = c.get("user");
+  const advisor = sanitizeAdvisor(await readBody(c));
+  if (advisor.email && !EMAIL_PATTERN.test(advisor.email)) return fail(c, "checkFields", 400, { errors: { email: "emailInvalid" } });
+  await tenantDb(c.env, user.tenantId).saveAdvisor(advisor);
+  audit(c, user.tenantId, user, "advisorChanged");
+  return c.json({ advisor });
+});
+
+app.get("/accounting/month/:month", accounting, async (c) => {
+  const month = c.req.param("month") ?? "";
+  if (!isValidMonth(month)) return fail(c, "notFound", 404);
+  return c.json({ entries: await tenantDb(c.env, c.get("user").tenantId).monthEntries(month) });
+});
+
+app.put("/accounting/month/:month", accounting, async (c) => {
+  const user = c.get("user");
+  const month = c.req.param("month") ?? "";
+  if (!isValidMonth(month)) return fail(c, "notFound", 404);
+  const body = await readBody(c);
+  const ids = new Set((await tenantDb(c.env, user.tenantId).listEmployees()).map((e) => e.id));
+  const entries = (Array.isArray(body.entries) ? body.entries : [])
+    .slice(0, 500)
+    .map((e) => sanitizeMonthEntry((e ?? {}) as Record<string, unknown>, month))
+    .filter((e) => ids.has(e.employeeId));
+  await tenantDb(c.env, user.tenantId).saveMonthEntries(month, entries);
+  audit(c, user.tenantId, user, "monthSaved", { month });
+  return c.json({ ok: true });
+});
+
+async function buildMonthReport(c: Ctx, month: string) {
+  const user = c.get("user");
+  const db = tenantDb(c.env, user.tenantId);
+  const [employees, entries, advisor] = await Promise.all([loadEmployees(c.env, user.tenantId), db.monthEntries(month), db.getAdvisor()]);
+  const csv = monthReportCsv({ company: user.tenantName, month, advisor, employees: employees.filter((e) => employedInMonth(e, month)), entries });
+  return { csv, advisor, filename: `Monatsmeldung-${month}.csv` };
+}
+
+app.get("/accounting/month/:month/export", accounting, async (c) => {
+  const month = c.req.param("month") ?? "";
+  if (!isValidMonth(month)) return fail(c, "notFound", 404);
+  const { csv, filename } = await buildMonthReport(c, month);
+  audit(c, c.get("user").tenantId, c.get("user"), "monthExported", { month });
+  return new Response(csv, {
+    headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="${filename}"`, "Cache-Control": "no-store" },
+  });
+});
+
+app.post("/accounting/month/:month/send", accounting, async (c) => {
+  const user = c.get("user");
+  const month = c.req.param("month") ?? "";
+  if (!isValidMonth(month)) return fail(c, "notFound", 404);
+  if (!mailEnabled(c.env)) return fail(c, "mailNotConfigured", 400);
+  const { csv, advisor, filename } = await buildMonthReport(c, month);
+  if (!advisor?.email) return fail(c, "advisorEmailMissing", 400);
+  const bytes = new TextEncoder().encode(csv);
+  let binary = "";
+  for (const b of bytes) binary += String.fromCharCode(b);
+  const content = renderReportMail(langOf(await readBody(c)), { company: user.tenantName, month, sender: user.name, replyTo: user.email });
+  const sent = await sendMail(c.env, advisor.email, content, fetch, { attachments: [{ filename, content: btoa(binary) }], replyTo: user.email });
+  if (!sent) return fail(c, "mailFailed", 502);
+  audit(c, user.tenantId, user, "monthSent", { month, email: advisor.email });
+  return c.json({ ok: true, to: advisor.email });
 });
 
 // ---------- Adressvorschläge ----------
