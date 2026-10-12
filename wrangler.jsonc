@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "code-kontor",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  // Plattform-Datenbank: Firmen-Verzeichnis, Benutzer, Sitzungen
+  "d1_databases": [
+    {
+      "binding": "PLATFORM_DB",
+      "database_name": "code-kontor-platform",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  // Eine eigene SQLite-Datenbank je Kunde (Durable Object je Firma)
+  "durable_objects": {
+    "bindings": [{ "name": "TENANT_DB", "class_name": "TenantDatabase" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["TenantDatabase"] }]
+}
