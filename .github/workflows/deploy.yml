@@ -66,3 +66,14 @@ jobs:
           else
             echo "::warning::Kein GEMINI_API_KEY in den Repository-Secrets. Der KI-Assistent zeigt „noch nicht eingerichtet“."
           fi
+      - name: E-Mail-Versand hinterlegen
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          MAIL_FROM: ${{ secrets.MAIL_FROM }}
+        run: |
+          if [ -n "$RESEND_API_KEY" ] && [ -n "$MAIL_FROM" ]; then
+            printf '%s' "$RESEND_API_KEY" | npx wrangler secret put RESEND_API_KEY
+            printf '%s' "$MAIL_FROM" | npx wrangler secret put MAIL_FROM
+          else
+            echo "::warning::Kein RESEND_API_KEY oder MAIL_FROM in den Repository-Secrets. Einladungslinks werden nur in der App angezeigt, E-Mails werden nicht gesendet."
+          fi

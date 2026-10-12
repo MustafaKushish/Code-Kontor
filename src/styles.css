@@ -722,3 +722,23 @@ a.tile:hover { transform: translateY(-3px); box-shadow: var(--shadow-lift); }
 .address-list span { display: grid; min-width: 0; }
 .address-list strong { font-weight: 600; }
 .address-list small { color: var(--muted); }
+
+/* ---------- Konto und Sicherheit ---------- */
+.text-button {
+  justify-self: start; background: none; border: none; padding: 4px 0; font: inherit; font-weight: 600; color: var(--brand); cursor: pointer;
+  text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--brand) 35%, transparent); text-underline-offset: 3px;
+}
+.text-button:hover { text-decoration-color: currentColor; }
+.text-button:disabled { opacity: 0.5; cursor: default; }
+.notice.success { background: var(--success-soft); color: var(--success); display: flex; align-items: center; gap: 8px; }
+.success-text { color: var(--success); margin: 0; }
+.verify-banner { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+.verify-banner > span { flex: 1; min-width: 200px; }
+.verify-banner svg { flex: none; }
+.card-subtitle { display: flex; align-items: center; gap: 8px; font-size: 1rem; margin: 0; }
+.card-subtitle svg { color: var(--brand); }
+.account-password { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line); }
+.invite-result { display: grid; gap: 10px; }
+.invite-link { display: flex; gap: 8px; align-items: stretch; }
+.invite-link input { flex: 1; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85rem; }
+.list-title { margin: 0; padding: 14px 18px 4px; font-size: 0.85rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }

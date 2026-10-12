@@ -10,6 +10,7 @@ import { findApp } from "../shared/apps";
 import { fail } from "./errors";
 import { cityForPostalCode, suggestAddresses } from "./geo";
 import { askAssistant, DAILY_QUESTION_LIMIT, parseConversation } from "./assistant";
+import { mailEnabled, renderMail, sendMail, type MailKind } from "./mail";
 
 export { TenantDatabase };
 
@@ -21,6 +22,10 @@ export interface Env {
   GEMINI_API_KEY?: string;
   /** Optional anderes Gemini-Modell, z. B. "gemini-2.5-pro". */
   GEMINI_MODEL?: string;
+  /** E-Mail-Versand über Resend. Ohne beide Werte werden keine E-Mails gesendet. */
+  RESEND_API_KEY?: string;
+  /** Absender, z. B. "Code Kontor <noreply@code-kontor.de>". */
+  MAIL_FROM?: string;
 }
 
 type Role = "owner" | "admin" | "staff";
@@ -31,14 +36,18 @@ interface SessionUser {
   email: string;
   name: string;
   role: Role;
+  emailVerified: boolean;
 }
 
-type App = { Bindings: Env; Variables: { user: SessionUser } };
+type App = { Bindings: Env; Variables: { user: SessionUser; sessionHash: string } };
 type Ctx = Context<App>;
 
 const SESSION_COOKIE = "ck_session";
 const SESSION_DAYS = 30;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const HOUR = 3_600_000;
+const TOKEN_HOURS = { verify: 72, reset: 1 } as const;
+const INVITE_DAYS = 7;
 
 const app = new Hono<App>().basePath("/api");
 app.use(csrf());
@@ -76,6 +85,56 @@ async function readBody(c: Ctx): Promise<Record<string, unknown>> {
 }
 
 const text = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+const langOf = (body: Record<string, unknown>) => (typeof body.lang === "string" && /^[a-z]{2}$/.test(body.lang) ? body.lang : "de");
+const nowIso = () => new Date().toISOString();
+
+/** Link zu einer Seite der App, auf derselben Adresse, über die die Anfrage kam. */
+const appLink = (c: Ctx, path: string) => new URL(path, c.req.url).toString();
+
+/** Einmal-Link anlegen (Bestätigung oder neues Passwort) und per E-Mail senden. */
+async function sendUserLink(c: Ctx, kind: "verify" | "reset", user: { id: string; email: string; name: string }, lang: string) {
+  const token = newSessionToken();
+  const db = c.env.PLATFORM_DB;
+  await db.batch([
+    // Ältere Links derselben Art werden ungültig
+    db.prepare("DELETE FROM user_tokens WHERE user_id = ? AND kind = ?").bind(user.id, kind),
+    db.prepare("INSERT INTO user_tokens (token_hash, user_id, kind, expires_at) VALUES (?, ?, ?, ?)")
+      .bind(await hashToken(token), user.id, kind, new Date(Date.now() + TOKEN_HOURS[kind] * HOUR).toISOString()),
+  ]);
+  const path = kind === "verify" ? `/bestaetigen/${token}` : `/passwort-neu/${token}`;
+  return mail(c, kind, user.email, lang, appLink(c, path), { name: user.name });
+}
+
+function mail(c: Ctx, kind: MailKind, to: string, lang: string, link: string, vars: Record<string, string>) {
+  const content = renderMail(kind, lang, link, vars);
+  // Antwort nicht auf den Versand warten lassen
+  const sending = sendMail(c.env, to, content).catch((err) => (console.error("[mail]", err), false));
+  c.executionCtx.waitUntil(sending);
+  return sending;
+}
+
+/** Gültigen Einmal-Link einlösen: gibt die Benutzer-ID zurück und löscht den Link. */
+async function useUserToken(c: Ctx, kind: "verify" | "reset", token: string): Promise<string | null> {
+  if (!/^[0-9a-f]{64}$/.test(token)) return null;
+  const hash = await hashToken(token);
+  const row = await c.env.PLATFORM_DB.prepare("SELECT user_id FROM user_tokens WHERE token_hash = ? AND kind = ? AND expires_at > ?")
+    .bind(hash, kind, nowIso())
+    .first<{ user_id: string }>();
+  if (!row) return null;
+  await c.env.PLATFORM_DB.prepare("DELETE FROM user_tokens WHERE token_hash = ?").bind(hash).run();
+  return row.user_id;
+}
+
+async function findInvite(c: Ctx, token: string) {
+  if (!/^[0-9a-f]{64}$/.test(token)) return null;
+  return c.env.PLATFORM_DB.prepare(
+    `SELECT i.id, i.tenant_id AS tenantId, i.email, i.name, i.role, t.name AS companyName
+       FROM invites i JOIN tenants t ON t.id = i.tenant_id
+      WHERE i.token_hash = ? AND i.expires_at > ?`,
+  )
+    .bind(await hashToken(token), nowIso())
+    .first<{ id: string; tenantId: string; email: string; name: string; role: "admin" | "staff"; companyName: string }>();
+}
 
 // ---------- Anmeldung ----------
 
@@ -106,6 +165,7 @@ app.post("/auth/register", async (c) => {
   const db = tenantDb(c.env, tenantId);
   await db.saveCompany({ ...sanitizeCompany({ name: companyName, email }) });
 
+  c.executionCtx.waitUntil(sendUserLink(c, "verify", { id: userId, email, name }, langOf(body)));
   await startSession(c, userId);
   return c.json({ ok: true }, 201);
 });
@@ -137,13 +197,84 @@ app.post("/auth/logout", async (c) => {
   return c.json({ ok: true });
 });
 
+// E-Mail-Adresse bestätigen (Link aus der E-Mail, auch ohne Anmeldung)
+app.post("/auth/verify", async (c) => {
+  const userId = await useUserToken(c, "verify", text((await readBody(c)).token));
+  if (!userId) return fail(c, "linkInvalid", 400);
+  await c.env.PLATFORM_DB.prepare("UPDATE users SET email_verified_at = ? WHERE id = ? AND email_verified_at IS NULL").bind(nowIso(), userId).run();
+  return c.json({ ok: true });
+});
+
+// Passwort vergessen: Antwort ist immer gleich, damit niemand prüfen kann, welche E-Mails es gibt.
+app.post("/auth/forgot", async (c) => {
+  const body = await readBody(c);
+  const email = text(body.email).toLowerCase();
+  if (!EMAIL_PATTERN.test(email)) return fail(c, "emailInvalid", 400);
+  const keys = [{ key: `reset:${email}`, limit: 3 }];
+  if (!(await isLocked(c.env.PLATFORM_DB, keys))) {
+    await recordFailure(c.env.PLATFORM_DB, keys);
+    const user = await c.env.PLATFORM_DB.prepare("SELECT id, email, name FROM users WHERE email = ?")
+      .bind(email)
+      .first<{ id: string; email: string; name: string }>();
+    if (user) c.executionCtx.waitUntil(sendUserLink(c, "reset", user, langOf(body)));
+  }
+  return c.json({ ok: true });
+});
+
+// Neues Passwort über den Link aus der E-Mail. Alle bisherigen Sitzungen werden beendet.
+app.post("/auth/reset", async (c) => {
+  const body = await readBody(c);
+  const problem = passwordProblem(body.password);
+  if (problem) return fail(c, problem, 400);
+  const userId = await useUserToken(c, "reset", text(body.token));
+  if (!userId) return fail(c, "linkInvalid", 400);
+  const user = await c.env.PLATFORM_DB.prepare("SELECT email FROM users WHERE id = ?").bind(userId).first<{ email: string }>();
+  await c.env.PLATFORM_DB.batch([
+    // Wer den Link aus der E-Mail nutzt, hat die Adresse damit auch bestätigt
+    c.env.PLATFORM_DB.prepare("UPDATE users SET password_hash = ?, email_verified_at = COALESCE(email_verified_at, ?) WHERE id = ?")
+      .bind(await hashPassword(body.password as string), nowIso(), userId),
+    c.env.PLATFORM_DB.prepare("DELETE FROM sessions WHERE user_id = ?").bind(userId),
+  ]);
+  if (user) await clearFailures(c.env.PLATFORM_DB, user.email);
+  await startSession(c, userId);
+  return c.json({ ok: true });
+});
+
+// Einladung ansehen und annehmen
+app.get("/auth/invite/:token", async (c) => {
+  const invite = await findInvite(c, c.req.param("token"));
+  if (!invite) return fail(c, "linkInvalid", 404);
+  return c.json({ invite: { email: invite.email, name: invite.name, role: invite.role, companyName: invite.companyName } });
+});
+
+app.post("/auth/invite/:token", async (c) => {
+  const body = await readBody(c);
+  const invite = await findInvite(c, c.req.param("token"));
+  if (!invite) return fail(c, "linkInvalid", 404);
+  const name = text(body.name) || invite.name;
+  const problem = passwordProblem(body.password);
+  if (problem) return fail(c, problem, 400);
+  const exists = await c.env.PLATFORM_DB.prepare("SELECT 1 FROM users WHERE email = ?").bind(invite.email).first();
+  if (exists) return fail(c, "emailTaken", 409);
+  const userId = crypto.randomUUID();
+  await c.env.PLATFORM_DB.batch([
+    c.env.PLATFORM_DB.prepare(
+      "INSERT INTO users (id, tenant_id, email, name, role, password_hash, email_verified_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    ).bind(userId, invite.tenantId, invite.email, name, invite.role, await hashPassword(body.password as string), nowIso()),
+    c.env.PLATFORM_DB.prepare("DELETE FROM invites WHERE id = ?").bind(invite.id),
+  ]);
+  await startSession(c, userId);
+  return c.json({ ok: true }, 201);
+});
+
 // ---------- Ab hier nur mit Anmeldung ----------
 
 app.use("*", async (c, next) => {
   const token = getCookie(c, SESSION_COOKIE);
   if (!token) return fail(c, "notLoggedIn", 401);
   const user = await c.env.PLATFORM_DB.prepare(
-    `SELECT u.id, u.tenant_id AS tenantId, t.name AS tenantName, u.email, u.name, u.role
+    `SELECT u.id, u.tenant_id AS tenantId, t.name AS tenantName, u.email, u.name, u.role,
+            u.email_verified_at IS NOT NULL AS emailVerified
        FROM sessions s JOIN users u ON u.id = s.user_id JOIN tenants t ON t.id = u.tenant_id
       WHERE s.token_hash = ? AND s.expires_at > ?`,
   )
@@ -153,7 +284,8 @@ app.use("*", async (c, next) => {
     deleteCookie(c, SESSION_COOKIE, { path: "/" });
     return fail(c, "sessionExpired", 401);
   }
-  c.set("user", user);
+  c.set("user", { ...user, emailVerified: !!user.emailVerified });
+  c.set("sessionHash", await hashToken(token));
   await next();
 });
 
@@ -168,7 +300,35 @@ app.get("/me", async (c) => {
   const db = tenantDb(c.env, user.tenantId);
   const company = await db.getCompany();
   const setupComplete = !!company && Object.keys(validateCompany(company)).length === 0;
-  return c.json({ user, setupComplete, installedApps: await db.installedApps() });
+  return c.json({ user, setupComplete, installedApps: await db.installedApps(), mailEnabled: mailEnabled(c.env) });
+});
+
+// ---------- Eigenes Konto ----------
+
+app.post("/account/password", async (c) => {
+  const user = c.get("user");
+  const body = await readBody(c);
+  const problem = passwordProblem(body.newPassword);
+  if (problem) return fail(c, problem, 400);
+  const row = await c.env.PLATFORM_DB.prepare("SELECT password_hash FROM users WHERE id = ?").bind(user.id).first<{ password_hash: string }>();
+  if (!row || !(await verifyPassword(typeof body.currentPassword === "string" ? body.currentPassword : "", row.password_hash)))
+    return fail(c, "currentPasswordWrong", 400);
+  await c.env.PLATFORM_DB.batch([
+    c.env.PLATFORM_DB.prepare("UPDATE users SET password_hash = ? WHERE id = ?").bind(await hashPassword(body.newPassword as string), user.id),
+    // Alle anderen Geräte abmelden, dieses bleibt angemeldet
+    c.env.PLATFORM_DB.prepare("DELETE FROM sessions WHERE user_id = ? AND token_hash != ?").bind(user.id, c.get("sessionHash")),
+  ]);
+  return c.json({ ok: true });
+});
+
+app.post("/account/verify-email", async (c) => {
+  const user = c.get("user");
+  if (user.emailVerified) return c.json({ ok: true, sent: false });
+  const keys = [{ key: `verify:${user.id}`, limit: 3 }];
+  if (await isLocked(c.env.PLATFORM_DB, keys)) return fail(c, "tooManyAttempts", 429);
+  await recordFailure(c.env.PLATFORM_DB, keys);
+  const sent = await sendUserLink(c, "verify", user, langOf(await readBody(c)));
+  return c.json({ ok: true, sent });
 });
 
 // ---------- Firmendaten ----------
@@ -216,27 +376,52 @@ app.get("/users", requireRole("owner", "admin"), async (c) => {
   return c.json({ users: results });
 });
 
-app.post("/users", requireRole("owner", "admin"), async (c) => {
+app.get("/invites", requireRole("owner", "admin"), async (c) => {
+  const { results } = await c.env.PLATFORM_DB.prepare(
+    "SELECT id, email, name, role, expires_at AS expiresAt FROM invites WHERE tenant_id = ? AND expires_at > ? ORDER BY created_at",
+  )
+    .bind(c.get("user").tenantId, nowIso())
+    .all();
+  return c.json({ invites: results });
+});
+
+app.post("/invites", requireRole("owner", "admin"), async (c) => {
   const me = c.get("user");
   const body = await readBody(c);
   const name = text(body.name);
   const email = text(body.email).toLowerCase();
   const role = body.role as Role;
-  const problem = passwordProblem(body.password);
   if (!name) return fail(c, "nameRequired", 400);
   if (!EMAIL_PATTERN.test(email)) return fail(c, "emailInvalid", 400);
   if (role !== "admin" && role !== "staff") return fail(c, "roleInvalid", 400);
   if (role === "admin" && me.role !== "owner") return fail(c, "ownerOnlyAdmins", 403);
-  if (problem) return fail(c, problem, 400);
   const exists = await c.env.PLATFORM_DB.prepare("SELECT 1 FROM users WHERE email = ?").bind(email).first();
   if (exists) return fail(c, "emailTaken", 409);
+
+  const token = newSessionToken();
   const id = crypto.randomUUID();
-  await c.env.PLATFORM_DB.prepare(
-    "INSERT INTO users (id, tenant_id, email, name, role, password_hash) VALUES (?, ?, ?, ?, ?, ?)",
-  )
-    .bind(id, me.tenantId, email, name, role, await hashPassword(body.password as string))
+  const expires = new Date(Date.now() + INVITE_DAYS * 24 * HOUR).toISOString();
+  await c.env.PLATFORM_DB.batch([
+    // Eine neue Einladung an dieselbe Adresse ersetzt die alte
+    c.env.PLATFORM_DB.prepare("DELETE FROM invites WHERE tenant_id = ? AND email = ?").bind(me.tenantId, email),
+    c.env.PLATFORM_DB.prepare(
+      "INSERT INTO invites (id, token_hash, tenant_id, email, name, role, invited_by, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    ).bind(id, await hashToken(token), me.tenantId, email, name, role, me.id, expires),
+  ]);
+  const link = appLink(c, `/einladung/${token}`);
+  const sent = await mail(c, "invite", email, langOf(body), link, { name, inviter: me.name, company: me.tenantName });
+  // Der Link wird nur dieses eine Mal angezeigt, damit man ihn notfalls selbst weitergeben kann.
+  return c.json({ invite: { id, email, name, role, expiresAt: expires }, link, sent }, 201);
+});
+
+app.delete("/invites/:id", requireRole("owner", "admin"), async (c) => {
+  const me = c.get("user");
+  // Admins dürfen nur Einladungen für Mitarbeiter zurückziehen
+  const roles = me.role === "owner" ? ["admin", "staff"] : ["staff"];
+  await c.env.PLATFORM_DB.prepare(`DELETE FROM invites WHERE id = ? AND tenant_id = ? AND role IN (${roles.map(() => "?").join(", ")})`)
+    .bind(c.req.param("id"), me.tenantId, ...roles)
     .run();
-  return c.json({ user: { id, email, name, role } }, 201);
+  return c.json({ ok: true });
 });
 
 app.delete("/users/:id", requireRole("owner", "admin"), async (c) => {

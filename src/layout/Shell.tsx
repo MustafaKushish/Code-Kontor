@@ -8,6 +8,7 @@ import { findApp } from "../../shared/apps";
 import { useI18n } from "../i18n";
 import { LanguageSwitch } from "./LanguageSwitch";
 import { Assistant } from "./Assistant";
+import { VerifyBanner } from "../pages/Account";
 
 const NAV = [
   { to: "/", label: "nav.overview", short: "nav.startShort", icon: LayoutDashboard },
@@ -117,6 +118,7 @@ export function Shell({ me, path, onLogout, children }: { me: Me; path: string; 
       </header>
 
       <main className="content" key={path}>
+        <VerifyBanner me={me} />
         {children}
       </main>
 

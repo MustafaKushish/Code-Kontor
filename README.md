@@ -35,7 +35,7 @@ npm run typecheck
 ## Bei Cloudflare veröffentlichen
 
 **Automatisch über GitHub:** Jeder Push auf `main` (und den Arbeitsbranch) veröffentlicht die App über `.github/workflows/deploy.yml`.
-Dafür braucht das Repository die Secrets `CLOUDFLARE_API_TOKEN` und `CLOUDFLARE_ACCOUNT_ID`, für den KI-Assistenten zusätzlich `GEMINI_API_KEY`.
+Dafür braucht das Repository die Secrets `CLOUDFLARE_API_TOKEN` und `CLOUDFLARE_ACCOUNT_ID`, für den KI-Assistenten zusätzlich `GEMINI_API_KEY`, für den E-Mail-Versand `RESEND_API_KEY` und `MAIL_FROM` (z. B. `Code Kontor <noreply@deine-domain.de>`, die Domain muss bei Resend bestätigt sein).
 Die Plattform-Datenbank wird beim ersten Lauf automatisch angelegt. Die Adresse steht danach in der Zusammenfassung des Laufs.
 
 **Von Hand:**
@@ -45,6 +45,8 @@ Die Plattform-Datenbank wird beim ersten Lauf automatisch angelegt. Die Adresse 
 3. `npm run db:migrate:remote`
 4. `npx wrangler secret put GEMINI_API_KEY` – kostenloser Schlüssel aus Google AI Studio (aistudio.google.com) für den KI-Assistenten (ohne Schlüssel zeigt der Chat „noch nicht eingerichtet“)
 5. `npm run deploy`
+
+Ohne E-Mail-Versand funktioniert alles weiter: Einladungslinks zeigt die App zum Weitergeben an, Bestätigungs- und Passwort-Links stehen nur im Worker-Protokoll.
 
 Lokal liest `wrangler dev` den Schlüssel aus einer Datei `.dev.vars` mit der Zeile `GEMINI_API_KEY=...` (nicht einchecken).
 

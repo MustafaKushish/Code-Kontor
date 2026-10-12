@@ -24,7 +24,8 @@ export async function api<T = unknown>(path: string, options: { method?: string;
 export type Role = "owner" | "admin" | "staff";
 
 export interface Me {
-  user: { id: string; tenantId: string; tenantName: string; email: string; name: string; role: Role };
+  user: { id: string; tenantId: string; tenantName: string; email: string; name: string; role: Role; emailVerified: boolean };
   setupComplete: boolean;
+  mailEnabled: boolean;
   installedApps: string[];
 }

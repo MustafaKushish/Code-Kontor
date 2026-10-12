@@ -5,6 +5,7 @@ import { LanguageSwitch } from "../layout/LanguageSwitch";
 import { useI18n } from "../i18n";
 import { api, type Me } from "../api";
 import { emptyCompanyProfile, type CompanyProfile } from "../../shared/company";
+import { AccountCard } from "./Account";
 
 export function Settings({ me, onEdit }: { me: Me; onEdit: () => void }) {
   const [company, setCompany] = useState<CompanyProfile | null>(null);
@@ -56,6 +57,7 @@ export function Settings({ me, onEdit }: { me: Me; onEdit: () => void }) {
               <dt>{t("settings.bankName")}</dt><dd>{c.bankName || "–"}</dd>
             </dl>
           </section>
+          <AccountCard me={me} />
           <section className="card">
             <h2 className="card-title"><Palette size={20} /> {t("theme.label")}</h2>
             <p className="muted">{t("theme.text")}</p>

@@ -3,6 +3,7 @@ import { api, ApiError, type Me } from "./api";
 import { usePath, navigate } from "./router";
 import { Shell } from "./layout/Shell";
 import { AuthPage } from "./pages/AuthPage";
+import { InvitePage, ResetPage, VerifyPage } from "./pages/AccountLinks";
 import { SetupWizard } from "./pages/SetupWizard";
 import { Overview } from "./pages/Overview";
 import { Catalog } from "./pages/Catalog";
@@ -39,6 +40,13 @@ export function App() {
   };
 
   if (loading) return <div className="splash"><img src="/icon.svg" alt="" width={56} height={56} /></div>;
+
+  // Links aus E-Mails funktionieren mit und ohne Anmeldung
+  const [, linkKind, token] = path.split("/");
+  if (linkKind === "einladung" && token) return <InvitePage token={token} onDone={refresh} />;
+  if (linkKind === "passwort-neu" && token) return <ResetPage token={token} onDone={refresh} />;
+  if (linkKind === "bestaetigen" && token) return <VerifyPage token={token} onDone={refresh} />;
+
   if (!me) return <AuthPage onDone={refresh} />;
 
   const isManager = me.user.role !== "staff";
