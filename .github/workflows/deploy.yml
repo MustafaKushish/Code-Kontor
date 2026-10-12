@@ -52,39 +52,35 @@ jobs:
         run: node scripts/ensure-d1.mjs
       - name: Datenbank-Tabellen aktualisieren
         run: npx wrangler d1 migrations apply PLATFORM_DB --remote
-      - name: Veröffentlichen
+      - name: Geheimnisse vorbereiten
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          MAIL_FROM: ${{ secrets.MAIL_FROM }}
         run: |
-          npx wrangler deploy | tee deploy.log
-          URL=$(grep -oE 'https://[a-zA-Z0-9.-]+\.workers\.dev' deploy.log | head -1)
-          echo "### Code Kontor ist online: $URL" >> "$GITHUB_STEP_SUMMARY"
-      - name: Schlüssel für verschlüsselte Felder sicherstellen
-        run: |
-          # Einmalig erzeugen und nie überschreiben: ohne diesen Schlüssel lassen sich IBAN und Zwei-Faktor-Geheimnisse nicht mehr lesen.
+          # Die Geheimnisse gehen zusammen mit der neuen Version online (wrangler deploy --secrets-file).
+          # Fehlende Einträge lassen vorhandene Geheimnisse unverändert.
+          FILE="$RUNNER_TEMP/secrets.json"
+          echo '{}' > "$FILE"
+          add() { jq --arg k "$1" --arg v "$2" '. + {($k): $v}' "$FILE" > "$FILE.tmp" && mv "$FILE.tmp" "$FILE"; }
+          # DATA_KEY einmalig erzeugen und nie überschreiben: ohne ihn lassen sich IBAN, Lohndaten und Zwei-Faktor-Geheimnisse nicht mehr lesen.
           # Bricht ab, wenn die Liste nicht gelesen werden kann, damit nie ein vorhandener Schlüssel ersetzt wird.
           SECRETS=$(npx wrangler secret list --format json)
           if echo "$SECRETS" | grep -q '"DATA_KEY"'; then
             echo "DATA_KEY ist vorhanden."
           else
-            openssl rand -base64 32 | tr -d '\n' | npx wrangler secret put DATA_KEY
-            echo "DATA_KEY wurde neu erzeugt."
+            add DATA_KEY "$(openssl rand -base64 32 | tr -d '\n')"
+            echo "DATA_KEY wird neu erzeugt."
           fi
-      - name: Gemini-Schlüssel hinterlegen
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          if [ -n "$GEMINI_API_KEY" ]; then add GEMINI_API_KEY "$GEMINI_API_KEY"; else
+            echo "::warning::Kein GEMINI_API_KEY in den Repository-Secrets. Der KI-Assistent zeigt „noch nicht eingerichtet“."; fi
+          if [ -n "$RESEND_API_KEY" ] && [ -n "$MAIL_FROM" ]; then add RESEND_API_KEY "$RESEND_API_KEY"; add MAIL_FROM "$MAIL_FROM"; else
+            echo "::warning::Kein RESEND_API_KEY oder MAIL_FROM in den Repository-Secrets. E-Mails werden nicht gesendet."; fi
+          echo "Geheimnisse für diese Version: $(jq -r 'keys | join(", ")' "$FILE")"
+      - name: Veröffentlichen
         run: |
-          if [ -n "$GEMINI_API_KEY" ]; then
-            printf '%s' "$GEMINI_API_KEY" | npx wrangler secret put GEMINI_API_KEY
-          else
-            echo "::warning::Kein GEMINI_API_KEY in den Repository-Secrets. Der KI-Assistent zeigt „noch nicht eingerichtet“."
-          fi
-      - name: E-Mail-Versand hinterlegen
-        env:
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          MAIL_FROM: ${{ secrets.MAIL_FROM }}
-        run: |
-          if [ -n "$RESEND_API_KEY" ] && [ -n "$MAIL_FROM" ]; then
-            printf '%s' "$RESEND_API_KEY" | npx wrangler secret put RESEND_API_KEY
-            printf '%s' "$MAIL_FROM" | npx wrangler secret put MAIL_FROM
-          else
-            echo "::warning::Kein RESEND_API_KEY oder MAIL_FROM in den Repository-Secrets. Einladungslinks werden nur in der App angezeigt, E-Mails werden nicht gesendet."
-          fi
+          set -o pipefail
+          npx wrangler deploy --secrets-file "$RUNNER_TEMP/secrets.json" | tee deploy.log
+          rm -f "$RUNNER_TEMP/secrets.json"
+          URL=$(grep -oE 'https://[a-zA-Z0-9.-]+\.workers\.dev' deploy.log | head -1)
+          echo "### Code Kontor ist online: $URL" >> "$GITHUB_STEP_SUMMARY"
