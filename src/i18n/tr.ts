@@ -114,6 +114,7 @@ export const tr: Dict = {
     passwordTooShort: "Şifre en az 10 karakter olmalı.",
     passwordTooLong: "Şifre çok uzun.",
     wrongCredentials: "E-posta veya şifre yanlış.",
+    tooManyAttempts: "Çok fazla başarısız deneme. Lütfen 15 dakika sonra tekrar dene.",
     notLoggedIn: "Giriş yapılmamış.",
     sessionExpired: "Oturum sona erdi. Lütfen tekrar giriş yap.",
     forbidden: "Bunun için yetkin yok.",

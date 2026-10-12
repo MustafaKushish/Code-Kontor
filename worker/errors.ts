@@ -11,6 +11,7 @@ export const ERROR_TEXT = {
   passwordTooShort: "Das Passwort braucht mindestens 10 Zeichen.",
   passwordTooLong: "Das Passwort ist zu lang.",
   wrongCredentials: "E-Mail oder Passwort ist falsch.",
+  tooManyAttempts: "Zu viele Fehlversuche. Bitte in 15 Minuten noch einmal versuchen.",
   notLoggedIn: "Nicht angemeldet.",
   sessionExpired: "Sitzung abgelaufen. Bitte neu anmelden.",
   forbidden: "Dafür fehlt dir die Berechtigung.",

@@ -114,6 +114,7 @@ export const en: Dict = {
     passwordTooShort: "The password needs at least 10 characters.",
     passwordTooLong: "The password is too long.",
     wrongCredentials: "Email or password is wrong.",
+    tooManyAttempts: "Too many failed attempts. Please try again in 15 minutes.",
     notLoggedIn: "Not signed in.",
     sessionExpired: "Session expired. Please sign in again.",
     forbidden: "You don't have permission for this.",

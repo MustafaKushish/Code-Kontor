@@ -114,6 +114,7 @@ export const ru: Dict = {
     passwordTooShort: "Пароль должен содержать не менее 10 символов.",
     passwordTooLong: "Пароль слишком длинный.",
     wrongCredentials: "Неверная эл. почта или пароль.",
+    tooManyAttempts: "Слишком много неудачных попыток. Попробуйте снова через 15 минут.",
     notLoggedIn: "Вы не вошли в систему.",
     sessionExpired: "Сеанс истёк. Войдите снова.",
     forbidden: "У вас нет на это прав.",

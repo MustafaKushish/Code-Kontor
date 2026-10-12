@@ -34,6 +34,9 @@ export async function verifyPassword(password: string, stored: string): Promise<
   return diff === 0;
 }
 
+/** Fester Hash zum Vergleichen, wenn es die E-Mail nicht gibt (gleiche Rechenzeit wie bei echten Konten). */
+export const DUMMY_PASSWORD_HASH = `pbkdf2$${PBKDF2_ITERATIONS}$${"00".repeat(16)}$${"00".repeat(32)}`;
+
 export function newSessionToken(): string {
   return toHex(crypto.getRandomValues(new Uint8Array(32)));
 }

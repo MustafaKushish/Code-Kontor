@@ -114,6 +114,7 @@ export const uk: Dict = {
     passwordTooShort: "Пароль має містити щонайменше 10 символів.",
     passwordTooLong: "Пароль задовгий.",
     wrongCredentials: "Неправильна ел. пошта або пароль.",
+    tooManyAttempts: "Забагато невдалих спроб. Спробуйте ще раз через 15 хвилин.",
     notLoggedIn: "Ви не увійшли.",
     sessionExpired: "Сеанс завершився. Увійдіть знову.",
     forbidden: "У вас немає на це прав.",

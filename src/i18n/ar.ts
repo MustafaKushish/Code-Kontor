@@ -114,6 +114,7 @@ export const ar: Dict = {
     passwordTooShort: "يجب أن تتكون كلمة المرور من 10 أحرف على الأقل.",
     passwordTooLong: "كلمة المرور طويلة جدًا.",
     wrongCredentials: "البريد الإلكتروني أو كلمة المرور غير صحيحة.",
+    tooManyAttempts: "محاولات فاشلة كثيرة. يرجى المحاولة مرة أخرى بعد 15 دقيقة.",
     notLoggedIn: "لم يتم تسجيل الدخول.",
     sessionExpired: "انتهت الجلسة. يرجى تسجيل الدخول مجددًا.",
     forbidden: "ليست لديك صلاحية لذلك.",

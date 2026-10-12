@@ -1,7 +1,9 @@
 import { Hono, type Context } from "hono";
 import { csrf } from "hono/csrf";
+import { secureHeaders } from "hono/secure-headers";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
-import { hashPassword, hashToken, newSessionToken, passwordProblem, verifyPassword } from "./auth";
+import { hashPassword, hashToken, newSessionToken, passwordProblem, verifyPassword, DUMMY_PASSWORD_HASH } from "./auth";
+import { attemptKeys, clearFailures, isLocked, recordFailure } from "./throttle";
 import { TenantDatabase } from "./tenant";
 import { sanitizeCompany, validateCompany } from "../shared/company";
 import { findApp } from "../shared/apps";
@@ -40,6 +42,7 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const app = new Hono<App>().basePath("/api");
 app.use(csrf());
+app.use(secureHeaders({ crossOriginResourcePolicy: "same-origin" }));
 
 function tenantDb(env: Env, tenantId: string) {
   return env.TENANT_DB.get(env.TENANT_DB.idFromName(tenantId));
@@ -48,9 +51,12 @@ function tenantDb(env: Env, tenantId: string) {
 async function startSession(c: Ctx, userId: string) {
   const token = newSessionToken();
   const expires = new Date(Date.now() + SESSION_DAYS * 86_400_000);
-  await c.env.PLATFORM_DB.prepare("INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)")
-    .bind(await hashToken(token), userId, expires.toISOString())
-    .run();
+  await c.env.PLATFORM_DB.batch([
+    // Abgelaufene Sitzungen dieses Benutzers aufräumen
+    c.env.PLATFORM_DB.prepare("DELETE FROM sessions WHERE user_id = ? AND expires_at <= ?").bind(userId, new Date().toISOString()),
+    c.env.PLATFORM_DB.prepare("INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)")
+      .bind(await hashToken(token), userId, expires.toISOString()),
+  ]);
   setCookie(c, SESSION_COOKIE, token, {
     httpOnly: true,
     secure: new URL(c.req.url).protocol === "https:",
@@ -108,11 +114,18 @@ app.post("/auth/login", async (c) => {
   const body = await readBody(c);
   const email = text(body.email).toLowerCase();
   const password = typeof body.password === "string" ? body.password : "";
+  const keys = attemptKeys(email, c.req.header("CF-Connecting-IP"));
+  if (await isLocked(c.env.PLATFORM_DB, keys)) return fail(c, "tooManyAttempts", 429);
   const user = await c.env.PLATFORM_DB.prepare("SELECT id, password_hash FROM users WHERE email = ?")
     .bind(email)
     .first<{ id: string; password_hash: string }>();
-  if (!user || !(await verifyPassword(password, user.password_hash)))
+  // Auch ohne passenden Benutzer ein Passwort prüfen, damit die Antwortzeit nicht verrät, ob es die E-Mail gibt.
+  const valid = await verifyPassword(password, user?.password_hash ?? DUMMY_PASSWORD_HASH);
+  if (!user || !valid) {
+    await recordFailure(c.env.PLATFORM_DB, keys);
     return fail(c, "wrongCredentials", 401);
+  }
+  await clearFailures(c.env.PLATFORM_DB, email);
   await startSession(c, user.id);
   return c.json({ ok: true });
 });
