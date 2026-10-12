@@ -59,7 +59,6 @@ export function LanguageSwitch({ compact, up }: { compact?: boolean; up?: boolea
                 role="menuitemradio"
                 aria-checked={l.code === lang}
                 lang={l.code}
-                dir={l.dir}
                 onClick={() => {
                   setLang(l.code);
                   setOpen(false);
