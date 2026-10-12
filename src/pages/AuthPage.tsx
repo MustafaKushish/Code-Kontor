@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from "react";
+import { MonitorSmartphone, ShieldCheck, Sparkles } from "lucide-react";
 import { api, ApiError } from "../api";
-import { Logo } from "../components";
+import { AppIcon, Field, Logo } from "../components";
+import { CATALOG } from "../../shared/apps";
 
 export function AuthPage({ onDone }: { onDone: () => void }) {
   const [mode, setMode] = useState<"login" | "register">("login");
@@ -25,53 +27,61 @@ export function AuthPage({ onDone }: { onDone: () => void }) {
 
   const register = mode === "register";
   return (
-    <main className="auth">
-      <div className="card auth-card">
+    <div className="auth">
+      <aside className="auth-brand">
         <Logo />
-        <h1>{register ? "Konto anlegen" : "Anmelden"}</h1>
-        <p className="muted">
-          {register
-            ? "Deine Firma bekommt sofort ihre eigene, getrennte Datenbank."
-            : "Willkommen zurück bei Code Kontor."}
-        </p>
-        <form onSubmit={submit} className="stack">
-          {register && (
-            <>
-              <label>
-                Firmenname
-                <input value={form.companyName} onChange={set("companyName")} autoComplete="organization" required />
-              </label>
-              <label>
-                Dein Name
-                <input value={form.name} onChange={set("name")} autoComplete="name" required />
-              </label>
-            </>
-          )}
-          <label>
-            E-Mail
-            <input type="email" value={form.email} onChange={set("email")} autoComplete="email" required />
-          </label>
-          <label>
-            Passwort
-            <input
-              type="password"
-              value={form.password}
-              onChange={set("password")}
-              autoComplete={register ? "new-password" : "current-password"}
-              minLength={register ? 10 : undefined}
-              required
-            />
-            {register && <small className="muted">Mindestens 10 Zeichen.</small>}
-          </label>
-          {error && <p className="error" role="alert">{error}</p>}
-          <button className="primary" disabled={busy}>
-            {busy ? "Bitte warten …" : register ? "Konto anlegen" : "Anmelden"}
-          </button>
-        </form>
-        <button className="link" onClick={() => { setMode(register ? "login" : "register"); setError(""); }}>
-          {register ? "Schon ein Konto? Anmelden" : "Neu hier? Konto anlegen"}
-        </button>
-      </div>
-    </main>
+        <div className="stack">
+          <h1>Ein System für jedes Geschäft.</h1>
+          <p>Friseur, Werkstatt, Restaurant, Laden oder Handyshop: fertig eingerichtet, monatlich mietbar.</p>
+        </div>
+        <div className="auth-apps">
+          {CATALOG.map((app) => <AppIcon key={app.id} app={app} size="md" />)}
+        </div>
+        <ul className="auth-points">
+          <li><ShieldCheck size={18} /> Eigene Datenbank für jede Firma</li>
+          <li><MonitorSmartphone size={18} /> Handy, Tablet und Laptop</li>
+          <li><Sparkles size={18} /> In wenigen Minuten startklar</li>
+        </ul>
+      </aside>
+
+      <main className="auth-main">
+        <div className="auth-form">
+          <div className="auth-mobile-logo"><Logo /></div>
+          <div className="segmented" role="tablist">
+            <button role="tab" aria-selected={!register} className={!register ? "active" : ""} onClick={() => { setMode("login"); setError(""); }}>Anmelden</button>
+            <button role="tab" aria-selected={register} className={register ? "active" : ""} onClick={() => { setMode("register"); setError(""); }}>Konto anlegen</button>
+          </div>
+          <div className="stack-sm">
+            <h2>{register ? "Starte mit Code Kontor" : "Willkommen zurück"}</h2>
+            <p className="muted">
+              {register ? "Deine Firma bekommt sofort ihre eigene, getrennte Datenbank." : "Melde dich mit deiner E-Mail-Adresse an."}
+            </p>
+          </div>
+          <form onSubmit={submit} className="stack">
+            {register && (
+              <>
+                <Field label="Firmenname"><input value={form.companyName} onChange={set("companyName")} autoComplete="organization" required /></Field>
+                <Field label="Dein Name"><input value={form.name} onChange={set("name")} autoComplete="name" required /></Field>
+              </>
+            )}
+            <Field label="E-Mail"><input type="email" value={form.email} onChange={set("email")} autoComplete="email" required /></Field>
+            <Field label="Passwort" hint={register ? "Mindestens 10 Zeichen." : undefined}>
+              <input
+                type="password"
+                value={form.password}
+                onChange={set("password")}
+                autoComplete={register ? "new-password" : "current-password"}
+                minLength={register ? 10 : undefined}
+                required
+              />
+            </Field>
+            {error && <p className="error" role="alert">{error}</p>}
+            <button className="button primary block" disabled={busy}>
+              {busy ? "Bitte warten …" : register ? "Kostenlos starten" : "Anmelden"}
+            </button>
+          </form>
+        </div>
+      </main>
+    </div>
   );
 }

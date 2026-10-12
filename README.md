@@ -8,7 +8,8 @@ Läuft als installierbare App auf Handy, Tablet und Laptop.
 
 | Teil | Wo | Was |
 |---|---|---|
-| Oberfläche | `src/` | React-App (PWA), Einrichtungs-Assistent, Übersicht, Team |
+| Oberfläche | `src/` | React-App (PWA): Anmeldung, Einrichtungs-Assistent, Übersicht, App-Katalog, Team, Firma |
+| App-Katalog | `shared/apps.ts` | Alle Branchen-Systeme mit Funktionen, Farbe und Preis (Preise sind Platzhalter) |
 | Server | `worker/` | Cloudflare Worker mit Hono, alle Wege unter `/api` |
 | Plattform-Datenbank | `migrations/` (Cloudflare D1) | Firmen-Verzeichnis, Benutzer, Sitzungen |
 | Datenbank je Kunde | `worker/tenant.ts` (Durable Object mit SQLite) | Firmendaten und später alle Geschäftsdaten, getrennt je Firma |
@@ -39,6 +40,6 @@ npm run typecheck
 ## Fahrplan
 
 1. **Plattform-Kern** – Konto, Login, Rollen, Firmendaten-Assistent, Datenbank je Kunde, installierbare App ✔
-2. **App-Katalog** – Branchen-System auswählen und mit einem Klick installieren
+2. **App-Katalog** – Branchen-System auswählen und mit einem Klick installieren, modernes Design ✔
 3. **Erstes fertiges System** – Friseur: Kunden, Termine, Rechnungen
 4. **Abo und Start** – Stripe-Abo, automatische Einrichtung, Admin-Konsole, erster Kunde

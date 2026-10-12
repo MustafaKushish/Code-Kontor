@@ -1,13 +1,21 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError, type Me } from "./api";
+import { usePath, navigate } from "./router";
+import { Shell } from "./layout/Shell";
 import { AuthPage } from "./pages/AuthPage";
 import { SetupWizard } from "./pages/SetupWizard";
-import { Dashboard } from "./pages/Dashboard";
+import { Overview } from "./pages/Overview";
+import { Catalog } from "./pages/Catalog";
+import { AppDetail, InstalledApp } from "./pages/AppDetail";
+import { Team } from "./pages/Team";
+import { Settings } from "./pages/Settings";
+import { findApp } from "../shared/apps";
 
 export function App() {
   const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
   const [editingCompany, setEditingCompany] = useState(false);
+  const path = usePath();
 
   const refresh = useCallback(async () => {
     try {
@@ -27,13 +35,14 @@ export function App() {
   const logout = async () => {
     await api("/auth/logout", { method: "POST" });
     setMe(null);
+    navigate("/");
   };
 
-  if (loading) return <div className="center muted">Lädt …</div>;
+  if (loading) return <div className="splash"><img src="/icon.svg" alt="" width={56} height={56} /></div>;
   if (!me) return <AuthPage onDone={refresh} />;
 
-  const canEdit = me.user.role !== "staff";
-  if ((!me.setupComplete && canEdit) || editingCompany)
+  const isManager = me.user.role !== "staff";
+  if ((!me.setupComplete && isManager) || editingCompany)
     return (
       <SetupWizard
         firstRun={!me.setupComplete}
@@ -46,5 +55,27 @@ export function App() {
       />
     );
 
-  return <Dashboard me={me} onEditCompany={() => setEditingCompany(true)} onLogout={logout} />;
+  const setInstalledApps = (installedApps: string[]) => setMe({ ...me, installedApps });
+
+  let page;
+  const [, section, id] = path.split("/");
+  if (section === "katalog" && id && findApp(id)) {
+    page = <AppDetail app={findApp(id)!} me={me} onAppsChanged={setInstalledApps} />;
+  } else if (section === "katalog") {
+    page = <Catalog me={me} />;
+  } else if (section === "app" && id && findApp(id) && me.installedApps.includes(id)) {
+    page = <InstalledApp app={findApp(id)!} />;
+  } else if (section === "team" && isManager) {
+    page = <Team me={me} />;
+  } else if (section === "einstellungen") {
+    page = <Settings me={me} onEdit={() => setEditingCompany(true)} />;
+  } else {
+    page = <Overview me={me} />;
+  }
+
+  return (
+    <Shell me={me} path={path} onLogout={logout}>
+      {page}
+    </Shell>
+  );
 }

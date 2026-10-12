@@ -46,4 +46,12 @@ export class TenantDatabase extends DurableObject<Record<string, never>> {
   async installedApps(): Promise<string[]> {
     return this.sql.exec<{ app_id: string }>("SELECT app_id FROM installed_apps ORDER BY installed_at").toArray().map((r) => r.app_id);
   }
+
+  async installApp(appId: string): Promise<void> {
+    this.sql.exec("INSERT OR IGNORE INTO installed_apps (app_id) VALUES (?)", appId);
+  }
+
+  async uninstallApp(appId: string): Promise<void> {
+    this.sql.exec("DELETE FROM installed_apps WHERE app_id = ?", appId);
+  }
 }

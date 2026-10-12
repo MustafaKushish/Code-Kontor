@@ -96,8 +96,8 @@ export function SetupWizard(props: {
 
   const current = STEPS[step];
   return (
-    <main className="page">
-      <header className="topbar">
+    <main className="page wizard-page">
+      <header className="wizard-top">
         <Logo />
         {props.onCancel ? (
           <button className="link" onClick={props.onCancel}>Abbrechen</button>
@@ -189,8 +189,8 @@ export function SetupWizard(props: {
 
         {message && <p className="error" role="alert">{message}</p>}
         <div className="actions">
-          {step > 0 && <button onClick={() => { setErrors({}); setStep(step - 1); }}>Zurück</button>}
-          <button className="primary" onClick={next} disabled={busy}>
+          {step > 0 && <button className="button" onClick={() => { setErrors({}); setStep(step - 1); }}>Zurück</button>}
+          <button className="button primary" onClick={next} disabled={busy}>
             {step < STEPS.length - 1 ? "Weiter" : busy ? "Speichert …" : "Speichern und fertig"}
           </button>
         </div>

@@ -4,6 +4,7 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { hashPassword, hashToken, newSessionToken, passwordProblem, verifyPassword } from "./auth";
 import { TenantDatabase } from "./tenant";
 import { sanitizeCompany, validateCompany } from "../shared/company";
+import { findApp } from "../shared/apps";
 
 export { TenantDatabase };
 
@@ -166,6 +167,22 @@ app.put("/company", requireRole("owner", "admin"), async (c) => {
   if (company.name !== user.tenantName)
     await c.env.PLATFORM_DB.prepare("UPDATE tenants SET name = ? WHERE id = ?").bind(company.name, user.tenantId).run();
   return c.json({ company });
+});
+
+// ---------- App-Katalog ----------
+
+app.post("/apps/:id", requireRole("owner", "admin"), async (c) => {
+  const catalogApp = findApp(c.req.param("id") ?? "");
+  if (!catalogApp) return c.json({ error: "Dieses System gibt es nicht." }, 404);
+  const db = tenantDb(c.env, c.get("user").tenantId);
+  await db.installApp(catalogApp.id);
+  return c.json({ installedApps: await db.installedApps() });
+});
+
+app.delete("/apps/:id", requireRole("owner", "admin"), async (c) => {
+  const db = tenantDb(c.env, c.get("user").tenantId);
+  await db.uninstallApp(c.req.param("id") ?? "");
+  return c.json({ installedApps: await db.installedApps() });
 });
 
 // ---------- Benutzer und Rollen ----------
