@@ -35,7 +35,13 @@ export const emptyCompanyProfile: CompanyProfile = {
   logoDataUrl: "",
 };
 
-export type CompanyErrors = Partial<Record<keyof CompanyProfile, string>>;
+/** Fehler je Feld als Code; die App übersetzt ihn in die gewählte Sprache. */
+export type ValidationCode =
+  | "companyNameRequired" | "streetRequired" | "postalCodeRequired" | "postalCodeDe" | "cityRequired"
+  | "countryRequired" | "emailInvalid" | "taxRequired" | "taxNumberInvalid" | "vatIdInvalid"
+  | "ibanRequired" | "ibanInvalid" | "bicInvalid" | "logoType" | "logoSize";
+
+export type CompanyErrors = Partial<Record<keyof CompanyProfile, ValidationCode>>;
 
 const MAX_LOGO_BYTES = 200_000;
 
@@ -76,29 +82,29 @@ export function isValidTaxNumber(value: string): boolean {
 
 export function validateCompany(profile: CompanyProfile): CompanyErrors {
   const errors: CompanyErrors = {};
-  if (!profile.name.trim()) errors.name = "Bitte den Firmennamen angeben.";
-  if (!profile.street.trim()) errors.street = "Bitte Straße und Hausnummer angeben.";
-  if (!profile.postalCode.trim()) errors.postalCode = "Bitte die PLZ angeben.";
+  if (!profile.name.trim()) errors.name = "companyNameRequired";
+  if (!profile.street.trim()) errors.street = "streetRequired";
+  if (!profile.postalCode.trim()) errors.postalCode = "postalCodeRequired";
   else if (profile.country === "DE" && !/^\d{5}$/.test(profile.postalCode.trim()))
-    errors.postalCode = "Eine deutsche PLZ hat 5 Ziffern.";
-  if (!profile.city.trim()) errors.city = "Bitte den Ort angeben.";
-  if (!/^[A-Z]{2}$/.test(profile.country)) errors.country = "Bitte ein Land wählen.";
+    errors.postalCode = "postalCodeDe";
+  if (!profile.city.trim()) errors.city = "cityRequired";
+  if (!/^[A-Z]{2}$/.test(profile.country)) errors.country = "countryRequired";
   if (profile.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profile.email))
-    errors.email = "Diese E-Mail-Adresse sieht nicht richtig aus.";
+    errors.email = "emailInvalid";
   if (!profile.taxNumber.trim() && !profile.vatId.trim())
-    errors.taxNumber = "Für Rechnungen ist eine Steuernummer oder USt-IdNr. nötig.";
+    errors.taxNumber = "taxRequired";
   if (profile.taxNumber.trim() && !isValidTaxNumber(profile.taxNumber))
-    errors.taxNumber = "Die Steuernummer hat 10 bis 13 Ziffern.";
+    errors.taxNumber = "taxNumberInvalid";
   if (profile.vatId.trim() && !isValidVatId(profile.vatId))
-    errors.vatId = "Die USt-IdNr. hat das Format DE123456789.";
-  if (!profile.iban.trim()) errors.iban = "Bitte die IBAN angeben.";
-  else if (!isValidIban(profile.iban)) errors.iban = "Diese IBAN ist ungültig. Bitte prüfen.";
-  if (profile.bic.trim() && !isValidBic(profile.bic)) errors.bic = "Diese BIC ist ungültig.";
+    errors.vatId = "vatIdInvalid";
+  if (!profile.iban.trim()) errors.iban = "ibanRequired";
+  else if (!isValidIban(profile.iban)) errors.iban = "ibanInvalid";
+  if (profile.bic.trim() && !isValidBic(profile.bic)) errors.bic = "bicInvalid";
   if (profile.logoDataUrl) {
     if (!/^data:image\/(png|jpeg|svg\+xml|webp);base64,/.test(profile.logoDataUrl))
-      errors.logoDataUrl = "Das Logo muss ein PNG-, JPG-, SVG- oder WebP-Bild sein.";
+      errors.logoDataUrl = "logoType";
     else if (profile.logoDataUrl.length > MAX_LOGO_BYTES * 1.4)
-      errors.logoDataUrl = "Das Logo darf höchstens 200 KB groß sein.";
+      errors.logoDataUrl = "logoSize";
   }
   return errors;
 }

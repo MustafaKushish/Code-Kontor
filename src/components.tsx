@@ -69,6 +69,3 @@ export function Avatar({ name }: { name: string }) {
     .join("");
   return <span className="avatar">{initials || "?"}</span>;
 }
-
-export const euro = (value: number) =>
-  new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(value);

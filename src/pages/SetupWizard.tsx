@@ -1,40 +1,17 @@
 import { useEffect, useState, type ChangeEvent } from "react";
 import { api, ApiError } from "../api";
+import { useI18n } from "../i18n";
+import { LanguageSwitch } from "../layout/LanguageSwitch";
 import { Field, Logo } from "../components";
 import { emptyCompanyProfile, validateCompany, type CompanyErrors, type CompanyProfile } from "../../shared/company";
 
-const STEPS: { title: string; intro: string; fields: (keyof CompanyProfile)[] }[] = [
-  {
-    title: "Firma und Adresse",
-    intro: "So erscheint deine Firma auf Rechnungen und Belegen.",
-    fields: ["name", "legalForm", "street", "postalCode", "city", "country", "email", "phone"],
-  },
-  {
-    title: "Steuern",
-    intro: "Steuernummer oder USt-IdNr. sind Pflicht auf jeder Rechnung.",
-    fields: ["taxNumber", "vatId"],
-  },
-  {
-    title: "Bank und Logo",
-    intro: "Die Bankverbindung steht unten auf deinen Rechnungen.",
-    fields: ["iban", "bic", "bankName", "logoDataUrl"],
-  },
+const STEPS: { key: "step1" | "step2" | "step3"; fields: (keyof CompanyProfile)[] }[] = [
+  { key: "step1", fields: ["name", "legalForm", "street", "postalCode", "city", "country", "email", "phone"] },
+  { key: "step2", fields: ["taxNumber", "vatId"] },
+  { key: "step3", fields: ["iban", "bic", "bankName", "logoDataUrl"] },
 ];
 
-const COUNTRIES: [string, string][] = [
-  ["DE", "Deutschland"],
-  ["AT", "Österreich"],
-  ["CH", "Schweiz"],
-  ["NL", "Niederlande"],
-  ["BE", "Belgien"],
-  ["FR", "Frankreich"],
-  ["LU", "Luxemburg"],
-  ["DK", "Dänemark"],
-  ["PL", "Polen"],
-  ["IT", "Italien"],
-  ["ES", "Spanien"],
-  ["TR", "Türkei"],
-];
+const COUNTRIES = ["DE", "AT", "CH", "NL", "BE", "FR", "LU", "DK", "PL", "IT", "ES", "TR"];
 
 export function SetupWizard(props: {
   firstRun: boolean;
@@ -47,6 +24,15 @@ export function SetupWizard(props: {
   const [errors, setErrors] = useState<CompanyErrors>({});
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const { t, lang, errorText } = useI18n();
+  const err = (key: keyof CompanyProfile) => (errors[key] ? t(`validation.${errors[key]}`) : undefined);
+  const countryName = (code: string) => {
+    try {
+      return new Intl.DisplayNames([lang], { type: "region" }).of(code) ?? code;
+    } catch {
+      return code;
+    }
+  };
 
   useEffect(() => {
     api<{ company: CompanyProfile | null }>("/company").then(({ company }) => {
@@ -75,11 +61,11 @@ export function SetupWizard(props: {
       props.onDone();
     } catch (err) {
       if (err instanceof ApiError && err.errors) {
-        setErrors(err.errors);
+        setErrors(err.errors as CompanyErrors);
         const first = STEPS.findIndex((s) => s.fields.some((f) => err.errors![f]));
         if (first >= 0) setStep(first);
       }
-      setMessage(err instanceof ApiError ? err.message : "Keine Verbindung zum Server.");
+      setMessage(errorText(err));
     } finally {
       setBusy(false);
     }
@@ -88,7 +74,7 @@ export function SetupWizard(props: {
   const pickLogo = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 200_000) return setErrors({ ...errors, logoDataUrl: "Das Logo darf höchstens 200 KB groß sein." });
+    if (file.size > 200_000) return setErrors({ ...errors, logoDataUrl: "logoSize" });
     const reader = new FileReader();
     reader.onload = () => setCompany((c) => ({ ...c, logoDataUrl: String(reader.result) }));
     reader.readAsDataURL(file);
@@ -99,54 +85,57 @@ export function SetupWizard(props: {
     <main className="page wizard-page">
       <header className="wizard-top">
         <Logo />
-        {props.onCancel ? (
-          <button className="link" onClick={props.onCancel}>Abbrechen</button>
-        ) : (
-          <button className="link" onClick={props.onLogout}>Abmelden</button>
-        )}
+        <div className="row">
+          <LanguageSwitch compact />
+          {props.onCancel ? (
+            <button className="link" onClick={props.onCancel}>{t("common.cancel")}</button>
+          ) : (
+            <button className="link" onClick={props.onLogout}>{t("common.logout")}</button>
+          )}
+        </div>
       </header>
 
       <div className="card wizard">
-        {props.firstRun && <p className="eyebrow">Einrichtung</p>}
-        <ol className="progress" aria-label="Fortschritt">
+        {props.firstRun && <p className="eyebrow">{t("wizard.setup")}</p>}
+        <ol className="progress" aria-label={t("wizard.progress")}>
           {STEPS.map((s, i) => (
-            <li key={s.title} className={i === step ? "active" : i < step ? "done" : undefined}>
-              <span>{i + 1}</span> {s.title}
+            <li key={s.key} className={i === step ? "active" : i < step ? "done" : undefined}>
+              <span>{i + 1}</span> {t(`wizard.${s.key}Title`)}
             </li>
           ))}
         </ol>
-        <h1 className="display">{current.title}</h1>
-        <p className="muted">{current.intro}</p>
+        <h1 className="display">{t(`wizard.${current.key}Title`)}</h1>
+        <p className="muted">{t(`wizard.${current.key}Intro`)}</p>
 
         <div className="grid">
           {step === 0 && (
             <>
-              <Field label="Firmenname" error={errors.name} wide>
+              <Field label={t("wizard.name")} error={err("name")} wide>
                 <input value={company.name} onChange={set("name")} autoComplete="organization" />
               </Field>
-              <Field label="Rechtsform" hint="z. B. Einzelunternehmen, GmbH, UG">
+              <Field label={t("wizard.legalForm")} hint={t("wizard.legalFormHint")}>
                 <input value={company.legalForm} onChange={set("legalForm")} />
               </Field>
-              <Field label="Land" error={errors.country}>
+              <Field label={t("wizard.country")} error={err("country")}>
                 <select value={company.country} onChange={set("country")}>
-                  {COUNTRIES.map(([code, label]) => (
-                    <option key={code} value={code}>{label}</option>
+                  {COUNTRIES.map((code) => (
+                    <option key={code} value={code}>{countryName(code)}</option>
                   ))}
                 </select>
               </Field>
-              <Field label="Straße und Hausnummer" error={errors.street} wide>
+              <Field label={t("wizard.street")} error={err("street")} wide>
                 <input value={company.street} onChange={set("street")} autoComplete="street-address" />
               </Field>
-              <Field label="PLZ" error={errors.postalCode}>
+              <Field label={t("wizard.postalCode")} error={err("postalCode")}>
                 <input value={company.postalCode} onChange={set("postalCode")} autoComplete="postal-code" inputMode="numeric" />
               </Field>
-              <Field label="Ort" error={errors.city}>
+              <Field label={t("wizard.city")} error={err("city")}>
                 <input value={company.city} onChange={set("city")} autoComplete="address-level2" />
               </Field>
-              <Field label="E-Mail für Rechnungen" error={errors.email}>
+              <Field label={t("wizard.invoiceEmail")} error={err("email")}>
                 <input type="email" value={company.email} onChange={set("email")} autoComplete="email" />
               </Field>
-              <Field label="Telefon">
+              <Field label={t("wizard.phone")}>
                 <input type="tel" value={company.phone} onChange={set("phone")} autoComplete="tel" />
               </Field>
             </>
@@ -154,10 +143,10 @@ export function SetupWizard(props: {
 
           {step === 1 && (
             <>
-              <Field label="Steuernummer" error={errors.taxNumber} hint="vom Finanzamt, z. B. 12/345/67890" wide>
+              <Field label={t("wizard.taxNumber")} error={err("taxNumber")} hint={t("wizard.taxNumberHint")} wide>
                 <input value={company.taxNumber} onChange={set("taxNumber")} inputMode="numeric" />
               </Field>
-              <Field label="USt-IdNr. (falls vorhanden)" error={errors.vatId} hint="z. B. DE123456789" wide>
+              <Field label={t("wizard.vatId")} error={err("vatId")} hint={t("wizard.vatIdHint")} wide>
                 <input value={company.vatId} onChange={set("vatId")} />
               </Field>
             </>
@@ -165,22 +154,22 @@ export function SetupWizard(props: {
 
           {step === 2 && (
             <>
-              <Field label="IBAN" error={errors.iban} wide>
+              <Field label={t("wizard.iban")} error={err("iban")} wide>
                 <input value={company.iban} onChange={set("iban")} placeholder="DE00 0000 0000 0000 0000 00" />
               </Field>
-              <Field label="BIC (optional)" error={errors.bic}>
+              <Field label={t("wizard.bic")} error={err("bic")}>
                 <input value={company.bic} onChange={set("bic")} />
               </Field>
-              <Field label="Bank (optional)">
+              <Field label={t("wizard.bankName")}>
                 <input value={company.bankName} onChange={set("bankName")} />
               </Field>
-              <Field label="Logo (optional)" error={errors.logoDataUrl} hint="PNG, JPG, SVG oder WebP, höchstens 200 KB" wide>
+              <Field label={t("wizard.logo")} error={err("logoDataUrl")} hint={t("wizard.logoHint")} wide>
                 <input type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" onChange={pickLogo} />
               </Field>
               {company.logoDataUrl && (
                 <div className="logo-preview wide">
-                  <img src={company.logoDataUrl} alt="Logo-Vorschau" />
-                  <button className="link" onClick={() => setCompany({ ...company, logoDataUrl: "" })}>Logo entfernen</button>
+                  <img src={company.logoDataUrl} alt={t("wizard.logoPreview")} />
+                  <button className="link" onClick={() => setCompany({ ...company, logoDataUrl: "" })}>{t("wizard.removeLogo")}</button>
                 </div>
               )}
             </>
@@ -189,9 +178,9 @@ export function SetupWizard(props: {
 
         {message && <p className="error" role="alert">{message}</p>}
         <div className="actions">
-          {step > 0 && <button className="button" onClick={() => { setErrors({}); setStep(step - 1); }}>Zurück</button>}
+          {step > 0 && <button className="button" onClick={() => { setErrors({}); setStep(step - 1); }}>{t("common.back")}</button>}
           <button className="button primary" onClick={next} disabled={busy}>
-            {step < STEPS.length - 1 ? "Weiter" : busy ? "Speichert …" : "Speichern und fertig"}
+            {step < STEPS.length - 1 ? t("wizard.next") : busy ? t("wizard.saving") : t("wizard.finish")}
           </button>
         </div>
       </div>

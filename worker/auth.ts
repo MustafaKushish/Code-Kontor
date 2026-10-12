@@ -43,8 +43,8 @@ export async function hashToken(token: string): Promise<string> {
   return toHex(await crypto.subtle.digest("SHA-256", encoder.encode(token)));
 }
 
-export function passwordProblem(password: unknown): string | null {
-  if (typeof password !== "string" || password.length < 10) return "Das Passwort braucht mindestens 10 Zeichen.";
-  if (password.length > 200) return "Das Passwort ist zu lang.";
+export function passwordProblem(password: unknown): "passwordTooShort" | "passwordTooLong" | null {
+  if (typeof password !== "string" || password.length < 10) return "passwordTooShort";
+  if (password.length > 200) return "passwordTooLong";
   return null;
 }

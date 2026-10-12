@@ -4,6 +4,7 @@ import type { Me } from "../api";
 import { AppIcon } from "../components";
 import { navigate } from "../router";
 import { CATALOG } from "../../shared/apps";
+import { useI18n } from "../i18n";
 
 interface Entry {
   id: string;
@@ -18,27 +19,29 @@ export function CommandPalette({ me, open, onClose }: { me: Me; open: boolean; o
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState(0);
   const input = useRef<HTMLInputElement>(null);
+  const { t, appText } = useI18n();
 
   const entries = useMemo<Entry[]>(() => {
     const pages: Entry[] = [
-      { id: "home", label: "Übersicht", hint: "Seite", to: "/", icon: <LayoutDashboard size={18} /> },
-      { id: "catalog", label: "App-Katalog", hint: "Seite", to: "/katalog", icon: <Store size={18} /> },
-      { id: "company", label: "Firmendaten", hint: "Seite", to: "/einstellungen", icon: <Settings size={18} /> },
+      { id: "home", label: t("nav.overview"), hint: t("palette.page"), to: "/", icon: <LayoutDashboard size={18} /> },
+      { id: "catalog", label: t("nav.catalog"), hint: t("palette.page"), to: "/katalog", icon: <Store size={18} /> },
+      { id: "company", label: t("palette.companyData"), hint: t("palette.page"), to: "/einstellungen", icon: <Settings size={18} /> },
     ];
-    if (me.user.role !== "staff") pages.push({ id: "team", label: "Team", hint: "Seite", to: "/team", icon: <Users size={18} /> });
+    if (me.user.role !== "staff") pages.push({ id: "team", label: t("nav.team"), hint: t("palette.page"), to: "/team", icon: <Users size={18} /> });
     const apps = CATALOG.map((app) => {
       const installed = me.installedApps.includes(app.id);
       return {
         id: app.id,
-        label: app.name,
-        hint: installed ? "Öffnen" : "Im Katalog",
+        label: appText(app.id).name,
+        hint: installed ? t("palette.open") : t("palette.inCatalog"),
         to: installed ? `/app/${app.id}` : `/katalog/${app.id}`,
         icon: <AppIcon app={app} size="sm" />,
       };
     });
     const q = query.trim().toLowerCase();
     return [...pages, ...apps].filter((e) => !q || e.label.toLowerCase().includes(q));
-  }, [me, query]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me, query, t]);
 
   useEffect(() => {
     if (open) {
@@ -58,13 +61,13 @@ export function CommandPalette({ me, open, onClose }: { me: Me; open: boolean; o
 
   return (
     <div className="palette-backdrop" onMouseDown={onClose}>
-      <div className="palette" role="dialog" aria-label="Schnellsuche" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="palette" role="dialog" aria-label={t("palette.title")} onMouseDown={(e) => e.stopPropagation()}>
         <label className="palette-input">
           <Search size={20} />
           <input
             ref={input}
             value={query}
-            placeholder="Wohin möchtest du?"
+            placeholder={t("palette.placeholder")}
             onChange={(e) => {
               setQuery(e.target.value);
               setIndex(0);
@@ -94,7 +97,7 @@ export function CommandPalette({ me, open, onClose }: { me: Me; open: boolean; o
               {i === index && <CornerDownLeft size={16} className="palette-enter" />}
             </li>
           ))}
-          {entries.length === 0 && <li className="palette-empty">Nichts gefunden.</li>}
+          {entries.length === 0 && <li className="palette-empty">{t("palette.nothing")}</li>}
         </ul>
       </div>
     </div>

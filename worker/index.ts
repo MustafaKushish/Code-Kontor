@@ -5,6 +5,9 @@ import { hashPassword, hashToken, newSessionToken, passwordProblem, verifyPasswo
 import { TenantDatabase } from "./tenant";
 import { sanitizeCompany, validateCompany } from "../shared/company";
 import { findApp } from "../shared/apps";
+import { fail } from "./errors";
+import Anthropic from "@anthropic-ai/sdk";
+import { askAssistant, DAILY_QUESTION_LIMIT, parseConversation } from "./assistant";
 
 export { TenantDatabase };
 
@@ -12,6 +15,8 @@ export interface Env {
   PLATFORM_DB: D1Database;
   TENANT_DB: DurableObjectNamespace<TenantDatabase>;
   ASSETS: Fetcher;
+  /** Schlüssel für den KI-Assistenten, gesetzt mit `wrangler secret put ANTHROPIC_API_KEY`. */
+  ANTHROPIC_API_KEY?: string;
 }
 
 type Role = "owner" | "admin" | "staff";
@@ -72,13 +77,13 @@ app.post("/auth/register", async (c) => {
   const name = text(body.name);
   const email = text(body.email).toLowerCase();
   const problem = passwordProblem(body.password);
-  if (!companyName) return c.json({ error: "Bitte den Firmennamen angeben." }, 400);
-  if (!name) return c.json({ error: "Bitte deinen Namen angeben." }, 400);
-  if (!EMAIL_PATTERN.test(email)) return c.json({ error: "Bitte eine gültige E-Mail-Adresse angeben." }, 400);
-  if (problem) return c.json({ error: problem }, 400);
+  if (!companyName) return fail(c, "companyNameRequired", 400);
+  if (!name) return fail(c, "nameRequired", 400);
+  if (!EMAIL_PATTERN.test(email)) return fail(c, "emailInvalid", 400);
+  if (problem) return fail(c, problem, 400);
 
   const exists = await c.env.PLATFORM_DB.prepare("SELECT 1 FROM users WHERE email = ?").bind(email).first();
-  if (exists) return c.json({ error: "Diese E-Mail-Adresse ist schon registriert." }, 409);
+  if (exists) return fail(c, "emailTaken", 409);
 
   const tenantId = crypto.randomUUID();
   const userId = crypto.randomUUID();
@@ -105,7 +110,7 @@ app.post("/auth/login", async (c) => {
     .bind(email)
     .first<{ id: string; password_hash: string }>();
   if (!user || !(await verifyPassword(password, user.password_hash)))
-    return c.json({ error: "E-Mail oder Passwort ist falsch." }, 401);
+    return fail(c, "wrongCredentials", 401);
   await startSession(c, user.id);
   return c.json({ ok: true });
 });
@@ -121,7 +126,7 @@ app.post("/auth/logout", async (c) => {
 
 app.use("*", async (c, next) => {
   const token = getCookie(c, SESSION_COOKIE);
-  if (!token) return c.json({ error: "Nicht angemeldet." }, 401);
+  if (!token) return fail(c, "notLoggedIn", 401);
   const user = await c.env.PLATFORM_DB.prepare(
     `SELECT u.id, u.tenant_id AS tenantId, t.name AS tenantName, u.email, u.name, u.role
        FROM sessions s JOIN users u ON u.id = s.user_id JOIN tenants t ON t.id = u.tenant_id
@@ -131,7 +136,7 @@ app.use("*", async (c, next) => {
     .first<SessionUser>();
   if (!user) {
     deleteCookie(c, SESSION_COOKIE, { path: "/" });
-    return c.json({ error: "Sitzung abgelaufen. Bitte neu anmelden." }, 401);
+    return fail(c, "sessionExpired", 401);
   }
   c.set("user", user);
   await next();
@@ -139,7 +144,7 @@ app.use("*", async (c, next) => {
 
 const requireRole = (...roles: Role[]) =>
   async (c: Ctx, next: () => Promise<void>) => {
-    if (!roles.includes(c.get("user").role)) return c.json({ error: "Dafür fehlt dir die Berechtigung." }, 403);
+    if (!roles.includes(c.get("user").role)) return fail(c, "forbidden", 403);
     await next();
   };
 
@@ -162,7 +167,7 @@ app.put("/company", requireRole("owner", "admin"), async (c) => {
   const user = c.get("user");
   const company = sanitizeCompany(await readBody(c));
   const errors = validateCompany(company);
-  if (Object.keys(errors).length) return c.json({ error: "Bitte die markierten Felder prüfen.", errors }, 400);
+  if (Object.keys(errors).length) return fail(c, "checkFields", 400, { errors });
   await tenantDb(c.env, user.tenantId).saveCompany(company);
   if (company.name !== user.tenantName)
     await c.env.PLATFORM_DB.prepare("UPDATE tenants SET name = ? WHERE id = ?").bind(company.name, user.tenantId).run();
@@ -173,7 +178,7 @@ app.put("/company", requireRole("owner", "admin"), async (c) => {
 
 app.post("/apps/:id", requireRole("owner", "admin"), async (c) => {
   const catalogApp = findApp(c.req.param("id") ?? "");
-  if (!catalogApp) return c.json({ error: "Dieses System gibt es nicht." }, 404);
+  if (!catalogApp) return fail(c, "unknownApp", 404);
   const db = tenantDb(c.env, c.get("user").tenantId);
   await db.installApp(catalogApp.id);
   return c.json({ installedApps: await db.installedApps() });
@@ -203,13 +208,13 @@ app.post("/users", requireRole("owner", "admin"), async (c) => {
   const email = text(body.email).toLowerCase();
   const role = body.role as Role;
   const problem = passwordProblem(body.password);
-  if (!name) return c.json({ error: "Bitte einen Namen angeben." }, 400);
-  if (!EMAIL_PATTERN.test(email)) return c.json({ error: "Bitte eine gültige E-Mail-Adresse angeben." }, 400);
-  if (role !== "admin" && role !== "staff") return c.json({ error: "Rolle muss Admin oder Mitarbeiter sein." }, 400);
-  if (role === "admin" && me.role !== "owner") return c.json({ error: "Nur der Inhaber kann Admins anlegen." }, 403);
-  if (problem) return c.json({ error: problem }, 400);
+  if (!name) return fail(c, "nameRequired", 400);
+  if (!EMAIL_PATTERN.test(email)) return fail(c, "emailInvalid", 400);
+  if (role !== "admin" && role !== "staff") return fail(c, "roleInvalid", 400);
+  if (role === "admin" && me.role !== "owner") return fail(c, "ownerOnlyAdmins", 403);
+  if (problem) return fail(c, problem, 400);
   const exists = await c.env.PLATFORM_DB.prepare("SELECT 1 FROM users WHERE email = ?").bind(email).first();
-  if (exists) return c.json({ error: "Diese E-Mail-Adresse ist schon registriert." }, 409);
+  if (exists) return fail(c, "emailTaken", 409);
   const id = crypto.randomUUID();
   await c.env.PLATFORM_DB.prepare(
     "INSERT INTO users (id, tenant_id, email, name, role, password_hash) VALUES (?, ?, ?, ?, ?, ?)",
@@ -224,14 +229,46 @@ app.delete("/users/:id", requireRole("owner", "admin"), async (c) => {
   const target = await c.env.PLATFORM_DB.prepare("SELECT id, role FROM users WHERE id = ? AND tenant_id = ?")
     .bind(c.req.param("id"), me.tenantId)
     .first<{ id: string; role: Role }>();
-  if (!target) return c.json({ error: "Benutzer nicht gefunden." }, 404);
-  if (target.id === me.id) return c.json({ error: "Du kannst dich nicht selbst entfernen." }, 400);
-  if (target.role === "owner") return c.json({ error: "Der Inhaber kann nicht entfernt werden." }, 403);
-  if (target.role === "admin" && me.role !== "owner") return c.json({ error: "Nur der Inhaber kann Admins entfernen." }, 403);
+  if (!target) return fail(c, "userNotFound", 404);
+  if (target.id === me.id) return fail(c, "cannotRemoveSelf", 400);
+  if (target.role === "owner") return fail(c, "cannotRemoveOwner", 403);
+  if (target.role === "admin" && me.role !== "owner") return fail(c, "ownerOnlyRemoveAdmins", 403);
   await c.env.PLATFORM_DB.prepare("DELETE FROM users WHERE id = ?").bind(target.id).run();
   return c.json({ ok: true });
 });
 
-app.notFound((c) => c.json({ error: "Nicht gefunden." }, 404));
+// ---------- KI-Assistent ----------
+
+app.post("/assistant", async (c) => {
+  const user = c.get("user");
+  const body = await readBody(c);
+  const messages = parseConversation(body.messages);
+  if (!messages) return fail(c, "messageInvalid", 400);
+  const apiKey = c.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return fail(c, "assistantNotConfigured", 503);
+
+  const db = tenantDb(c.env, user.tenantId);
+  if (!(await db.countAssistantQuestion(user.id, DAILY_QUESTION_LIMIT))) return fail(c, "assistantLimit", 429);
+
+  const context = {
+    companyName: user.tenantName,
+    userName: user.name,
+    role: user.role,
+    installedApps: await db.installedApps(),
+    lang: typeof body.lang === "string" ? body.lang : "de",
+  };
+
+  // Antwort als Zeilen mit je einem JSON-Ereignis, damit der Text sofort erscheint.
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      for await (const event of askAssistant(new Anthropic({ apiKey }), context, messages)) controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
+      controller.close();
+    },
+  });
+  return new Response(stream, { headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store" } });
+});
+
+app.notFound((c) => fail(c, "notFound", 404));
 
 export default app;

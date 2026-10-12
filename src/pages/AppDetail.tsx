@@ -1,18 +1,21 @@
 import { useState } from "react";
-import { ArrowLeft, Check, Cloud, Download, MonitorSmartphone, ShieldCheck, Trash2 } from "lucide-react";
-import { api, ApiError, type Me } from "../api";
-import { AppIcon, appStyle, euro, Link } from "../components";
+import { ArrowLeft, Check, Download, Languages, MonitorSmartphone, ShieldCheck, Trash2 } from "lucide-react";
+import { api, type Me } from "../api";
+import { AppIcon, appStyle, Link } from "../components";
 import { navigate } from "../router";
 import type { CatalogApp } from "../../shared/apps";
+import { useI18n } from "../i18n";
 
 export function AppDetail({ app, me, onAppsChanged }: { app: CatalogApp; me: Me; onAppsChanged: (apps: string[]) => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const installed = me.installedApps.includes(app.id);
   const isManager = me.user.role !== "staff";
+  const { t, errorText, appText, money } = useI18n();
+  const text = appText(app.id);
 
   const toggle = async () => {
-    if (installed && !confirm(`${app.name} wirklich entfernen? Deine Daten bleiben gespeichert.`)) return;
+    if (installed && !confirm(t("detail.confirmRemove", { name: text.name }))) return;
     setBusy(true);
     setError("");
     try {
@@ -20,7 +23,7 @@ export function AppDetail({ app, me, onAppsChanged }: { app: CatalogApp; me: Me;
       onAppsChanged(installedApps);
       if (!installed) navigate(`/app/${app.id}`);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Keine Verbindung zum Server.");
+      setError(errorText(err));
     } finally {
       setBusy(false);
     }
@@ -28,44 +31,44 @@ export function AppDetail({ app, me, onAppsChanged }: { app: CatalogApp; me: Me;
 
   return (
     <div className="stack-lg">
-      <Link to="/katalog" className="text-link back"><ArrowLeft size={16} /> App-Katalog</Link>
+      <Link to="/katalog" className="text-link back"><ArrowLeft size={16} className="flip-rtl" /> {t("nav.catalog")}</Link>
 
       <section className="detail-hero" style={appStyle(app)}>
         <span className="card-glow" aria-hidden />
         <AppIcon app={app} size="lg" />
         <div className="stack-sm">
-          <span className="pill">{app.category}</span>
-          <h1 className="display">{app.name}</h1>
-          <p>{app.description}</p>
+          <span className="pill">{t(`catalog.categories.${app.category}`)}</span>
+          <h1 className="display">{text.name}</h1>
+          <p>{text.description}</p>
         </div>
         <div className="detail-buy">
-          <p><strong className="price">{euro(app.priceMonthly)}</strong> <span className="muted">/ Monat</span></p>
+          <p><strong className="price">{money(app.priceMonthly)}</strong> <span className="muted">{t("common.perMonth")}</span></p>
           {isManager ? (
             <button className={installed ? "button" : "button primary"} onClick={toggle} disabled={busy}>
-              {installed ? <><Trash2 size={18} /> Entfernen</> : <><Download size={18} /> {busy ? "Wird installiert …" : "Installieren"}</>}
+              {installed ? <><Trash2 size={18} /> {t("common.remove")}</> : <><Download size={18} /> {busy ? t("detail.installing") : t("detail.install")}</>}
             </button>
           ) : (
-            <p className="muted">Installieren kann der Inhaber oder ein Admin.</p>
+            <p className="muted">{t("detail.managersOnly")}</p>
           )}
-          {installed && <Link to={`/app/${app.id}`} className="button primary">Öffnen</Link>}
+          {installed && <Link to={`/app/${app.id}`} className="button primary">{t("palette.open")}</Link>}
           {error && <p className="error" role="alert">{error}</p>}
-          <small className="muted">Monatlich kündbar. Preis zzgl. MwSt.</small>
+          <small className="muted">{t("detail.cancelAnytime")}</small>
         </div>
       </section>
 
       <div className="columns">
         <section className="card">
-          <h2>Das ist dabei</h2>
+          <h2>{t("detail.included")}</h2>
           <ul className="feature-list large">
-            {app.features.map((f) => <li key={f}><Check size={18} /> {f}</li>)}
+            {text.features.map((f) => <li key={f}><Check size={18} /> {f}</li>)}
           </ul>
         </section>
         <section className="card">
-          <h2>Für alle Systeme gleich</h2>
+          <h2>{t("detail.sameForAll")}</h2>
           <ul className="benefits">
-            <li><ShieldCheck size={20} /><span><strong>Eigene Datenbank</strong><small className="muted">Deine Daten liegen getrennt von allen anderen Kunden.</small></span></li>
-            <li><MonitorSmartphone size={20} /><span><strong>Jedes Gerät</strong><small className="muted">Handy, Tablet und Laptop, auch als App installierbar.</small></span></li>
-            <li><Cloud size={20} /><span><strong>Immer aktuell</strong><small className="muted">Updates kommen automatisch, ohne Installation.</small></span></li>
+            <li><ShieldCheck size={20} /><span><strong>{t("detail.b1Title")}</strong><small className="muted">{t("detail.b1Text")}</small></span></li>
+            <li><MonitorSmartphone size={20} /><span><strong>{t("detail.b2Title")}</strong><small className="muted">{t("detail.b2Text")}</small></span></li>
+            <li><Languages size={20} /><span><strong>{t("detail.b3Title")}</strong><small className="muted">{t("detail.b3Text")}</small></span></li>
           </ul>
         </section>
       </div>
@@ -74,23 +77,25 @@ export function AppDetail({ app, me, onAppsChanged }: { app: CatalogApp; me: Me;
 }
 
 export function InstalledApp({ app }: { app: CatalogApp }) {
+  const { t, appText } = useI18n();
+  const text = appText(app.id);
   return (
     <div className="stack-lg">
       <header className="page-head with-icon">
         <AppIcon app={app} size="lg" />
         <div>
-          <h1 className="display">{app.name}</h1>
-          <p className="muted">{app.tagline}</p>
+          <h1 className="display">{text.name}</h1>
+          <p className="muted">{text.tagline}</p>
         </div>
       </header>
       {app.status === "preview" && (
-        <p className="notice">Dieses System wird gerade gebaut. Die Bereiche unten werden nach und nach freigeschaltet.</p>
+        <p className="notice">{t("detail.building")}</p>
       )}
       <div className="module-grid" style={appStyle(app)}>
-        {app.features.map((f) => (
+        {text.features.map((f) => (
           <div key={f} className="module-tile">
             <strong>{f}</strong>
-            <small className="muted">Bald verfügbar</small>
+            <small className="muted">{t("detail.comingSoon")}</small>
           </div>
         ))}
       </div>

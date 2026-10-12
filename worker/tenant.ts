@@ -8,6 +8,7 @@ import type { CompanyProfile } from "../shared/company";
 const MIGRATIONS: string[] = [
   `CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT (datetime('now')));
    CREATE TABLE installed_apps (app_id TEXT PRIMARY KEY, installed_at TEXT NOT NULL DEFAULT (datetime('now')));`,
+  `CREATE TABLE assistant_usage (user_id TEXT NOT NULL, day TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user_id, day));`,
 ];
 
 export class TenantDatabase extends DurableObject<Record<string, never>> {
@@ -53,5 +54,22 @@ export class TenantDatabase extends DurableObject<Record<string, never>> {
 
   async uninstallApp(appId: string): Promise<void> {
     this.sql.exec("DELETE FROM installed_apps WHERE app_id = ?", appId);
+  }
+
+  /** Zählt eine Frage an den KI-Assistenten. Gibt false zurück, wenn das Tageslimit erreicht ist. */
+  async countAssistantQuestion(userId: string, dailyLimit: number): Promise<boolean> {
+    const day = new Date().toISOString().slice(0, 10);
+    const row = this.sql
+      .exec<{ count: number }>("SELECT count FROM assistant_usage WHERE user_id = ? AND day = ?", userId, day)
+      .toArray()[0];
+    if ((row?.count ?? 0) >= dailyLimit) return false;
+    this.sql.exec(
+      `INSERT INTO assistant_usage (user_id, day, count) VALUES (?, ?, 1)
+       ON CONFLICT(user_id, day) DO UPDATE SET count = count + 1`,
+      userId,
+      day,
+    );
+    this.sql.exec("DELETE FROM assistant_usage WHERE day < date('now', '-30 days')");
+    return true;
   }
 }
