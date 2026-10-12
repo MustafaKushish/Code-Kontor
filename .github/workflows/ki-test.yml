@@ -1,0 +1,25 @@
+name: KI-Schlüssel prüfen
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/project-thread-b59xrs]
+    paths: [.github/workflows/ki-test.yml]
+
+jobs:
+  gemini:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Gemini fragen
+        env:
+          KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          KEY=$(printf '%s' "$KEY" | tr -d ' \t\r\n"')
+          echo "Schlüssel: ${#KEY} Zeichen, beginnt mit ${KEY:0:4}… (Gemini-Schlüssel beginnen mit AIza und haben 39 Zeichen)"
+          echo "--- Verfügbare Flash-Modelle ---"
+          curl -s -w "\nHTTP %{http_code}\n" -H "x-goog-api-key: $KEY" "https://generativelanguage.googleapis.com/v1beta/models?pageSize=200" \
+            | grep -oE '"name": "models/[^"]*flash[^"]*"|HTTP [0-9]+|"message": "[^"]*"' | head -30
+          echo "--- Testfrage an gemini-2.5-flash ---"
+          curl -s -w "\nHTTP %{http_code}\n" -H "x-goog-api-key: $KEY" -H "Content-Type: application/json" \
+            -d '{"contents":[{"role":"user","parts":[{"text":"Sag nur: OK"}]}]}' \
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent" | head -c 1500

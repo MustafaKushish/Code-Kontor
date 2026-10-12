@@ -4,6 +4,8 @@
   "main": "worker/index.ts",
   "compatibility_date": "2026-09-01",
   "workers_dev": true,
+  // Protokolle im Cloudflare-Dashboard (Worker → Logs), hilft bei Fehlersuche
+  "observability": { "enabled": true },
   "assets": {
     "directory": "./dist",
     "not_found_handling": "single-page-application",
