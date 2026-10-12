@@ -69,6 +69,7 @@ export const it: Dict = {
     legalFormHint: "es. ditta individuale, GmbH, UG",
     country: "Paese",
     street: "Via e numero civico",
+    streetHint: "Inizia a scrivere e scegli un suggerimento: CAP e città si compilano da soli.",
     postalCode: "CAP",
     city: "Città",
     invoiceEmail: "E-mail per le fatture",

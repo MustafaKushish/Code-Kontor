@@ -1,4 +1,4 @@
-name: KI-Schlüssel prüfen
+name: KI und Adressdienste prüfen
 
 on:
   workflow_dispatch:
@@ -25,3 +25,7 @@ jobs:
               -d '{"systemInstruction":{"parts":[{"text":"Antworte kurz auf Deutsch."}]},"contents":[{"role":"user","parts":[{"text":"Was muss auf eine Rechnung?"}]}],"generationConfig":{"maxOutputTokens":2048,"temperature":0.4}}' \
               "https://generativelanguage.googleapis.com/v1beta/models/$MODEL:streamGenerateContent?alt=sse" | grep -oE '"text": "[^"]{0,80}|"finishReason": "[A-Z_]+"|"message": "[^"]*"|HTTP [0-9]+' | head -12
           done
+      - name: Adress-Dienste prüfen
+        run: |
+          curl -s "https://photon.komoot.io/api/?q=Hauptstra%C3%9Fe%2012%20Berlin&limit=2&lang=de&layer=house&layer=street" | head -c 1200; echo
+          curl -s https://api.zippopotam.us/de/10115 | head -c 400; echo

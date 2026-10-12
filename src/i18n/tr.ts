@@ -69,6 +69,7 @@ export const tr: Dict = {
     legalFormHint: "örn. şahıs şirketi, GmbH, UG",
     country: "Ülke",
     street: "Sokak ve numara",
+    streetHint: "Yazmaya başlayın ve bir öneri seçin: posta kodu ve şehir kendiliğinden dolar.",
     postalCode: "Posta kodu",
     city: "Şehir",
     invoiceEmail: "Faturalar için e-posta",

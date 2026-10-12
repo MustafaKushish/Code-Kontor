@@ -70,6 +70,7 @@ export const de = {
     legalFormHint: "z. B. Einzelunternehmen, GmbH, UG",
     country: "Land",
     street: "Straße und Hausnummer",
+    streetHint: "Tippen und einen Vorschlag wählen: PLZ und Ort füllen sich selbst.",
     postalCode: "PLZ",
     city: "Ort",
     invoiceEmail: "E-Mail für Rechnungen",

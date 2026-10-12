@@ -1,7 +1,8 @@
-import { useEffect, useState, type ChangeEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { api, ApiError } from "../api";
 import { useI18n } from "../i18n";
 import { LanguageSwitch } from "../layout/LanguageSwitch";
+import { AddressInput } from "./AddressInput";
 import { Field, Logo } from "../components";
 import { emptyCompanyProfile, validateCompany, type CompanyErrors, type CompanyProfile } from "../../shared/company";
 
@@ -42,6 +43,24 @@ export function SetupWizard(props: {
 
   const set = (key: keyof CompanyProfile) => (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setCompany({ ...company, [key]: e.target.value });
+
+  // PLZ eingegeben: Ort automatisch eintragen, solange er leer ist oder selbst eingetragen wurde.
+  const autoCity = useRef("");
+  const changePostalCode = (postalCode: string) => {
+    setCompany((c) => ({ ...c, postalCode }));
+    const code = postalCode.trim();
+    const complete = company.country === "DE" ? /^\d{5}$/.test(code) : code.length >= 4;
+    if (!complete || (company.city && company.city !== autoCity.current)) return;
+    const params = new URLSearchParams({ country: company.country, code });
+    api<{ city: string | null }>(`/geo/postal?${params}`)
+      .then(({ city }) => {
+        if (!city) return;
+        const previous = autoCity.current;
+        autoCity.current = city;
+        setCompany((c) => (c.postalCode.trim() === code && (!c.city || c.city === previous) ? { ...c, city } : c));
+      })
+      .catch(() => {});
+  };
 
   const stepErrors = (index: number) => {
     const all = validateCompany(company);
@@ -123,11 +142,25 @@ export function SetupWizard(props: {
                   ))}
                 </select>
               </Field>
-              <Field label={t("wizard.street")} error={err("street")} wide>
-                <input value={company.street} onChange={set("street")} autoComplete="street-address" />
+              <Field label={t("wizard.street")} error={err("street")} hint={t("wizard.streetHint")} wide>
+                <AddressInput
+                  value={company.street}
+                  country={company.country}
+                  lang={lang}
+                  onChange={(street) => setCompany((c) => ({ ...c, street }))}
+                  onPick={(a) =>
+                    setCompany((c) => ({
+                      ...c,
+                      street: a.street,
+                      postalCode: a.postalCode || c.postalCode,
+                      city: a.city || c.city,
+                      country: COUNTRIES.includes(a.country) ? a.country : c.country,
+                    }))
+                  }
+                />
               </Field>
               <Field label={t("wizard.postalCode")} error={err("postalCode")}>
-                <input value={company.postalCode} onChange={set("postalCode")} autoComplete="postal-code" inputMode="numeric" />
+                <input value={company.postalCode} onChange={(e) => changePostalCode(e.target.value)} autoComplete="postal-code" inputMode="numeric" />
               </Field>
               <Field label={t("wizard.city")} error={err("city")}>
                 <input value={company.city} onChange={set("city")} autoComplete="address-level2" />

@@ -69,6 +69,7 @@ export const uk: Dict = {
     legalFormHint: "напр. ФОП, GmbH, UG",
     country: "Країна",
     street: "Вулиця та будинок",
+    streetHint: "Почніть вводити й оберіть підказку: індекс і місто заповняться самі.",
     postalCode: "Поштовий індекс",
     city: "Місто",
     invoiceEmail: "Ел. пошта для рахунків",

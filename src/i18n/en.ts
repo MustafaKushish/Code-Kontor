@@ -69,6 +69,7 @@ export const en: Dict = {
     legalFormHint: "e.g. sole proprietor, GmbH, UG",
     country: "Country",
     street: "Street and number",
+    streetHint: "Start typing and pick a suggestion: postcode and city fill in by themselves.",
     postalCode: "Postcode",
     city: "City",
     invoiceEmail: "Email for invoices",

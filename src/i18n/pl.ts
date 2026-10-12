@@ -69,6 +69,7 @@ export const pl: Dict = {
     legalFormHint: "np. jednoosobowa działalność, sp. z o.o.",
     country: "Kraj",
     street: "Ulica i numer",
+    streetHint: "Zacznij pisać i wybierz podpowiedź: kod pocztowy i miejscowość uzupełnią się same.",
     postalCode: "Kod pocztowy",
     city: "Miejscowość",
     invoiceEmail: "E-mail do faktur",

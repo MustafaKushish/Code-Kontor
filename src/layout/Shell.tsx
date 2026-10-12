@@ -88,7 +88,7 @@ export function Shell({ me, path, onLogout, children }: { me: Me; path: string; 
         <div className="sidebar-foot">
           <div className="row foot-switches">
             <ThemeSwitch />
-            <LanguageSwitch compact />
+            <LanguageSwitch compact up />
           </div>
           <div className="sidebar-user">
             <Avatar name={me.user.name} />

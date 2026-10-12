@@ -6,6 +6,7 @@ import { TenantDatabase } from "./tenant";
 import { sanitizeCompany, validateCompany } from "../shared/company";
 import { findApp } from "../shared/apps";
 import { fail } from "./errors";
+import { cityForPostalCode, suggestAddresses } from "./geo";
 import { askAssistant, DAILY_QUESTION_LIMIT, parseConversation } from "./assistant";
 
 export { TenantDatabase };
@@ -236,6 +237,30 @@ app.delete("/users/:id", requireRole("owner", "admin"), async (c) => {
   if (target.role === "admin" && me.role !== "owner") return fail(c, "ownerOnlyRemoveAdmins", 403);
   await c.env.PLATFORM_DB.prepare("DELETE FROM users WHERE id = ?").bind(target.id).run();
   return c.json({ ok: true });
+});
+
+// ---------- Adressvorschläge ----------
+
+app.get("/geo/address", async (c) => {
+  const q = (c.req.query("q") ?? "").trim();
+  if (q.length < 3 || q.length > 120) return c.json({ suggestions: [] });
+  try {
+    const suggestions = await suggestAddresses(q, { lang: c.req.query("lang"), country: c.req.query("country") });
+    return c.json({ suggestions });
+  } catch (error) {
+    console.error("geo/address", error);
+    return c.json({ suggestions: [] });
+  }
+});
+
+app.get("/geo/postal", async (c) => {
+  try {
+    const city = await cityForPostalCode(c.req.query("country") ?? "", c.req.query("code") ?? "");
+    return c.json({ city }, 200, { "Cache-Control": "private, max-age=86400" });
+  } catch (error) {
+    console.error("geo/postal", error);
+    return c.json({ city: null });
+  }
 });
 
 // ---------- KI-Assistent ----------

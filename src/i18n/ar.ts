@@ -69,6 +69,7 @@ export const ar: Dict = {
     legalFormHint: "مثل: مؤسسة فردية، GmbH، UG",
     country: "الدولة",
     street: "الشارع ورقم المبنى",
+    streetHint: "ابدأ الكتابة واختر اقتراحًا: يُملأ الرمز البريدي والمدينة تلقائيًا.",
     postalCode: "الرمز البريدي",
     city: "المدينة",
     invoiceEmail: "البريد الإلكتروني للفواتير",
