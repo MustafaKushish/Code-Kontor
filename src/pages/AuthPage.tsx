@@ -29,9 +29,10 @@ export function AuthPage({ onDone }: { onDone: () => void }) {
   return (
     <div className="auth">
       <aside className="auth-brand">
+        <div className="aurora" aria-hidden><span /><span /><span /></div>
         <Logo />
         <div className="stack">
-          <h1>Ein System für jedes Geschäft.</h1>
+          <h1 className="display">Ein System für jedes Geschäft.</h1>
           <p>Friseur, Werkstatt, Restaurant, Laden oder Handyshop: fertig eingerichtet, monatlich mietbar.</p>
         </div>
         <div className="auth-apps">
@@ -52,7 +53,7 @@ export function AuthPage({ onDone }: { onDone: () => void }) {
             <button role="tab" aria-selected={register} className={register ? "active" : ""} onClick={() => { setMode("register"); setError(""); }}>Konto anlegen</button>
           </div>
           <div className="stack-sm">
-            <h2>{register ? "Starte mit Code Kontor" : "Willkommen zurück"}</h2>
+            <h2 className="display auth-title">{register ? "Starte mit Code Kontor" : "Willkommen zurück"}</h2>
             <p className="muted">
               {register ? "Deine Firma bekommt sofort ihre eigene, getrennte Datenbank." : "Melde dich mit deiner E-Mail-Adresse an."}
             </p>

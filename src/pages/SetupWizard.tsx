@@ -115,7 +115,7 @@ export function SetupWizard(props: {
             </li>
           ))}
         </ol>
-        <h1>{current.title}</h1>
+        <h1 className="display">{current.title}</h1>
         <p className="muted">{current.intro}</p>
 
         <div className="grid">

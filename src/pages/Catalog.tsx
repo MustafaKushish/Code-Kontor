@@ -23,7 +23,7 @@ export function Catalog({ me }: { me: Me }) {
     <div className="stack-lg">
       <header className="page-head">
         <div>
-          <h1>App-Katalog</h1>
+          <h1 className="display">App-Katalog</h1>
           <p className="muted">Fertige Systeme für jede Branche. Installieren, Firmendaten sind schon drin, loslegen.</p>
         </div>
       </header>
@@ -47,6 +47,7 @@ export function Catalog({ me }: { me: Me }) {
           const installed = me.installedApps.includes(app.id);
           return (
             <Link key={app.id} to={`/katalog/${app.id}`} className="catalog-card" style={appStyle(app)}>
+              <span className="card-glow" aria-hidden />
               <div className="catalog-card-top">
                 <AppIcon app={app} size="lg" />
                 {installed ? (

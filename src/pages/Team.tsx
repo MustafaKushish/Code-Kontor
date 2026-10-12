@@ -50,7 +50,7 @@ export function Team({ me }: { me: Me }) {
     <div className="stack-lg">
       <header className="page-head">
         <div>
-          <h1>Team</h1>
+          <h1 className="display">Team</h1>
           <p className="muted">Wer bei {me.user.tenantName} mit Code Kontor arbeitet.</p>
         </div>
         <button className={open ? "button" : "button primary"} onClick={() => setOpen(!open)}>

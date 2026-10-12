@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Building2, Landmark, Pencil, Receipt } from "lucide-react";
+import { Building2, Landmark, Palette, Pencil, Receipt } from "lucide-react";
+import { ThemeSwitch } from "../layout/Shell";
 import { api, type Me } from "../api";
 import type { CompanyProfile } from "../../shared/company";
 
@@ -17,7 +18,7 @@ export function Settings({ me, onEdit }: { me: Me; onEdit: () => void }) {
     <div className="stack-lg">
       <header className="page-head">
         <div>
-          <h1>Firma</h1>
+          <h1 className="display">Firma</h1>
           <p className="muted">Diese Angaben stehen auf deinen Rechnungen und Belegen.</p>
         </div>
         {canEdit && <button className="button primary" onClick={onEdit}><Pencil size={18} /> Bearbeiten</button>}
@@ -51,6 +52,11 @@ export function Settings({ me, onEdit }: { me: Me; onEdit: () => void }) {
               <dt>BIC</dt><dd>{c.bic || "–"}</dd>
               <dt>Bank</dt><dd>{c.bankName || "–"}</dd>
             </dl>
+          </section>
+          <section className="card">
+            <h2 className="card-title"><Palette size={20} /> Darstellung</h2>
+            <p className="muted">Hell, dunkel oder automatisch wie dein Gerät.</p>
+            <ThemeSwitch />
           </section>
         </div>
       ) : (

@@ -31,10 +31,11 @@ export function AppDetail({ app, me, onAppsChanged }: { app: CatalogApp; me: Me;
       <Link to="/katalog" className="text-link back"><ArrowLeft size={16} /> App-Katalog</Link>
 
       <section className="detail-hero" style={appStyle(app)}>
+        <span className="card-glow" aria-hidden />
         <AppIcon app={app} size="lg" />
         <div className="stack-sm">
           <span className="pill">{app.category}</span>
-          <h1>{app.name}</h1>
+          <h1 className="display">{app.name}</h1>
           <p>{app.description}</p>
         </div>
         <div className="detail-buy">
@@ -78,7 +79,7 @@ export function InstalledApp({ app }: { app: CatalogApp }) {
       <header className="page-head with-icon">
         <AppIcon app={app} size="lg" />
         <div>
-          <h1>{app.name}</h1>
+          <h1 className="display">{app.name}</h1>
           <p className="muted">{app.tagline}</p>
         </div>
       </header>
