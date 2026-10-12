@@ -22,6 +22,12 @@ describe("Adressvorschläge", () => {
     expect(result.map((r) => r.label)).toEqual(["Hauptstraße 1, 10115 Berlin"]);
   });
 
+  it("behält die getippte Hausnummer, wenn nur die Straße gefunden wird", async () => {
+    const features = [{ properties: { type: "street", name: "Hauptstraße", postcode: "12159", city: "Berlin", countrycode: "DE" } }];
+    const [first] = await suggestAddresses("Hauptstraße 12a", { country: "DE", fetch: fakeFetch({ features }) });
+    expect(first?.street).toBe("Hauptstraße 12a");
+  });
+
   it("findet den Ort zur Postleitzahl", async () => {
     expect(await cityForPostalCode("DE", "10115", fakeFetch({ places: [{ "place name": "Berlin" }] }))).toBe("Berlin");
     expect(await cityForPostalCode("DE", "00000", fakeFetch({}, 404))).toBeNull();

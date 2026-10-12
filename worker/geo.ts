@@ -53,7 +53,18 @@ export async function suggestAddresses(
   const response = await doFetch(url, { headers: { "User-Agent": "CodeKontor/1.0 (https://code-kontor.mustafa-alzurgany.workers.dev)" } });
   if (!response.ok) return [];
   const data = (await response.json()) as { features?: PhotonFeature[] };
-  const all = (data.features ?? []).map(toSuggestion).filter((s): s is AddressSuggestion => s !== null);
+  // Hausnummer aus der Eingabe übernehmen, wenn nur die Straße gefunden wurde.
+  const typedNumber = /(?:^|\s)(\d+\s?[a-zA-Z]?)\s*$/.exec(query.split(",")[0]!.trim())?.[1];
+  const all = (data.features ?? [])
+    .map((f) => {
+      const s = toSuggestion(f);
+      if (s && typedNumber && !f.properties.housenumber) {
+        s.street = `${s.street} ${typedNumber}`;
+        s.label = [s.street, `${s.postalCode} ${s.city}`.trim()].filter(Boolean).join(", ");
+      }
+      return s;
+    })
+    .filter((s): s is AddressSuggestion => s !== null);
   // Treffer im Land der Firma zuerst, doppelte Einträge entfernen.
   const seen = new Set<string>();
   const unique = all.filter((s) => !seen.has(s.label + s.country) && seen.add(s.label + s.country));
