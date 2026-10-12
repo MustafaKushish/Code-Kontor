@@ -10,11 +10,13 @@ interface ChatMessage {
 
 type StreamEvent = { type: "text"; text: string } | { type: "reset" } | { type: "done" } | { type: "error"; code: string };
 
-/** Fett (**text**) innerhalb einer Zeile. */
+/** Fett (**text**) und kursiv (*text*) innerhalb einer Zeile; einzelne Sternchen fallen weg. */
 function inline(text: string): ReactNode[] {
-  return text.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
-    part.startsWith("**") && part.endsWith("**") ? <strong key={i}>{part.slice(2, -2)}</strong> : <Fragment key={i}>{part}</Fragment>,
-  );
+  return text.split(/(\*\*[^*]+\*\*|\*[^*\s][^*]*\*)/g).map((part, i) => {
+    if (part.startsWith("**") && part.endsWith("**") && part.length > 4) return <strong key={i}>{part.slice(2, -2)}</strong>;
+    if (part.startsWith("*") && part.endsWith("*") && part.length > 2) return <em key={i}>{part.slice(1, -1)}</em>;
+    return <Fragment key={i}>{part.replace(/\*\*?/g, "")}</Fragment>;
+  });
 }
 
 /** Kleine, sichere Darstellung der Antwort: Absätze und Listen, kein HTML. */
@@ -161,12 +163,12 @@ export function Assistant({ me }: { me: Me }) {
               <small>{t("assistant.subtitle")}</small>
             </div>
             {messages.length > 0 && (
-              <button className="icon-button" onClick={reset} aria-label={t("assistant.newChat")} title={t("assistant.newChat")}>
+              <button className="assistant-tool" onClick={reset} aria-label={t("assistant.newChat")} title={t("assistant.newChat")}>
                 <RotateCcw size={18} />
               </button>
             )}
-            <button className="icon-button" onClick={() => setOpen(false)} aria-label={t("assistant.close")} title={t("assistant.close")}>
-              <X size={18} />
+            <button className="assistant-tool assistant-close" onClick={() => setOpen(false)} aria-label={t("assistant.close")} title={t("assistant.close")}>
+              <X size={20} strokeWidth={2.4} />
             </button>
           </header>
 
@@ -181,15 +183,18 @@ export function Assistant({ me }: { me: Me }) {
                 </div>
               </div>
             ) : (
-              messages.map((m, i) => (
-                <div key={i} className={`bubble ${m.role}`}>
-                  {m.role === "assistant" ? (
-                    m.content ? <RichText text={m.content} /> : <span className="typing" aria-label={t("assistant.thinking")}><i /><i /><i /></span>
-                  ) : (
-                    m.content
-                  )}
-                </div>
-              ))
+              messages.map((m, i) =>
+                m.role === "assistant" ? (
+                  <div key={i} className={busy && i === messages.length - 1 ? "msg bot streaming" : "msg bot"}>
+                    <span className="msg-avatar" aria-hidden><Sparkles size={14} /></span>
+                    <div className="msg-text">
+                      {m.content ? <RichText text={m.content} /> : <span className="typing" aria-label={t("assistant.thinking")}><i /><i /><i /></span>}
+                    </div>
+                  </div>
+                ) : (
+                  <div key={i} className="msg user">{m.content}</div>
+                ),
+              )
             )}
             {error && <p className="assistant-error" role="alert">{error}</p>}
           </div>
