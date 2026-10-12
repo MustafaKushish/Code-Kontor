@@ -62,7 +62,7 @@ describe("KI-Assistent: Antwortstrom", () => {
       { role: "user", content: "c" },
     ]);
     expect(events).toEqual([{ type: "text", text: "Hal" }, { type: "text", text: "lo!" }, { type: "done" }]);
-    expect(lastRequest?.url).toContain("/models/gemini-2.5-flash:streamGenerateContent?alt=sse");
+    expect(lastRequest?.url).toContain("/models/gemini-flash-latest:streamGenerateContent?alt=sse");
     expect(lastRequest?.headers.get("x-goog-api-key")).toBe("test-key");
     expect(lastRequest?.body.contents).toEqual([
       { role: "user", parts: [{ text: "a" }] },

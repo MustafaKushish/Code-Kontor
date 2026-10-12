@@ -4,8 +4,8 @@ import { CATALOG } from "../shared/apps";
 // Heute für Inhaber und Team in der App; die öffentlichen Kundenseiten der
 // Module bekommen später eine eigene Variante mit anderem Systemprompt.
 
-/** Kostenloses Gemini-Modell; mit der Variable GEMINI_MODEL austauschbar. */
-export const DEFAULT_MODEL = "gemini-2.5-flash";
+/** Immer das aktuelle kostenlose Flash-Modell von Google; mit der Variable GEMINI_MODEL austauschbar. */
+export const DEFAULT_MODEL = "gemini-flash-latest";
 export const DAILY_QUESTION_LIMIT = 50;
 const MAX_TURNS = 20;
 const MAX_MESSAGE_CHARS = 4000;

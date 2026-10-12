@@ -14,7 +14,7 @@ Läuft als installierbare App auf Handy, Tablet und Laptop.
 | Plattform-Datenbank | `migrations/` (Cloudflare D1) | Firmen-Verzeichnis, Benutzer, Sitzungen |
 | Datenbank je Kunde | `worker/tenant.ts` (Durable Object mit SQLite) | Firmendaten und später alle Geschäftsdaten, getrennt je Firma |
 | Sprachen | `src/i18n/` | 10 Sprachen: Deutsch, Englisch, Türkisch, Arabisch (von rechts nach links), Französisch, Spanisch, Italienisch, Polnisch, Russisch, Ukrainisch. Deutsch ist die Vorlage, die anderen werden bei Bedarf nachgeladen |
-| KI-Assistent | `worker/assistant.ts`, `src/layout/Assistant.tsx` | Chat für Inhaber und Team, antwortet in der gewählten Sprache (Google Gemini, Modell `gemini-2.5-flash`, kostenlos nutzbar), 50 Fragen pro Person und Tag |
+| KI-Assistent | `worker/assistant.ts`, `src/layout/Assistant.tsx` | Chat für Inhaber und Team, antwortet in der gewählten Sprache (Google Gemini, Modell `gemini-flash-latest`, kostenlos nutzbar), 50 Fragen pro Person und Tag |
 | Gemeinsame Prüfungen | `shared/` | IBAN, Steuernummer, USt-IdNr., PLZ – im Browser und auf dem Server gleich |
 
 Jede Firma bekommt bei der Anmeldung automatisch ihre eigene SQLite-Datenbank (ein Durable Object je Firma).

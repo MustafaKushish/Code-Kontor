@@ -19,7 +19,9 @@ jobs:
           echo "--- Verfügbare Flash-Modelle ---"
           curl -s -w "\nHTTP %{http_code}\n" -H "x-goog-api-key: $KEY" "https://generativelanguage.googleapis.com/v1beta/models?pageSize=200" \
             | grep -oE '"name": "models/[^"]*flash[^"]*"|HTTP [0-9]+|"message": "[^"]*"' | head -30
-          echo "--- Testfrage an gemini-2.5-flash ---"
-          curl -s -w "\nHTTP %{http_code}\n" -H "x-goog-api-key: $KEY" -H "Content-Type: application/json" \
-            -d '{"contents":[{"role":"user","parts":[{"text":"Sag nur: OK"}]}]}' \
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent" | head -c 1500
+          for MODEL in gemini-flash-latest gemini-3.8-flash; do
+            echo "--- Testfrage an $MODEL (Streaming wie in der App) ---"
+            curl -s -w "\nHTTP %{http_code}\n" -H "x-goog-api-key: $KEY" -H "Content-Type: application/json" \
+              -d '{"systemInstruction":{"parts":[{"text":"Antworte kurz auf Deutsch."}]},"contents":[{"role":"user","parts":[{"text":"Was muss auf eine Rechnung?"}]}],"generationConfig":{"maxOutputTokens":2048,"temperature":0.4}}' \
+              "https://generativelanguage.googleapis.com/v1beta/models/$MODEL:streamGenerateContent?alt=sse" | grep -oE '"text": "[^"]{0,80}|"finishReason": "[A-Z_]+"|"message": "[^"]*"|HTTP [0-9]+' | head -12
+          done
