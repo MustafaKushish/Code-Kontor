@@ -600,6 +600,12 @@ export const it: Dict = {
     desktop: "Fai clic sull’icona di installazione nella barra degli indirizzi o scegli “Installa app” nel menu del browser.",
     everywhere: "Funziona su Windows, macOS, Linux, ChromeOS, Android, iPhone e iPad. I tuoi dati sono al sicuro nel cloud e sono gli stessi su tutti i dispositivi.",
   },
+  legal: {
+    back: "Indietro",
+    imprint: "Note legali",
+    privacy: "Privacy",
+    label: "Informazioni legali",
+  },
   billing: {
     title: "Abbonamento",
     trial: "Prova: ancora {days} giorni gratis (fino al {date})",

@@ -600,6 +600,12 @@ export const tr: Dict = {
     desktop: "Adres çubuğundaki yükleme simgesine tıkla ya da tarayıcı menüsünde “Uygulamayı yükle”yi seç.",
     everywhere: "Windows, macOS, Linux, ChromeOS, Android, iPhone ve iPad'de çalışır. Verilerin bulutta güvenle saklanır ve tüm cihazlarında aynıdır.",
   },
+  legal: {
+    back: "Geri",
+    imprint: "Künye",
+    privacy: "Gizlilik",
+    label: "Yasal",
+  },
   billing: {
     title: "Abonelik",
     trial: "Deneme: {days} gün daha ücretsiz ({date} tarihine kadar)",

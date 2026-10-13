@@ -10,6 +10,7 @@ import { LanguageSwitch } from "./LanguageSwitch";
 import { Assistant } from "./Assistant";
 import { VerifyBanner } from "../pages/Account";
 import { BillingBanner } from "../pages/Billing";
+import { LegalLinks } from "../pages/Legal";
 
 const NAV = [
   { to: "/", label: "nav.overview", short: "nav.startShort", icon: LayoutDashboard },
@@ -92,6 +93,7 @@ export function Shell({ me, path, onLogout, children }: { me: Me; path: string; 
           </div>
         )}
         <div className="sidebar-foot">
+          <LegalLinks />
           <div className="row foot-switches">
             <ThemeSwitch />
             <LanguageSwitch compact up />
@@ -126,6 +128,7 @@ export function Shell({ me, path, onLogout, children }: { me: Me; path: string; 
         <BillingBanner me={me} />
         <VerifyBanner me={me} />
         {children}
+        <LegalLinks className="mobile-only" />
       </main>
 
       <nav className="tabbar" aria-label={t("nav.menu")}>

@@ -5,6 +5,7 @@ import { AppIcon, Field, Logo } from "../components";
 import { CATALOG } from "../../shared/apps";
 import { useI18n } from "../i18n";
 import { LanguageSwitch } from "../layout/LanguageSwitch";
+import { LegalLinks } from "./Legal";
 
 /** Rahmen für alle Seiten ohne Anmeldung: Marke links, Formular rechts. */
 export function AuthLayout({ children }: { children: ReactNode }) {
@@ -35,6 +36,7 @@ export function AuthLayout({ children }: { children: ReactNode }) {
             <LanguageSwitch />
           </div>
           {children}
+          <LegalLinks />
         </div>
       </main>
     </div>

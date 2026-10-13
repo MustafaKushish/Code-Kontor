@@ -14,6 +14,7 @@ import { AccountPage } from "./pages/Account";
 import { AccountingPage } from "./pages/Accounting";
 import { TimePage } from "./pages/Time";
 import { TerminalPage } from "./pages/Terminal";
+import { ImprintPage, PrivacyPage } from "./pages/Legal";
 import { findApp } from "../shared/apps";
 
 // Branchen-Systeme werden erst geladen, wenn sie gebraucht werden
@@ -50,6 +51,9 @@ export function App() {
   // Stempeluhr: eigene Ansicht ohne Anmeldung
   const [, firstPart, terminalToken] = path.split("/");
   if (firstPart === "terminal" && terminalToken) return <TerminalPage token={terminalToken} />;
+  // Rechtstexte immer erreichbar, mit und ohne Anmeldung
+  if (firstPart === "impressum") return <ImprintPage />;
+  if (firstPart === "datenschutz") return <PrivacyPage />;
   // Reparaturstatus für Endkunden: ebenfalls ohne Anmeldung
   const statusToken = path.split("/")[3];
   if (firstPart === "status" && terminalToken && statusToken) return <Suspense fallback={null}><RepairStatusPage tenantId={terminalToken} token={statusToken} /></Suspense>;
