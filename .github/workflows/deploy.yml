@@ -91,6 +91,22 @@ jobs:
             echo "::warning::Kein STRIPE_SECRET_KEY in den Repository-Secrets. Die Abo-Bezahlung ist aus, niemand wird gesperrt."
           fi
           echo "Geheimnisse für diese Version: $(jq -r 'keys | join(", ")' "$FILE")"
+      - name: KI-Assistent prüfen
+        continue-on-error: true
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-flash-latest' }}
+        run: |
+          # Kleine Testfrage an Gemini; zeigt nur Status, Fehlermeldung und Antwortlänge, nie den Schlüssel.
+          KEY=$(printf '%s' "$GEMINI_API_KEY" | tr -d ' \t\r\n"')
+          [ -z "$KEY" ] && { echo "Kein GEMINI_API_KEY."; exit 0; }
+          echo "::add-mask::$KEY"
+          CODE=$(curl -s -o "$RUNNER_TEMP/gemini.json" -w '%{http_code}' -H "Content-Type: application/json" -H "x-goog-api-key: $KEY" \
+            -d '{"contents":[{"role":"user","parts":[{"text":"Sag Hallo in einem Satz."}]}],"generationConfig":{"maxOutputTokens":2048}}' \
+            "https://generativelanguage.googleapis.com/v1beta/models/$GEMINI_MODEL:generateContent")
+          echo "Modell: $GEMINI_MODEL, HTTP $CODE, Schlüssellänge ${#KEY}"
+          jq '{error: .error | (if . then {code, status, message} else null end), finish: .candidates[0].finishReason, textLength: ([.candidates[0].content.parts[]?.text // ""] | join("") | length), usage: .usageMetadata, modelVersion}' "$RUNNER_TEMP/gemini.json"
+          rm -f "$RUNNER_TEMP/gemini.json"
       - name: Veröffentlichen
         run: |
           set -o pipefail
