@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   computeDays, computeYear, formatMinutes, holidays, localDay, monthTotals, nextStampKind, requiredBreakMinutes,
-  sanitizeAbsence, vacationEntitlement, type Absence, type TimeEntry, type WorkProfile,
+  sanitizeAbsence, sanitizeRequest, vacationEntitlement, type Absence, type TimeEntry, type WorkProfile,
 } from "../shared/time";
 
 const profile: WorkProfile = {
@@ -91,19 +91,25 @@ describe("Jahreskonto", () => {
       stamp("in", "2026-01-05T07:00:00Z"), stamp("out", "2026-01-05T17:00:00Z"), // 10 h brutto, 45 Min Pause
     ];
     const account = computeYear({ ...profile, openingBalance: 2, vacationCarryover: 3 }, entries, [absence("vacation", "2026-01-06", "2026-01-07"), absence("vacation", "2026-03-02")], 2026, settings, now);
-    // 2.–9. Januar: 6 Arbeitstage (1.1. Feiertag, 3./4. Wochenende)
-    expect(account.target).toBe(6 * 480);
+    // 2.–8. Januar: 5 Arbeitstage (1.1. Feiertag, 3./4. Wochenende); der 9. läuft noch
+    expect(account.target).toBe(5 * 480);
     expect(account.actual).toBe(555 + 2 * 480);
-    expect(account.balance).toBe(555 + 2 * 480 - 6 * 480);
+    expect(account.balance).toBe(555 + 2 * 480 - 5 * 480);
     expect(account.balanceTotal).toBe(account.balance + 120);
     expect(account.vacationEntitlement).toBe(33);
     expect(account.vacationTaken).toBe(2);
     expect(account.vacationPlanned).toBe(1);
     expect(account.vacationLeft).toBe(30);
   });
+  it("zählt den laufenden Tag erst, wenn sein Soll erreicht ist", () => {
+    const now = new Date("2026-06-15T10:00:00Z");
+    expect(computeYear({ ...profile, startDate: "2026-06-15" }, [stamp("in", "2026-06-15T06:00:00Z")], [], 2026, settings, now).balance).toBe(0);
+    const later = new Date("2026-06-15T16:00:00Z");
+    expect(computeYear({ ...profile, startDate: "2026-06-15" }, [stamp("in", "2026-06-15T06:00:00Z")], [], 2026, settings, later).balance).toBe(75);
+  });
   it("zählt das Soll erst ab Start der Zeiterfassung", () => {
     const account = computeYear(profile, [], [], 2026, { state: "", since: "2026-01-08" }, new Date("2026-01-09T12:00:00Z"));
-    expect(account.target).toBe(2 * 480);
+    expect(account.target).toBe(480);
   });
   it("gibt anteiligen Urlaub bei Eintritt im Jahr", () => {
     expect(vacationEntitlement({ startDate: "2026-07-01", endDate: "", vacationDays: 30 }, 2026)).toBe(15);
@@ -140,5 +146,26 @@ describe("Hilfen", () => {
   it("zeigt Minuten als Stunden", () => {
     expect(formatMinutes(450)).toBe("7:30");
     expect(formatMinutes(-75)).toBe("−1:15");
+  });
+});
+
+describe("Anträge", () => {
+  const now = new Date("2026-10-13T12:00:00Z");
+  it("nimmt vergessene Stempel aus der Vergangenheit an", () => {
+    expect(sanitizeRequest({ type: "stamp", kind: "out", at: "2026-10-12T15:00:00.000Z", note: "Vergessen" }, now)).toEqual({
+      data: { type: "stamp", kind: "out", at: "2026-10-12T15:00:00.000Z" }, note: "Vergessen",
+    });
+  });
+  it("lehnt Stempel in der Zukunft oder zu weit zurück ab", () => {
+    expect(sanitizeRequest({ type: "stamp", kind: "in", at: "2026-10-14T08:00:00Z" }, now)).toBeNull();
+    expect(sanitizeRequest({ type: "stamp", kind: "in", at: "2026-06-01T08:00:00Z" }, now)).toBeNull();
+    expect(sanitizeRequest({ type: "stamp", kind: "pause", at: "2026-10-12T08:00:00Z" }, now)).toBeNull();
+  });
+  it("nimmt Urlaubsanträge an", () => {
+    expect(sanitizeRequest({ type: "absence", absence: "vacation", from: "2026-11-02", to: "2026-11-06" }, now)).toEqual({
+      data: { type: "absence", absence: "vacation", from: "2026-11-02", to: "2026-11-06", halfDay: false }, note: "",
+    });
+    expect(sanitizeRequest({ type: "absence", absence: "party", from: "2026-11-02" }, now)).toBeNull();
+    expect(sanitizeRequest({ type: "other" }, now)).toBeNull();
   });
 });

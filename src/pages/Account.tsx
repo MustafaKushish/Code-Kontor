@@ -5,6 +5,7 @@ import { api, type Me } from "../api";
 import { Field } from "../components";
 import { useI18n } from "../i18n";
 import { BillingCard } from "./Billing";
+import { InstallCard } from "./Install";
 
 /** Bestätigungslink erneut senden. */
 function useResend() {
@@ -376,6 +377,7 @@ export function AccountPage({ me, onChanged }: { me: Me; onChanged: () => void }
         {isManager && <BillingCard me={me} />}
         <AccountCard me={me} />
         <TwoFactorCard me={me} onChanged={onChanged} />
+        <InstallCard />
         <DevicesCard />
         {me.user.role === "owner" && <DataCard me={me} />}
         {isManager && <AuditCard />}

@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import type { CompanyProfile } from "../shared/company";
 import { emptyEmployee, type Advisor, type Employee, type MonthEntry } from "../shared/accounting";
-import { localDay, type Absence, type TimeEntry, type TimeSettings } from "../shared/time";
+import { localDay, type Absence, type RequestStatus, type TimeEntry, type TimeRequest, type TimeRequestData, type TimeSettings } from "../shared/time";
 
 // Die eigene Datenbank eines Kunden. Jede Firma bekommt bei der Anmeldung
 // ein eigenes Durable Object mit eigener SQLite-Datenbank, getrennt von allen anderen.
@@ -29,6 +29,14 @@ const MIGRATIONS: string[] = [
      half_day INTEGER NOT NULL DEFAULT 0, note TEXT NOT NULL DEFAULT ''
    );
    CREATE INDEX absences_employee ON absences(employee_id, from_day);`,
+  `CREATE TABLE time_requests (
+     id TEXT PRIMARY KEY, employee_id TEXT NOT NULL, data TEXT NOT NULL, note TEXT NOT NULL DEFAULT '',
+     status TEXT NOT NULL DEFAULT 'pending', created_by TEXT,
+     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+     decided_by TEXT, decided_at TEXT, reply TEXT NOT NULL DEFAULT ''
+   );
+   CREATE INDEX time_requests_status ON time_requests(status, created_at);
+   CREATE INDEX time_requests_employee ON time_requests(employee_id, created_at);`,
 ];
 
 export interface AuditEntry {
@@ -111,6 +119,7 @@ export class TenantDatabase extends DurableObject<Record<string, never>> {
     this.sql.exec("DELETE FROM payroll_entries WHERE employee_id = ?", id);
     this.sql.exec("DELETE FROM time_entries WHERE employee_id = ?", id);
     this.sql.exec("DELETE FROM absences WHERE employee_id = ?", id);
+    this.sql.exec("DELETE FROM time_requests WHERE employee_id = ?", id);
     this.sql.exec("DELETE FROM employees WHERE id = ?", id);
   }
 
@@ -200,6 +209,59 @@ export class TenantDatabase extends DurableObject<Record<string, never>> {
 
   async deleteAbsence(id: string): Promise<void> {
     this.sql.exec("DELETE FROM absences WHERE id = ?", id);
+  }
+
+  async addRequest(employeeId: string, data: TimeRequestData, note: string, createdBy: string): Promise<string> {
+    const id = crypto.randomUUID();
+    this.sql.exec("INSERT INTO time_requests (id, employee_id, data, note, created_by) VALUES (?, ?, ?, ?, ?)", id, employeeId, JSON.stringify(data), note, createdBy);
+    return id;
+  }
+
+  /** Anträge einer Person (neueste zuerst) oder alle offenen plus die zuletzt entschiedenen. */
+  async requests(employeeId: string | null, limit = 50): Promise<TimeRequest[]> {
+    const rows = employeeId
+      ? this.sql.exec<Record<string, string | null>>("SELECT * FROM time_requests WHERE employee_id = ? ORDER BY created_at DESC LIMIT ?", employeeId, limit)
+      : this.sql.exec<Record<string, string | null>>(
+          "SELECT * FROM time_requests ORDER BY status = 'pending' DESC, COALESCE(decided_at, created_at) DESC LIMIT ?", limit,
+        );
+    return rows.toArray().map((r) => ({
+      id: r.id!, employeeId: r.employee_id!, data: JSON.parse(r.data!) as TimeRequestData, note: r.note ?? "",
+      status: r.status as RequestStatus, createdAt: r.created_at!, decidedAt: r.decided_at ?? null, decidedBy: r.decided_by ?? null, reply: r.reply ?? "",
+    }));
+  }
+
+  async pendingRequestCount(): Promise<number> {
+    return this.sql.exec<{ n: number }>("SELECT COUNT(*) AS n FROM time_requests WHERE status = 'pending'").one().n;
+  }
+
+  /**
+   * Antrag entscheiden. Bei Genehmigung wird daraus ein Stempel oder eine Abwesenheit.
+   * Gibt den Antrag zurück oder null, wenn er nicht (mehr) offen ist.
+   */
+  async decideRequest(id: string, approve: boolean, reply: string, decidedBy: string, decidedByName: string): Promise<TimeRequest | null> {
+    const [request] = (await this.requests(null, 1000)).filter((r) => r.id === id && r.status === "pending");
+    if (!request) return null;
+    this.ctx.storage.transactionSync(() => {
+      this.sql.exec(
+        "UPDATE time_requests SET status = ?, reply = ?, decided_by = ?, decided_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?",
+        approve ? "approved" : "rejected", reply, decidedByName, id,
+      );
+      if (!approve) return;
+      const d = request.data;
+      const note = [request.note, `Antrag genehmigt von ${decidedByName}`].filter(Boolean).join(" · ");
+      if (d.type === "stamp")
+        this.sql.exec("INSERT INTO time_entries (id, employee_id, kind, at, source, note, created_by) VALUES (?, ?, ?, ?, 'manual', ?, ?)", crypto.randomUUID(), request.employeeId, d.kind, d.at, note, decidedBy);
+      else
+        this.sql.exec("INSERT INTO absences (id, employee_id, type, from_day, to_day, half_day, note) VALUES (?, ?, ?, ?, ?, ?, ?)", crypto.randomUUID(), request.employeeId, d.absence, d.from, d.to, d.halfDay ? 1 : 0, note);
+    });
+    return { ...request, status: approve ? "approved" : "rejected", reply };
+  }
+
+  /** Eigenen offenen Antrag zurückziehen. */
+  async withdrawRequest(id: string, employeeId: string): Promise<boolean> {
+    const before = this.sql.exec<{ n: number }>("SELECT COUNT(*) AS n FROM time_requests WHERE id = ? AND employee_id = ? AND status = 'pending'", id, employeeId).one().n;
+    this.sql.exec("DELETE FROM time_requests WHERE id = ? AND employee_id = ? AND status = 'pending'", id, employeeId);
+    return before > 0;
   }
 
   async getTimeSettings(): Promise<TimeSettings> {

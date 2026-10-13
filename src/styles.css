@@ -915,7 +915,7 @@ input[aria-invalid="true"] { border-color: var(--error); }
 }
 
 /* ---------- Stempeluhr (Vollbild, ohne Anmeldung) ---------- */
-.kiosk { min-height: 100dvh; display: grid; grid-template-rows: auto 1fr; background: #0a0b10; color: #f1efe9; padding: 18px; }
+.kiosk { min-height: 100vh; min-height: 100dvh; display: grid; grid-template-rows: auto 1fr; background: #0a0b10; color: #f1efe9; padding: 18px; }
 .kiosk-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-weight: 600; }
 .kiosk-head .muted { color: #9a9cab; flex: 1; }
 .kiosk-panel { display: grid; place-items: center; align-content: center; gap: 16px; text-align: center; }
@@ -932,3 +932,21 @@ input[aria-invalid="true"] { border-color: var(--error); }
 .kiosk-form:focus-within { opacity: 1; }
 .kiosk-form .button { background: #2dd4bf; color: #0a0b10; }
 .kiosk-form input { width: 200px; background: #191c27; color: #f1efe9; border-color: #2f3344; }
+
+/* ---------- Anträge ---------- */
+.count-badge {
+  display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px;
+  background: #e11d48; color: #fff; font-size: 0.72rem; font-weight: 700; line-height: 1; margin-inline-start: 6px;
+}
+.nav-item .count-badge { margin-inline-start: auto; }
+.tab { position: relative; }
+.tab-badge { position: absolute; top: 2px; inset-inline-end: 18%; margin: 0; }
+.success-button { background: var(--success-soft); color: var(--success); border-color: transparent; }
+.request-actions { gap: 8px; flex-wrap: wrap; }
+.request-actions .button { padding: 8px 14px; }
+@media (max-width: 760px) {
+  .request-row { flex-wrap: wrap; }
+  .request-row .list-main { flex: 1 1 calc(100% - 60px); }
+  .request-actions { width: 100%; padding-inline-start: 52px; }
+  .request-actions .button { flex: 1; justify-content: center; }
+}

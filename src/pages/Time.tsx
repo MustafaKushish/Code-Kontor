@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
-  CalendarDays, CalendarOff, Clock, Copy, LogIn, LogOut, MapPin, Nfc, Plus, Settings2, Trash2, TriangleAlert, Users,
+  CalendarDays, CalendarOff, Check, Clock, Copy, Inbox, LogIn, LogOut, MapPin, Nfc, Plus, Send, Settings2, Trash2, TriangleAlert, Undo2, Users, X,
 } from "lucide-react";
 import { api, type Me } from "../api";
 import { Avatar, Field } from "../components";
 import { useI18n } from "../i18n";
 import {
   ABSENCE_TYPES, STATES, formatMinutes,
-  type Absence, type AbsenceType, type DayResult, type StampKind, type TimeEntry, type TimeSettings, type YearAccount,
+  type Absence, type AbsenceType, type DayResult, type StampKind, type TimeEntry, type TimeRequest, type TimeSettings, type YearAccount,
 } from "../../shared/time";
 
 interface PublicEmployee { id: string; name: string; personnelNumber: number; chip: boolean; linked: boolean }
@@ -18,6 +18,7 @@ interface MyTime {
   today?: DayResult;
   account?: YearAccount;
   upcomingAbsences?: Absence[];
+  requests?: TimeRequest[];
 }
 interface OverviewRow extends PublicEmployee { present: boolean; since: string | null; absentToday: AbsenceType | null; account: YearAccount }
 interface MonthData {
@@ -29,7 +30,7 @@ interface MonthData {
 }
 interface Terminal { id: string; name: string; createdAt: string; lastSeenAt: string | null }
 
-type Tab = "me" | "overview" | "month" | "absences" | "terminals" | "settings";
+type Tab = "me" | "requests" | "overview" | "month" | "absences" | "terminals" | "settings";
 
 const today = () => new Date().toLocaleDateString("en-CA");
 const thisMonth = () => today().slice(0, 7);
@@ -52,12 +53,14 @@ export function TimePage({ me }: { me: Me }) {
   const isManager = me.user.role !== "staff";
   const [tab, setTab] = useState<Tab>(isManager ? "overview" : "me");
   const [focus, setFocus] = useState<string | null>(null);
+  const [openRequests, setOpenRequests] = useState(me.timeRequests ?? 0);
 
-  const tabs: { id: Tab; label: string; icon: typeof Users }[] = [
+  const tabs: { id: Tab; label: string; icon: typeof Users; badge?: number }[] = [
     { id: "me", label: t("time.tabMe"), icon: Clock },
     ...(isManager
       ? [
           { id: "overview" as const, label: t("time.tabOverview"), icon: Users },
+          { id: "requests" as const, label: t("time.tabRequests"), icon: Inbox, badge: openRequests },
           { id: "month" as const, label: t("time.tabMonth"), icon: CalendarDays },
           { id: "absences" as const, label: t("time.tabAbsences"), icon: CalendarOff },
           { id: "terminals" as const, label: t("time.tabTerminals"), icon: Nfc },
@@ -77,15 +80,17 @@ export function TimePage({ me }: { me: Me }) {
 
       {tabs.length > 1 && (
         <div className="page-tabs time-tabs" role="tablist" aria-label={t("time.title")}>
-          {tabs.map(({ id, label, icon: Icon }) => (
+          {tabs.map(({ id, label, icon: Icon, badge }) => (
             <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? "active" : ""} onClick={() => setTab(id)}>
               <Icon size={17} aria-hidden /> {label}
+              {!!badge && <span className="count-badge" aria-label={t("time.openRequests", { n: badge })}>{badge}</span>}
             </button>
           ))}
         </div>
       )}
 
       {tab === "me" && <MyTimeTab isManager={isManager} />}
+      {tab === "requests" && <RequestsTab onCount={setOpenRequests} />}
       {tab === "overview" && <OverviewTab onOpen={(id) => { setFocus(id); setTab("month"); }} />}
       {tab === "month" && <MonthTab focus={focus} onFocus={setFocus} />}
       {tab === "absences" && <AbsencesTab />}
@@ -164,6 +169,9 @@ function MyTimeTab({ isManager }: { isManager: boolean }) {
         </section>
       )}
 
+      <RequestForm onSent={() => api<MyTime>("/time/me").then(setData)} />
+      <MyRequests requests={data.requests ?? []} onChanged={() => api<MyTime>("/time/me").then(setData)} />
+
       {(data.upcomingAbsences ?? []).length > 0 && (
         <section className="card">
           <h2 className="card-title"><CalendarOff size={20} /> {t("time.upcoming")}</h2>
@@ -172,6 +180,189 @@ function MyTimeTab({ isManager }: { isManager: boolean }) {
               <li key={ab.id}><span>{t(`time.types.${ab.type}`)}</span> <span className="muted">{day(ab.from)}{ab.to !== ab.from && ` – ${day(ab.to)}`}</span></li>
             ))}
           </ul>
+        </section>
+      )}
+    </div>
+  );
+}
+
+// ---------- Anträge ----------
+
+/** Kurzbeschreibung eines Antrags, z. B. „Kommen · Mo., 12.10. 08:00“ oder „Urlaub · 01.11. – 05.11.“ */
+function useRequestText() {
+  const { t } = useI18n();
+  const { clock, day } = useTimeFormat();
+  return (r: TimeRequest) => {
+    const d = r.data;
+    if (d.type === "stamp") return `${t(d.kind === "in" ? "time.clockIn" : "time.clockOut")} · ${day(new Date(d.at).toLocaleDateString("en-CA"))} ${clock(d.at)}`;
+    const range = d.to !== d.from ? `${day(d.from)} – ${day(d.to)}` : day(d.from);
+    return `${t(`time.types.${d.absence}`)}${d.halfDay ? ` (${t("time.half")})` : ""} · ${range}`;
+  };
+}
+
+function RequestForm({ onSent }: { onSent: () => void }) {
+  const { t, errorText } = useI18n();
+  const [mode, setMode] = useState<"stamp" | "absence">("stamp");
+  const [stamp, setStamp] = useState({ date: today(), time: "08:00", kind: "in" as StampKind });
+  const [absence, setAbsence] = useState({ absence: "vacation" as AbsenceType, from: today(), to: today(), halfDay: false });
+  const [note, setNote] = useState("");
+  const [status, setStatus] = useState<{ kind: "success" | "error"; text: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const send = async (event: FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setStatus(null);
+    try {
+      const body = mode === "stamp"
+        ? { type: "stamp", kind: stamp.kind, at: new Date(`${stamp.date}T${stamp.time}`).toISOString(), note }
+        : { type: "absence", ...absence, note };
+      await api("/time/me/requests", { method: "POST", body });
+      setNote("");
+      setStatus({ kind: "success", text: t("time.requestSent") });
+      onSent();
+    } catch (e) {
+      setStatus({ kind: "error", text: errorText(e) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form className="card form-grid" onSubmit={send}>
+      <h2 className="card-title wide"><Send size={20} /> {t("time.requestTitle")}</h2>
+      <div className="segmented wide" role="radiogroup" aria-label={t("time.requestTitle")}>
+        <button type="button" role="radio" aria-checked={mode === "stamp"} className={mode === "stamp" ? "active" : ""} onClick={() => setMode("stamp")}>{t("time.requestStamp")}</button>
+        <button type="button" role="radio" aria-checked={mode === "absence"} className={mode === "absence" ? "active" : ""} onClick={() => setMode("absence")}>{t("time.requestAbsence")}</button>
+      </div>
+      {mode === "stamp" ? (
+        <>
+          <Field label={t("time.date")}><input type="date" value={stamp.date} max={today()} onChange={(e) => setStamp({ ...stamp, date: e.target.value })} /></Field>
+          <Field label={t("time.time")}><input type="time" value={stamp.time} onChange={(e) => setStamp({ ...stamp, time: e.target.value })} /></Field>
+          <Field label={t("time.kind")}>
+            <select value={stamp.kind} onChange={(e) => setStamp({ ...stamp, kind: e.target.value as StampKind })}>
+              <option value="in">{t("time.clockIn")}</option>
+              <option value="out">{t("time.clockOut")}</option>
+            </select>
+          </Field>
+        </>
+      ) : (
+        <>
+          <Field label={t("time.absenceType")}>
+            <select value={absence.absence} onChange={(e) => setAbsence({ ...absence, absence: e.target.value as AbsenceType })}>
+              {ABSENCE_TYPES.map((type) => <option key={type} value={type}>{t(`time.types.${type}`)}</option>)}
+            </select>
+          </Field>
+          <Field label={t("time.from")}><input type="date" value={absence.from} onChange={(e) => setAbsence({ ...absence, from: e.target.value, to: e.target.value > absence.to ? e.target.value : absence.to })} /></Field>
+          <Field label={t("time.to")}><input type="date" value={absence.to} min={absence.from} onChange={(e) => setAbsence({ ...absence, to: e.target.value })} /></Field>
+          <label className="check">
+            <input type="checkbox" checked={absence.halfDay} disabled={absence.from !== absence.to} onChange={(e) => setAbsence({ ...absence, halfDay: e.target.checked })} />
+            {t("time.halfDay")}
+          </label>
+        </>
+      )}
+      <Field label={t("time.reason")} wide><input value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} /></Field>
+      <p className="muted wide">{t("time.requestHint")}</p>
+      {status && <p className={`wide ${status.kind === "error" ? "error" : "notice success"}`} role="status">{status.text}</p>}
+      <div className="wide actions"><button className="button primary" disabled={busy}><Send size={18} /> {t("time.requestSend")}</button></div>
+    </form>
+  );
+}
+
+const statusPill = (status: TimeRequest["status"]) => (status === "approved" ? "pill pos" : status === "rejected" ? "pill neg" : "pill warn");
+
+function MyRequests({ requests, onChanged }: { requests: TimeRequest[]; onChanged: () => void }) {
+  const { t } = useI18n();
+  const describe = useRequestText();
+  if (requests.length === 0) return null;
+  const withdraw = async (r: TimeRequest) => {
+    if (!confirm(t("time.confirmWithdraw"))) return;
+    await api(`/time/me/requests/${r.id}`, { method: "DELETE" }).catch(() => undefined);
+    onChanged();
+  };
+  return (
+    <section className="card list-card">
+      <h2 className="list-title">{t("time.myRequests")}</h2>
+      {requests.map((r) => (
+        <div key={r.id} className="list-row">
+          <div className="list-main">
+            <strong>{describe(r)}</strong>
+            <small className="muted">
+              {r.note}{r.note && r.reply && " · "}{r.reply && t("time.replyFrom", { name: r.decidedBy ?? "", text: r.reply })}
+            </small>
+          </div>
+          <span className={statusPill(r.status)}>{t(`time.status.${r.status}`)}</span>
+          {r.status === "pending" && (
+            <button className="icon-button" onClick={() => withdraw(r)} aria-label={t("time.withdraw")} title={t("time.withdraw")}><Undo2 size={17} /></button>
+          )}
+        </div>
+      ))}
+    </section>
+  );
+}
+
+function RequestsTab({ onCount }: { onCount: (n: number) => void }) {
+  const { t, errorText, lang } = useI18n();
+  const describe = useRequestText();
+  const [requests, setRequests] = useState<(TimeRequest & { name: string })[] | null>(null);
+  const [error, setError] = useState("");
+  const when = (iso: string) => new Intl.DateTimeFormat(lang, { dateStyle: "medium", timeStyle: "short" }).format(new Date(iso));
+
+  const load = () =>
+    api<{ requests: (TimeRequest & { name: string })[] }>("/time/requests").then((r) => {
+      setRequests(r.requests);
+      onCount(r.requests.filter((x) => x.status === "pending").length);
+    });
+  useEffect(() => { load(); }, []);
+
+  const decide = async (r: TimeRequest, approve: boolean) => {
+    const reply = approve ? "" : prompt(t("time.rejectReason")) ?? null;
+    if (reply === null) return;
+    setError("");
+    try {
+      await api(`/time/requests/${r.id}/decide`, { method: "POST", body: { approve, reply } });
+      load();
+    } catch (e) {
+      setError(errorText(e));
+    }
+  };
+
+  if (!requests) return <p className="muted">{t("common.loading")}</p>;
+  const open = requests.filter((r) => r.status === "pending");
+  const done = requests.filter((r) => r.status !== "pending");
+  return (
+    <div className="stack">
+      <p className="muted">{t("time.requestsHint")}</p>
+      {error && <p className="error" role="alert">{error}</p>}
+      <section className="card list-card">
+        <h2 className="list-title">{t("time.openRequestsTitle")}</h2>
+        {open.length === 0 && <p className="muted empty">{t("time.noOpenRequests")}</p>}
+        {open.map((r) => (
+          <div key={r.id} className="list-row request-row">
+            <Avatar name={r.name} />
+            <div className="list-main">
+              <strong>{r.name} · {describe(r)}</strong>
+              <small className="muted">{t("time.requestedAt", { when: when(r.createdAt) })}{r.note && ` · ${r.note}`}</small>
+            </div>
+            <div className="row request-actions">
+              <button className="button success-button" onClick={() => decide(r, true)}><Check size={17} /> {t("time.approve")}</button>
+              <button className="button" onClick={() => decide(r, false)}><X size={17} /> {t("time.reject")}</button>
+            </div>
+          </div>
+        ))}
+      </section>
+      {done.length > 0 && (
+        <section className="card list-card">
+          <h2 className="list-title">{t("time.decidedRequests")}</h2>
+          {done.map((r) => (
+            <div key={r.id} className="list-row">
+              <div className="list-main">
+                <strong>{r.name} · {describe(r)}</strong>
+                <small className="muted">{r.decidedBy}{r.decidedAt && `, ${when(r.decidedAt)}`}{r.reply && ` · ${r.reply}`}</small>
+              </div>
+              <span className={statusPill(r.status)}>{t(`time.status.${r.status}`)}</span>
+            </div>
+          ))}
         </section>
       )}
     </div>
@@ -286,7 +477,7 @@ function MonthTab({ focus, onFocus }: { focus: string | null; onFocus: (id: stri
 
   // Soll und Saldo nur bis heute, die Zukunft ist noch offen
   const todayDay = today();
-  const sum = (key: "target" | "worked" | "credited") => data?.days.filter((d) => d.day <= todayDay).reduce((s, d) => s + d[key], 0) ?? 0;
+  const sum = (key: "target" | "worked" | "credited") => data?.days.filter((d) => d.day < todayDay || (d.day === todayDay && d.worked + d.credited >= d.target)).reduce((s, d) => s + d[key], 0) ?? 0;
   return (
     <div className="stack">
       <div className="acc-toolbar">

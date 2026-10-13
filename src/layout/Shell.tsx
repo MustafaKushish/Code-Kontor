@@ -77,6 +77,7 @@ export function Shell({ me, path, onLogout, children }: { me: Me; path: string; 
           {items.map(({ to, label, icon: Icon }) => (
             <Link key={to} to={to} className={active(to) ? "nav-item active" : "nav-item"}>
               <Icon size={19} /> {t(label)}
+              {to === "/zeiten" && !!me.timeRequests && <span className="count-badge">{me.timeRequests}</span>}
             </Link>
           ))}
         </nav>
@@ -132,6 +133,7 @@ export function Shell({ me, path, onLogout, children }: { me: Me; path: string; 
         {items.filter((item) => !item.notInTabbar).map(({ to, short, icon: Icon }) => (
           <Link key={to} to={to} className={active(to) ? "tab active" : "tab"}>
             <Icon size={21} />
+            {to === "/zeiten" && !!me.timeRequests && <span className="count-badge tab-badge">{me.timeRequests}</span>}
             <span>{t(short)}</span>
           </Link>
         ))}

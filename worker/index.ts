@@ -22,6 +22,7 @@ import { daysLeft, hasAccess, quote } from "../shared/billing";
 import {
   computeDays, computeYear, localDay, monthTotals, nextStampKind, sanitizeAbsence, sanitizeTimeSettings,
   type StampKind, type WorkProfile,
+  sanitizeRequest,
 } from "../shared/time";
 import { newRecoveryCodes, newTotpSecret, normalizeRecoveryCode, otpauthUrl, verifyTotp } from "./totp";
 import type { CompanyProfile } from "../shared/company";
@@ -426,6 +427,23 @@ app.get("/terminal/:token", async (c) => {
   return c.json({ name: terminal.name, company: terminal.company });
 });
 
+/** Eigenes App-Manifest je Stempeluhr: Installiert öffnet sie direkt die Stempeluhr statt der Startseite. */
+app.get("/terminal/:token/manifest", async (c) => {
+  const terminal = await terminalFor(c);
+  if (!terminal) return fail(c, "terminalInvalid", 404);
+  const url = `/terminal/${c.req.param("token")}`;
+  c.header("Content-Type", "application/manifest+json");
+  c.header("Cache-Control", "no-store");
+  return c.body(JSON.stringify({
+    id: url, name: `Stempeluhr ${terminal.name}`, short_name: terminal.name, start_url: url, scope: url,
+    display: "fullscreen", display_override: ["fullscreen", "standalone"], background_color: "#0a0b10", theme_color: "#0a0b10",
+    icons: [
+      { src: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { src: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+  }));
+});
+
 // Eigene Stempelgeräte schicken den Schlüssel im Header X-Terminal-Key an /api/terminal/stamp
 const terminalStamp = async (c: Ctx) => {
   const terminal = await terminalFor(c);
@@ -525,7 +543,8 @@ app.get("/me", async (c) => {
   const db = tenantDb(c.env, user.tenantId);
   const company = await loadCompany(c.env, user.tenantId);
   const setupComplete = !!company && Object.keys(validateCompany(company)).length === 0;
-  return c.json({ user, setupComplete, installedApps: await db.installedApps(), mailEnabled: mailEnabled(c.env), billing: await billingSummary(c) });
+  const [installedApps, timeRequests] = await Promise.all([db.installedApps(), user.role === "staff" ? 0 : db.pendingRequestCount()]);
+  return c.json({ user, setupComplete, installedApps, mailEnabled: mailEnabled(c.env), billing: await billingSummary(c), timeRequests });
 });
 
 // ---------- Eigenes Konto ----------
@@ -1027,6 +1046,7 @@ async function myTime(c: Ctx) {
     today: computeDays(profileOf(employee), entries, absences, { from: today, to: today }, settings)[0],
     account: computeYear(profileOf(employee), entries, absences, year, settings),
     upcomingAbsences: absences.filter((a) => a.to >= today).slice(0, 5),
+    requests: await tenantDb(c.env, user.tenantId).requests(employee.id, 20),
   };
 }
 
@@ -1042,7 +1062,46 @@ app.post("/time/me/stamp", async (c) => {
   return c.json(await myTime(c));
 });
 
+// Nachträge und Urlaub beantragen: Die Person selbst stellt den Antrag, Inhaber oder Admin entscheidet.
+app.post("/time/me/requests", async (c) => {
+  const user = c.get("user");
+  const db = tenantDb(c.env, user.tenantId);
+  const employee = (await db.listEmployees()).find((e) => e.userId === user.id);
+  if (!employee) return fail(c, "notLinked", 400);
+  const request = sanitizeRequest(await readBody(c));
+  if (!request) return fail(c, "checkFields", 400);
+  if ((await db.requests(employee.id, 200)).filter((r) => r.status === "pending").length >= 30) return fail(c, "tooManyRequests", 429);
+  const id = await db.addRequest(employee.id, request.data, request.note, user.id);
+  audit(c, user.tenantId, user, "requestCreated", { type: request.data.type });
+  return c.json({ id }, 201);
+});
+
+app.delete("/time/me/requests/:id", async (c) => {
+  const user = c.get("user");
+  const db = tenantDb(c.env, user.tenantId);
+  const employee = (await db.listEmployees()).find((e) => e.userId === user.id);
+  if (!employee || !(await db.withdrawRequest(c.req.param("id") ?? "", employee.id))) return fail(c, "notFound", 404);
+  return c.json({ ok: true });
+});
+
 const timeManager = requireRole("owner", "admin");
+
+app.get("/time/requests", timeManager, async (c) => {
+  const db = tenantDb(c.env, c.get("user").tenantId);
+  const [requests, employees] = await Promise.all([db.requests(null, 100), db.listEmployees()]);
+  const names = new Map(employees.map((e) => [e.id, publicEmployee(e).name]));
+  return c.json({ requests: requests.map((r) => ({ ...r, name: names.get(r.employeeId) ?? "?" })) });
+});
+
+app.post("/time/requests/:id/decide", timeManager, async (c) => {
+  const user = c.get("user");
+  const body = await readBody(c);
+  const approve = body.approve === true;
+  const request = await tenantDb(c.env, user.tenantId).decideRequest(c.req.param("id") ?? "", approve, text(body.reply).slice(0, 300), user.id, user.name);
+  if (!request) return fail(c, "notFound", 404);
+  audit(c, user.tenantId, user, approve ? "requestApproved" : "requestRejected", { type: request.data.type });
+  return c.json({ request });
+});
 
 app.get("/time/overview", timeManager, async (c) => {
   const user = c.get("user");

@@ -3,6 +3,9 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { I18nProvider } from "./i18n";
 import "./styles.css";
+import { captureInstallPrompt } from "./pages/Install";
+
+captureInstallPrompt();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

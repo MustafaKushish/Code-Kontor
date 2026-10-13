@@ -1,6 +1,6 @@
 // Service Worker: macht Code Kontor installierbar und lädt die Oberfläche auch bei schlechtem Netz.
 // API-Aufrufe werden nie zwischengespeichert, Geschäftsdaten kommen immer frisch vom Server.
-const CACHE = "code-kontor-v1";
+const CACHE = "code-kontor-v2";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(["/", "/manifest.webmanifest", "/icon.svg"])));

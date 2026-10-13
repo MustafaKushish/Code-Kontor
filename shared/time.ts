@@ -280,8 +280,10 @@ export function computeYear(
   const yearEnd = `${year}-12-31`;
   const to = today < yearEnd ? today : yearEnd;
   const days = to >= from ? computeDays(profile, entries, absences, { from, to }, settings, now) : [];
-  const target = days.reduce((s, d) => s + d.target, 0);
-  const actual = days.reduce((s, d) => s + d.worked + d.credited, 0);
+  // Der laufende Tag zählt erst, wenn sein Soll erreicht ist, sonst stünde morgens schon das ganze Tagessoll im Minus
+  const counted = days.filter((d) => d.day < today || d.worked + d.credited >= d.target);
+  const target = counted.reduce((s, d) => s + d.target, 0);
+  const actual = counted.reduce((s, d) => s + d.worked + d.credited, 0);
   // Urlaub über das ganze Jahr zählen (auch geplanten)
   const all = computeDays(profile, [], absences, { from, to: yearEnd }, settings, now);
   let taken = 0, planned = 0, sick = 0;
@@ -350,4 +352,44 @@ export function formatMinutes(min: number): string {
   const sign = min < 0 ? "−" : "";
   const abs = Math.abs(Math.round(min));
   return `${sign}${Math.floor(abs / 60)}:${pad(abs % 60)}`;
+}
+
+// ---------- Anträge: Mitarbeiter beantragen, Inhaber oder Admin entscheidet ----------
+
+export type RequestStatus = "pending" | "approved" | "rejected";
+
+export type TimeRequestData =
+  | { type: "stamp"; kind: StampKind; at: string }
+  | { type: "absence"; absence: AbsenceType; from: string; to: string; halfDay: boolean };
+
+export interface TimeRequest {
+  id: string;
+  employeeId: string;
+  data: TimeRequestData;
+  note: string;
+  status: RequestStatus;
+  createdAt: string;
+  decidedAt: string | null;
+  decidedBy: string | null;
+  reply: string;
+}
+
+/** Wie weit ein Nachtrag zurückliegen darf. */
+export const REQUEST_MAX_DAYS_BACK = 62;
+
+/** Antrag prüfen. Gibt null zurück, wenn etwas nicht stimmt. */
+export function sanitizeRequest(input: Record<string, unknown>, now = new Date()): { data: TimeRequestData; note: string } | null {
+  const note = str(input.note, 300);
+  if (input.type === "stamp") {
+    if ((input.kind !== "in" && input.kind !== "out") || typeof input.at !== "string" || !/^\d{4}-\d{2}-\d{2}T/.test(input.at)) return null;
+    const at = Date.parse(input.at);
+    if (Number.isNaN(at) || at > now.getTime() || now.getTime() - at > REQUEST_MAX_DAYS_BACK * 86_400_000) return null;
+    return { data: { type: "stamp", kind: input.kind, at: new Date(at).toISOString() }, note };
+  }
+  if (input.type === "absence") {
+    const absence = sanitizeAbsence({ ...input, type: input.absence });
+    if (!absence) return null;
+    return { data: { type: "absence", absence: absence.type, from: absence.from, to: absence.to, halfDay: absence.halfDay }, note };
+  }
+  return null;
 }

@@ -30,4 +30,6 @@ export interface Me {
   installedApps: string[];
   /** Nur gesetzt, wenn die Bezahlung eingerichtet ist */
   billing: { status: "trialing" | "active" | "past_due" | "canceled" | "expired"; daysLeft: number; access: boolean } | null;
+  /** Offene Zeit-Anträge (nur für Inhaber und Admins) */
+  timeRequests?: number;
 }

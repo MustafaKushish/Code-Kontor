@@ -27,6 +27,30 @@ export function TerminalPage({ token }: { token: string }) {
     return () => clearInterval(timer);
   }, [token]);
 
+  // Als eigene App installierbar machen und den Bildschirm wach halten
+  useEffect(() => {
+    const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+    const before = link?.href;
+    if (link) link.href = `/api/terminal/${token}/manifest`;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", "#0a0b10");
+    let lock: { release: () => Promise<void> } | null = null;
+    const wake = async () => {
+      try {
+        lock = (await (navigator as Navigator & { wakeLock?: { request: (t: "screen") => Promise<{ release: () => Promise<void> }> } }).wakeLock?.request("screen")) ?? null;
+      } catch {
+        // Nicht jedes Gerät erlaubt das, dann eben nicht
+      }
+    };
+    wake();
+    const onVisible = () => document.visibilityState === "visible" && wake();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      if (link && before) link.href = before;
+      document.removeEventListener("visibilitychange", onVisible);
+      lock?.release().catch(() => undefined);
+    };
+  }, [token]);
+
   // Eingabe immer im Fokus halten, damit der Leser jederzeit tippen kann
   useEffect(() => {
     const keep = () => setTimeout(() => input.current?.focus(), 50);

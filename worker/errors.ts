@@ -26,6 +26,7 @@ export const ERROR_TEXT = {
   terminalInvalid: "Dieses Terminal ist nicht (mehr) freigeschaltet.",
   unknownChip: "Dieser Chip ist keiner Person zugeordnet.",
   notLinked: "Dein Konto ist noch keiner Person in der Zeiterfassung zugeordnet.",
+  tooManyRequests: "Es sind schon sehr viele Anträge offen. Bitte warte, bis sie bearbeitet sind.",
   tooManyAttempts: "Zu viele Fehlversuche. Bitte in 15 Minuten noch einmal versuchen.",
   notLoggedIn: "Nicht angemeldet.",
   sessionExpired: "Sitzung abgelaufen. Bitte neu anmelden.",
