@@ -38,6 +38,7 @@ let lastRequest: { url: string; headers: Headers; body: Record<string, unknown> 
 function fakeGemini(chunks: object[], status = 200): GeminiOptions {
   return {
     apiKey: "test-key",
+    wait: async () => undefined,
     fetch: (async (url: string, init?: RequestInit) => {
       lastRequest = { url: String(url), headers: new Headers(init?.headers), body: JSON.parse(String(init?.body)) };
       if (status !== 200) return new Response("{}", { status });

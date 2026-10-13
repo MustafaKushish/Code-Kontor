@@ -90,6 +90,7 @@ export interface GeminiOptions {
   model?: string;
   /** Für Tests austauschbar. */
   fetch?: typeof fetch;
+  wait?: (ms: number) => Promise<void>;
 }
 
 interface GeminiChunk {
@@ -100,13 +101,16 @@ interface GeminiChunk {
 const BLOCKED = new Set(["SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST", "SPII", "RECITATION"]);
 
 /** Ausweichmodelle, wenn Google das Hauptmodell gerade überlastet meldet (HTTP 503/500/429). */
-export const FALLBACK_MODELS = ["gemini-flash-lite-latest", "gemini-2.5-flash"];
+export const FALLBACK_MODELS = ["gemini-flash-lite-latest", "gemini-pro-latest"];
 const RETRYABLE = new Set([429, 500, 503, 504]);
 
 /** Stellt die Frage an Gemini und liefert die Antwort Stück für Stück. */
 export async function* askAssistant(options: GeminiOptions, ctx: AssistantContext, messages: ChatMessage[]): AsyncGenerator<StreamEvent> {
   const doFetch = options.fetch ?? fetch;
-  const models = [...new Set([options.model || DEFAULT_MODEL, ...FALLBACK_MODELS])];
+  const primary = options.model || DEFAULT_MODEL;
+  // Überlastung dauert meist nur Sekunden: zum Schluss das Hauptmodell nach kurzer Pause noch einmal.
+  const models = [...new Set([primary, ...FALLBACK_MODELS]), primary];
+  const wait = options.wait ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
   const body = JSON.stringify({
     systemInstruction: { parts: [{ text: systemPrompt(ctx) }] },
     contents: messages.map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })),
@@ -115,7 +119,8 @@ export async function* askAssistant(options: GeminiOptions, ctx: AssistantContex
 
   let response: Response | null = null;
   let lastStatus = 0;
-  for (const model of models) {
+  for (const [i, model] of models.entries()) {
+    if (i === models.length - 1) await wait(1500);
     try {
       response = await doFetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`, {
         method: "POST",
