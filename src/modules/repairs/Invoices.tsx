@@ -2,11 +2,12 @@ import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { api } from "../../api";
 import { Link } from "../../components";
-import type { InvoiceKind, PaymentMethod, RepairInvoice } from "../../../shared/repairs";
+import type { InvoiceKind, RepairInvoice } from "../../../shared/repairs";
+import type { PayMethod } from "../../../shared/pos";
 import { SaleInvoicePrint } from "./Print";
 import { useRepairI18n } from "./i18n";
 
-interface InvoiceRow { number: string; kind: InvoiceKind; issuedAt: string; totalCents: number; paymentMethod: PaymentMethod; orderId: string; orderNumber: number | null; customerName: string }
+interface InvoiceRow { number: string; kind: InvoiceKind; issuedAt: string; totalCents: number; paymentMethod: PayMethod; orderId: string; orderNumber: number | null; customerName: string; canceledBy: string | null }
 
 /** Alle Rechnungen eines Jahres. Reparatur: öffnet den Auftrag. Verkauf: öffnet die Rechnung zum erneuten Drucken. */
 export function InvoicesTab() {
@@ -24,7 +25,7 @@ export function InvoicesTab() {
   const openSale = (number: string) =>
     api<{ invoice: RepairInvoice }>(`/repairs/invoices/${encodeURIComponent(number)}`).then((d) => setPrinting(d.invoice)).catch((e) => setError(repairError(e)));
 
-  const sum = (rows ?? []).reduce((s, x) => s + x.totalCents, 0);
+  const sum = (rows ?? []).filter((x) => !x.canceledBy).reduce((s, x) => s + x.totalCents, 0);
 
   return (
     <div className="stack">
@@ -42,7 +43,7 @@ export function InvoicesTab() {
             const content = (
               <>
                 <span className="list-main">
-                  <strong>{x.number}</strong>
+                  <strong>{x.number}{x.canceledBy && <small className="error"> · {r("invoices.canceled", { number: x.canceledBy })}</small>}</strong>
                   <small className="muted">
                     {day(x.issuedAt)}{x.customerName ? ` · ${x.customerName}` : ""} · {x.kind === "sale" ? r("invoices.sale") : `${r("invoices.repair")} #${x.orderNumber}`}
                   </small>

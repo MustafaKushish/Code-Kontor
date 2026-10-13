@@ -40,9 +40,6 @@
 .repair-status.tone-bad { background: color-mix(in srgb, var(--error) 12%, transparent); color: var(--error); }
 .repair-status.tone-done { background: transparent; border-color: var(--line-strong); color: var(--muted); }
 
-.money-input { position: relative; display: block; }
-.money-input input { padding-inline-end: 34px; text-align: end; font-variant-numeric: tabular-nums; }
-.money-input span { position: absolute; inset-inline-end: 14px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
 
 .customer-suggestions { display: flex; flex-wrap: wrap; gap: 8px; }
 .repair-form .notice.success { flex-wrap: wrap; }
@@ -58,9 +55,6 @@
 .repair-item { display: flex; align-items: center; gap: 12px; padding: 10px 0; }
 .repair-item + .repair-item { border-top: 1px solid var(--line); }
 .repair-item .amount { font-variant-numeric: tabular-nums; white-space: nowrap; }
-.repair-totals { display: grid; gap: 4px; border-top: 1px solid var(--line-strong); padding-top: 10px; }
-.repair-totals p { display: flex; justify-content: space-between; gap: 12px; font-variant-numeric: tabular-nums; }
-.repair-totals .grand { font-size: 1.1rem; }
 
 .repair-timeline { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
 .repair-timeline li { display: grid; grid-template-columns: 14px 1fr; gap: 12px; position: relative; }
@@ -80,14 +74,6 @@
 .unlock-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .unlock-row .text-button { display: inline-flex; align-items: center; gap: 4px; }
 
-.repair-dialog-backdrop {
-  position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 16px;
-  background: rgb(10 11 16 / 0.5); backdrop-filter: blur(4px); animation: fade 0.15s;
-}
-.repair-dialog { width: min(480px, 100%); max-height: calc(100dvh - 32px); overflow: auto; box-shadow: var(--shadow-lift); }
-.repair-dialog.wide { width: min(680px, 100%); }
-@keyframes fade { from { opacity: 0; } }
-.segmented.three { grid-template-columns: repeat(3, 1fr); }
 .grid.three { grid-template-columns: 0.7fr 1.3fr 1fr; }
 .part-picker { display: grid; max-height: 320px; overflow: auto; border: 1px solid var(--line); border-radius: 16px; padding: 4px; }
 .part-picker .list-row { border: none; background: none; font: inherit; color: inherit; text-align: start; cursor: pointer; width: 100%; }
@@ -149,64 +135,12 @@
 .status-page .notice { display: flex; align-items: center; gap: 8px; }
 .status-page p svg { vertical-align: -2px; }
 
-/* ---------- Druck: Annahmeschein, Kostenvoranschlag, Rechnung ---------- */
-.print-layer { position: fixed; inset: 0; z-index: 95; overflow: auto; background: rgb(10 11 16 / 0.55); backdrop-filter: blur(4px); padding: 16px; }
-.print-toolbar { position: sticky; top: 0; z-index: 1; display: flex; gap: 10px; justify-content: center; margin-bottom: 16px; }
-.print-sheet {
-  width: min(210mm, 100%); min-height: 297mm; margin: 0 auto; padding: 16mm 15mm; background: #fff; color: #111;
-  font: 10.5pt/1.45 Inter, system-ui, sans-serif; display: grid; gap: 14px; align-content: start; box-shadow: var(--shadow-lift);
-}
-.print-sheet h1 { font-size: 20pt; letter-spacing: -0.02em; }
-.print-sheet h2 { font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.08em; color: #666; margin-bottom: 3px; font-family: Inter, sans-serif; font-weight: 700; }
-.print-head { display: flex; justify-content: space-between; gap: 20px; border-bottom: 2px solid #111; padding-bottom: 12px; }
-.print-company { font-size: 13pt; display: block; }
-.print-logo { max-height: 48px; max-width: 180px; object-fit: contain; display: block; margin-bottom: 6px; }
-.print-meta { text-align: end; display: grid; gap: 2px; align-content: start; }
-.print-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px 20px; }
-.print-table { width: 100%; border-collapse: collapse; }
-.print-table th { text-align: start; font-size: 8.5pt; color: #666; border-bottom: 1px solid #111; padding: 4px 6px; }
-.print-table td { padding: 6px; border-bottom: 1px solid #ddd; vertical-align: top; }
-.print-table .num { text-align: end; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.print-table small { color: #666; }
-.print-totals { justify-self: end; min-width: 260px; display: grid; gap: 3px; }
-.print-totals p { display: flex; justify-content: space-between; gap: 20px; font-variant-numeric: tabular-nums; }
-.print-totals .grand { border-top: 1px solid #111; padding-top: 4px; font-size: 12pt; }
-.print-terms { font-size: 8.5pt; color: #444; border-top: 1px solid #ddd; padding-top: 8px; white-space: pre-wrap; }
-.print-sign { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 26px; font-size: 8.5pt; color: #666; }
-.print-sign span { display: block; border-bottom: 1px solid #111; height: 30px; margin-bottom: 4px; }
-.print-signature { display: block; height: 30px; width: auto; max-width: 100%; border-bottom: 1px solid #111; margin-bottom: 4px; object-fit: contain; object-position: left bottom; }
-.print-qr { display: flex; gap: 12px; align-items: center; font-size: 9pt; }
-.print-qr .small { color: #666; word-break: break-all; }
-.print-foot { margin-top: auto; border-top: 1px solid #ddd; padding-top: 8px; font-size: 8pt; color: #666; display: flex; flex-wrap: wrap; gap: 4px 18px; }
-
-@media print {
-  @page { size: A4; margin: 0; }
-  body.ck-printing { background: #fff; }
-  body.ck-printing::after { display: none; }
-  body.ck-printing #root, body.ck-printing .print-toolbar { display: none !important; }
-  body.ck-printing .print-layer { position: static; overflow: visible; background: none; backdrop-filter: none; padding: 0; }
-  body.ck-printing .print-sheet { box-shadow: none; width: 210mm; min-height: 297mm; }
-}
 .status-page .button { white-space: normal; text-align: center; }
 .status-page .card > a.button { justify-self: stretch; }
 @media (max-width: 640px) { .status-page .row.wrap .button { flex: 1 1 100%; } }
 
 /* ---------- Verkauf, Ankauf, Garantie ---------- */
 .repairs .row.gap-sm { display: inline-flex; align-items: center; gap: 4px; }
-.sale-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
-.sale-layout .search { max-width: none; }
-.sale-products { max-height: 520px; overflow: auto; }
-.sale-products .list-row:disabled { opacity: 0.45; cursor: default; }
-.sale-icon { width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; flex: none; background: var(--panel-2); color: var(--muted); }
-.sale-icon.used { background: hsl(var(--hue) 80% 60% / 0.14); color: hsl(var(--hue) 65% 55%); }
-.sale-cart { position: sticky; top: 16px; }
-.sale-line { display: grid; gap: 8px; padding: 10px 0; }
-.sale-line + .sale-line { border-top: 1px solid var(--line); }
-.sale-line-controls { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
-.sale-qty { min-width: 24px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; }
-.sale-price { width: 120px; }
-.sale-customer { display: inline-flex; align-items: center; gap: 6px; justify-self: start; }
-.sale-recent { grid-column: 1 / -1; }
 .used-seller { padding: 12px 14px; border-radius: 16px; background: var(--panel-2); }
 .repairs fieldset { border: none; padding: 0; margin: 0; min-width: 0; }
 .warranty-row { align-items: center; }
@@ -215,11 +149,6 @@
 .warranty-icon.off { background: var(--panel-2); color: var(--muted); }
 .small-button { min-height: 34px; padding: 4px 12px; font-size: 0.88rem; }
 
-@media (max-width: 860px) {
-  .sale-layout { grid-template-columns: minmax(0, 1fr); }
-  .sale-cart { position: static; }
-  .sale-products { max-height: 360px; }
-}
 @media (max-width: 720px) {
   .repairs-tabs { overflow-x: auto; scrollbar-width: none; justify-content: flex-start; }
   .repairs-tabs button { flex: none; padding-inline: 12px; }
@@ -257,9 +186,6 @@
 .cash-summary.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .cash-summary .tile { display: grid; gap: 2px; }
 .cash-summary .tile strong { font-size: 1.35rem; font-variant-numeric: tabular-nums; }
-.cash-date { max-width: 180px; }
-.cash-icon { width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; flex: none; background: var(--success-soft); color: var(--success); }
-.cash-icon.out { background: color-mix(in srgb, var(--error) 12%, transparent); color: var(--error); }
 .month-label { min-width: 150px; text-align: center; }
 .stats-bars { display: flex; align-items: flex-end; gap: 4px; height: 160px; padding-top: 8px; }
 .stats-bar { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 4px; min-width: 0; }

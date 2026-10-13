@@ -31,7 +31,7 @@ export const en: RepairDict = {
   },
   devices: { phone: "Smartphone", tablet: "Tablet", laptop: "Laptop", pc: "PC", watch: "Smartwatch", console: "Game console", other: "Other" },
   accessories: { charger: "Power adapter", cable: "Charging cable", case: "Case", sim: "SIM card", memoryCard: "Memory card", pen: "Stylus", box: "Original box" },
-  payment: { cash: "Cash", card: "Card", transfer: "Bank transfer" },
+  payment: { cash: "Cash", card: "Card", transfer: "Bank transfer", voucher: "Voucher" },
   list: {
     newBookings: "{n} new appointment requests",
     todayBookings: "{n} appointments today",
@@ -100,6 +100,8 @@ export const en: RepairDict = {
   order: {
     back: "All orders",
     events: {
+      receiptCanceled: "Receipt cancelled",
+      depositCanceled: "Deposit cancelled",
       quoteApproved: "Quote accepted",
       quoteRejected: "Quote declined",
       edited: "Details changed",
@@ -174,6 +176,7 @@ export const en: RepairDict = {
     pickupFree: "Without items, no invoice will be created.",
     paymentMethod: "Paid by",
     pickupConfirm: "Record pickup",
+    toPos: "Check out at the till",
     pickedUp: "Picked up on {day}",
     invoice: "Invoice {number}",
     edit: "Edit",
@@ -216,6 +219,7 @@ export const en: RepairDict = {
     margin: "Margin {percent} %",
   },
   invoices: {
+    canceled: "cancelled ({number})",
     empty: "No invoices this year yet.",
     sum: "Total {year}",
     number: "Number",

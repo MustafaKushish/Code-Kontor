@@ -15,6 +15,7 @@ Läuft als installierbare App auf Handy, Tablet und Laptop.
 | Datenbank je Kunde | `worker/tenant.ts` (Durable Object mit SQLite) | Firmendaten und später alle Geschäftsdaten, getrennt je Firma |
 | Sprachen | `src/i18n/` | 10 Sprachen: Deutsch, Englisch, Türkisch, Arabisch (von rechts nach links), Französisch, Spanisch, Italienisch, Polnisch, Russisch, Ukrainisch. Deutsch ist die Vorlage, die anderen werden bei Bedarf nachgeladen |
 | KI-Assistent | `worker/assistant.ts`, `src/layout/Assistant.tsx` | Chat für Inhaber und Team, antwortet in der gewählten Sprache (Google Gemini, Modell `gemini-flash-latest`, kostenlos nutzbar), 50 Fragen pro Person und Tag |
+| Kasse | `worker/pos/`, `src/pos/`, `shared/pos.ts` | Eine Kasse für alle Systeme unter `/kasse`: Bar, Karte, Überweisung, Gutschein, Aufteilen, Rückgeld, ein Nummernkreis für alle Belege, Storno als Gegenbeleg, Kassenbuch mit Tagesabschluss (Z-Bon). Module liefern nur Posten (`PosModule` in `worker/pos/store.ts`) und reagieren auf Buchung und Storno |
 | Gemeinsame Prüfungen | `shared/` | IBAN, Steuernummer, USt-IdNr., PLZ – im Browser und auf dem Server gleich |
 
 Jede Firma bekommt bei der Anmeldung automatisch ihre eigene SQLite-Datenbank (ein Durable Object je Firma).
@@ -63,5 +64,5 @@ Fehler schickt der Server als Code (`worker/errors.ts`), übersetzt wird im Brow
 1. **Plattform-Kern** – Konto, Login, Rollen, Firmendaten-Assistent, Datenbank je Kunde, installierbare App ✔
 2. **App-Katalog** – Branchen-System auswählen und mit einem Klick installieren, modernes Design ✔
 3. **10 Sprachen und KI-Assistent** für Inhaber und Team ✔ (KI für Endkunden kommt mit den Kundenseiten der Module)
-4. **Erstes fertiges System** – Einzelhandel: Artikel, Lager, Kasse
+4. **Erstes fertiges System** – Einzelhandel: Artikel, Lager, Kasse (die gemeinsame Kasse steht; als Nächstes TSE-Anbindung für Deutschland, z. B. fiskaly, und Kartenterminal)
 5. **Abo und Start** – Stripe-Abo, automatische Einrichtung, Admin-Konsole, erster Kunde

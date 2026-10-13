@@ -1,4 +1,5 @@
 import { useState, type FormEvent, type ReactNode } from "react";
+import { guessCountry, sortedCountries } from "../../shared/countries";
 import { MonitorSmartphone, ShieldCheck, Sparkles } from "lucide-react";
 import { api, ApiError } from "../api";
 import { AppIcon, Field, Logo } from "../components";
@@ -45,7 +46,7 @@ export function AuthLayout({ children }: { children: ReactNode }) {
 
 export function AuthPage({ onDone }: { onDone: () => void }) {
   const [mode, setMode] = useState<"login" | "register" | "forgot">("login");
-  const [form, setForm] = useState({ companyName: "", name: "", email: "", password: "" });
+  const [form, setForm] = useState({ companyName: "", name: "", email: "", password: "", country: guessCountry(navigator.languages ?? [navigator.language]) });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [forgotSent, setForgotSent] = useState(false);
@@ -143,6 +144,11 @@ export function AuthPage({ onDone }: { onDone: () => void }) {
               <>
                 <Field label={t("auth.companyName")}><input value={form.companyName} onChange={set("companyName")} autoComplete="organization" required /></Field>
                 <Field label={t("auth.yourName")}><input value={form.name} onChange={set("name")} autoComplete="name" required /></Field>
+                <Field label={t("auth.country")} hint={t("auth.countryHint")}>
+                  <select value={form.country} onChange={set("country")} autoComplete="country">
+                    {sortedCountries(lang).map(([code, name]) => <option key={code} value={code}>{name}</option>)}
+                  </select>
+                </Field>
               </>
             )}
             <Field label={t("auth.email")}><input type="email" value={form.email} onChange={set("email")} autoComplete="email" required /></Field>

@@ -1,8 +1,9 @@
+import { formatRate, vatChoices } from "../../money";
 import { useEffect, useState, type FormEvent } from "react";
 import { Plus, Search, Trash2 } from "lucide-react";
 import { api } from "../../api";
 import { Field } from "../../components";
-import { DEVICE_TYPES, VAT_RATES, type RepairPart, type RepairPrice } from "../../../shared/repairs";
+import { DEVICE_TYPES, type RepairPart, type RepairPrice } from "../../../shared/repairs";
 import { useRepairI18n } from "./i18n";
 import { Dialog, MoneyInput } from "./parts";
 
@@ -62,7 +63,7 @@ export function PricesPanel({ isManager }: { isManager: boolean }) {
 }
 
 function PriceDialog({ price, onClose, onSaved }: { price: RepairPrice | null; onClose: () => void; onSaved: () => void }) {
-  const { r, euro, repairError } = useRepairI18n();
+  const { r, euro, repairError, lang } = useRepairI18n();
   const [form, setForm] = useState<PriceForm>(price ? { ...price } : EMPTY);
   const [parts, setParts] = useState<RepairPart[]>([]);
   const [error, setError] = useState("");
@@ -112,7 +113,7 @@ function PriceDialog({ price, onClose, onSaved }: { price: RepairPrice | null; o
           <Field label={r("prices.price")}><MoneyInput cents={form.priceCents} onChange={(c) => c !== null && set({ priceCents: c })} /></Field>
           <Field label={r("order.vat")}>
             <select value={form.vatRate} onChange={(e) => set({ vatRate: Number(e.target.value) })}>
-              {VAT_RATES.map((v) => <option key={v} value={v}>{v} %</option>)}
+              {vatChoices().map((v) => <option key={v} value={v}>{formatRate(v, lang)}</option>)}
             </select>
           </Field>
           <Field label={r("prices.part")} hint={part ? r("prices.partHint", { price: euro(part.priceCents) }) : r("prices.partNone")}>

@@ -1,3 +1,4 @@
+import { COUNTRY_TAX, defaultTaxSettings, sanitizeTaxSettings, type TaxSettings } from "../shared/countries";
 import { Hono, type Context } from "hono";
 import { csrf } from "hono/csrf";
 import { secureHeaders } from "hono/secure-headers";
@@ -27,6 +28,7 @@ import {
 import { newRecoveryCodes, newTotpSecret, normalizeRecoveryCode, otpauthUrl, verifyTotp } from "./totp";
 import type { CompanyProfile } from "../shared/company";
 import { repairRoutes, repairStatusRoutes } from "./repairs/routes";
+import { posRoutes } from "./pos/routes";
 
 export { TenantDatabase };
 
@@ -195,6 +197,14 @@ async function storeCompany(env: Env, tenantId: string, company: CompanyProfile)
   await tenantDb(env, tenantId).saveCompany(stored);
 }
 
+/** Steuer-Einstellungen der Firma: eigene Werte oder die Vorgaben ihres Landes. */
+async function loadTax(env: Env, tenantId: string, country?: string): Promise<{ country: string; custom: boolean } & TaxSettings> {
+  const db = tenantDb(env, tenantId);
+  const [own, company] = await Promise.all([db.getTaxSettings(), country ? null : db.getCompany()]);
+  const land = country ?? company?.country ?? "DE";
+  return { country: land, custom: !!own, ...(own ?? defaultTaxSettings(land)) };
+}
+
 const LOGIN_CHALLENGE_MINUTES = 10;
 
 /** Benutzer anmelden und Anmeldung protokollieren. */
@@ -211,6 +221,10 @@ app.post("/auth/register", async (c) => {
   const name = text(body.name);
   const email = text(body.email).toLowerCase();
   const problem = passwordProblem(body.password);
+  // Land aus dem Formular, sonst aus dem Standort der Verbindung
+  const requested = text(body.country).toUpperCase();
+  const located = (c.req.header("CF-IPCountry") ?? "").toUpperCase();
+  const country = /^[A-Z]{2}$/.test(requested) ? requested : COUNTRY_TAX[located] ? located : "DE";
   if (!companyName) return fail(c, "companyNameRequired", 400);
   if (!name) return fail(c, "nameRequired", 400);
   if (!EMAIL_PATTERN.test(email)) return fail(c, "emailInvalid", 400);
@@ -231,7 +245,7 @@ app.post("/auth/register", async (c) => {
 
   // Eigene Datenbank des Kunden anlegen und mit dem Firmennamen vorbelegen
   const db = tenantDb(c.env, tenantId);
-  await storeCompany(c.env, tenantId, sanitizeCompany({ name: companyName, email }));
+  await storeCompany(c.env, tenantId, sanitizeCompany({ name: companyName, email, country }));
   audit(c, tenantId, { id: userId, name }, "accountCreated");
 
   c.executionCtx.waitUntil(sendUserLink(c, "verify", { id: userId, email, name }, langOf(body)));
@@ -549,8 +563,12 @@ app.get("/me", async (c) => {
   const db = tenantDb(c.env, user.tenantId);
   const company = await loadCompany(c.env, user.tenantId);
   const setupComplete = !!company && Object.keys(validateCompany(company)).length === 0;
-  const [installedApps, timeRequests] = await Promise.all([db.installedApps(), user.role === "staff" ? 0 : db.pendingRequestCount()]);
-  return c.json({ user, setupComplete, installedApps, mailEnabled: mailEnabled(c.env), billing: await billingSummary(c), timeRequests });
+  const [installedApps, timeRequests, tax] = await Promise.all([
+    db.installedApps(),
+    user.role === "staff" ? 0 : db.pendingRequestCount(),
+    loadTax(c.env, user.tenantId, company?.country ?? "DE"),
+  ]);
+  return c.json({ user, setupComplete, installedApps, mailEnabled: mailEnabled(c.env), billing: await billingSummary(c), timeRequests, tax });
 });
 
 // ---------- Eigenes Konto ----------
@@ -720,9 +738,30 @@ app.put("/company", requireRole("owner", "admin"), async (c) => {
   // Im Protokoll nur, welche Felder sich geändert haben, nicht die Werte
   const changed = (Object.keys(company) as (keyof CompanyProfile)[]).filter((k) => before?.[k] !== company[k]);
   if (changed.length) audit(c, user.tenantId, user, "companyChanged", { fields: changed });
+  // Neues Land: Währung und Steuersätze wieder aus dessen Vorgaben
+  if (before && before.country !== company.country) await tenantDb(c.env, user.tenantId).saveTaxSettings(null);
   if (company.name !== user.tenantName)
     await c.env.PLATFORM_DB.prepare("UPDATE tenants SET name = ? WHERE id = ?").bind(company.name, user.tenantId).run();
   return c.json({ company });
+});
+
+// ---------- Steuern und Währung ----------
+
+app.get("/tax", async (c) => {
+  const tax = await loadTax(c.env, c.get("user").tenantId);
+  return c.json({ tax, defaults: defaultTaxSettings(tax.country) });
+});
+
+app.put("/tax", requireRole("owner", "admin"), async (c) => {
+  const user = c.get("user");
+  const body = await readBody(c);
+  const company = await tenantDb(c.env, user.tenantId).getCompany();
+  const country = company?.country ?? "DE";
+  const settings = body.reset === true ? null : sanitizeTaxSettings(body, country);
+  await tenantDb(c.env, user.tenantId).saveTaxSettings(settings);
+  audit(c, user.tenantId, user, "taxChanged", settings ? { currency: settings.currency, vatRates: settings.vatRates } : { reset: true });
+  const tax = await loadTax(c.env, user.tenantId, country);
+  return c.json({ tax, defaults: defaultTaxSettings(country) });
 });
 
 // ---------- App-Katalog ----------
@@ -1321,6 +1360,7 @@ app.post("/assistant", async (c) => {
 
 // ---------- Branchen-Systeme ----------
 
+app.route("/pos", posRoutes);
 app.route("/repairs", repairRoutes);
 
 app.notFound((c) => fail(c, "notFound", 404));

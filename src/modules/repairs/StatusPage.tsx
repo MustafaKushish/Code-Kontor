@@ -19,6 +19,7 @@ interface PublicOrder {
   items: { name: string; qty: number; unitCents: number }[];
   totals: Totals | null;
   smallBusiness: boolean;
+  currency: string;
   history: { at: string; status: RepairStatus; event: string }[];
   warrantyUntil: string;
 }
@@ -98,16 +99,16 @@ export default function StatusPage({ tenantId, token }: { tenantId: string; toke
             <div className="repair-items">
               {order.items.map((it, i) => (
                 <div key={i} className="repair-item">
-                  <span className="list-main"><strong>{it.name}</strong>{it.qty !== 1 && <small className="muted">{it.qty} × {euro(it.unitCents)}</small>}</span>
-                  <strong className="amount">{euro(Math.round(it.qty * it.unitCents))}</strong>
+                  <span className="list-main"><strong>{it.name}</strong>{it.qty !== 1 && <small className="muted">{it.qty} × {euro(it.unitCents, order.currency)}</small>}</span>
+                  <strong className="amount">{euro(Math.round(it.qty * it.unitCents), order.currency)}</strong>
                 </div>
               ))}
             </div>
             <div className="repair-totals">
               {!order.smallBusiness && order.totals.vat.filter((v) => v.rate > 0).map((v) => (
-                <p key={v.rate}><span className="muted">{r("order.vatAmount", { rate: v.rate })}</span><span>{euro(v.vatCents)}</span></p>
+                <p key={v.rate}><span className="muted">{r("order.vatAmount", { rate: v.rate })}</span><span>{euro(v.vatCents, order.currency)}</span></p>
               ))}
-              <p className="grand"><span>{r("order.total")}</span><strong>{euro(order.totals.grossCents)}</strong></p>
+              <p className="grand"><span>{r("order.total")}</span><strong>{euro(order.totals.grossCents, order.currency)}</strong></p>
             </div>
             {order.status === "quote" && order.quote === "pending" && (
               <div className="stack-sm">

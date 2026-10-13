@@ -211,7 +211,7 @@ export function PrintView({ kind, order, statusUrl, qr, settings, onClose }: {
           {kind === "quote" && <p>{r("print.quoteValid")}</p>}
           {kind === "invoice" && order.invoice && (
             <>
-              <p>{r("print.paid", { method: r(`payment.${order.invoice.paymentMethod}`) })}</p>
+              <p>{r("print.paid", { method: paidText(order.invoice.snapshot, order.invoice.paymentMethod, r, euro) })}</p>
               <p>{r("print.serviceDate")}</p>
               {order.invoice.warrantyUntil && <p>{r("print.warranty", { day: day(order.invoice.warrantyUntil) })}</p>}
             </>
@@ -222,9 +222,16 @@ export function PrintView({ kind, order, statusUrl, qr, settings, onClose }: {
   );
 }
 
+/** Zahlarten laut Kasse, z. B. „Bar 20,00 €, Karte 49,00 €“; ältere Rechnungen kennen nur eine Zahlart. */
+function paidText(snap: InvoiceSnapshot, fallback: string, r: (k: string) => string, euro: (c: number) => string) {
+  const payments = snap.payments ?? [];
+  if (payments.length <= 1) return r(`payment.${payments[0]?.method ?? fallback}`);
+  return payments.map((p) => `${r(`payment.${p.method}`)} ${euro(p.cents)}`).join(", ");
+}
+
 /** Rechnung eines Verkaufs (Zubehör, Teile, Gebrauchtgeräte). */
 export function SaleInvoicePrint({ invoice, onClose }: { invoice: RepairInvoice; onClose: () => void }) {
-  const { r, day } = useRepairI18n();
+  const { r, euro, day } = useRepairI18n();
   const snap = invoice.snapshot;
   const c = snap.customer;
   return (
@@ -241,7 +248,7 @@ export function SaleInvoicePrint({ invoice, onClose }: { invoice: RepairInvoice;
         </section>
       )}
       <ItemsTable items={snap.items} totals={snap.totals} smallBusiness={snap.smallBusiness} deposit={0} />
-      <p>{r("print.paid", { method: r(`payment.${invoice.paymentMethod}`) })}</p>
+      <p>{r("print.paid", { method: paidText(snap, invoice.paymentMethod, r, euro) })}</p>
       <p>{r("print.serviceDate")}</p>
     </PrintFrame>
   );

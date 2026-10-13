@@ -31,7 +31,7 @@ export const uk: RepairDict = {
   },
   devices: { phone: "Смартфон", tablet: "Планшет", laptop: "Ноутбук", pc: "ПК", watch: "Смарт-годинник", console: "Ігрова приставка", other: "Інше" },
   accessories: { charger: "Блок живлення", cable: "Кабель для заряджання", case: "Чохол", sim: "SIM-картка", memoryCard: "Картка пам'яті", pen: "Стилус", box: "Оригінальна коробка" },
-  payment: { cash: "Готівка", card: "Картка", transfer: "Переказ" },
+  payment: { cash: "Готівка", card: "Картка", transfer: "Переказ", voucher: "Подарунковий сертифікат" },
   list: {
     newBookings: "Нових заявок на запис: {n}",
     todayBookings: "Записів на сьогодні: {n}",
@@ -100,6 +100,8 @@ export const uk: RepairDict = {
   order: {
     back: "Усі замовлення",
     events: {
+      receiptCanceled: "Чек скасовано",
+      depositCanceled: "Передоплату скасовано",
       quoteApproved: "Кошторис прийнято",
       quoteRejected: "Кошторис відхилено",
       edited: "Дані змінено",
@@ -174,6 +176,7 @@ export const uk: RepairDict = {
     pickupFree: "Без позицій рахунок не створюється.",
     paymentMethod: "Спосіб оплати",
     pickupConfirm: "Оформити видачу",
+    toPos: "Оформити на касі",
     pickedUp: "Видано {day}",
     invoice: "Рахунок {number}",
     edit: "Редагувати",
@@ -216,6 +219,7 @@ export const uk: RepairDict = {
     margin: "Маржа {percent} %",
   },
   invoices: {
+    canceled: "скасовано ({number})",
     empty: "Цього року рахунків ще немає.",
     sum: "Сума за {year}",
     number: "Номер",

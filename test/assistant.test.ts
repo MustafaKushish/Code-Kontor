@@ -38,6 +38,7 @@ let lastRequest: { url: string; headers: Headers; body: Record<string, unknown> 
 function fakeGemini(chunks: object[], status = 200): GeminiOptions {
   return {
     apiKey: "test-key",
+    wait: async () => undefined,
     fetch: (async (url: string, init?: RequestInit) => {
       lastRequest = { url: String(url), headers: new Headers(init?.headers), body: JSON.parse(String(init?.body)) };
       if (status !== 200) return new Response("{}", { status });
@@ -86,6 +87,22 @@ describe("KI-Assistent: Antwortstrom", () => {
   it("meldet Überlastung und falschen Schlüssel verständlich", async () => {
     expect(await collect(fakeGemini([], 429))).toEqual([{ type: "error", code: "assistantBusy" }]);
     expect(await collect(fakeGemini([], 403))).toEqual([{ type: "error", code: "assistantNotConfigured" }]);
-    expect(await collect(fakeGemini([], 500))).toEqual([{ type: "error", code: "assistantFailed" }]);
+    expect(await collect(fakeGemini([], 503))).toEqual([{ type: "error", code: "assistantBusy" }]);
+    expect(await collect(fakeGemini([], 400))).toEqual([{ type: "error", code: "assistantFailed" }]);
+  });
+
+  it("weicht auf ein anderes Modell aus, wenn Google überlastet ist", async () => {
+    const urls: string[] = [];
+    const options: GeminiOptions = {
+      apiKey: "k",
+      fetch: (async (url: string) => {
+        urls.push(String(url));
+        if (urls.length === 1) return new Response("{}", { status: 503 });
+        return new Response(`data: ${JSON.stringify(part("Hallo", "STOP"))}\n\n`);
+      }) as typeof fetch,
+    };
+    expect(await collect(options)).toEqual([{ type: "text", text: "Hallo" }, { type: "done" }]);
+    expect(urls[0]).toContain("gemini-flash-latest");
+    expect(urls[1]).toContain("gemini-flash-lite-latest");
   });
 });

@@ -1,7 +1,10 @@
+import { defaultTaxSettings } from "../../shared/countries";
 import { Hono, type Context } from "hono";
 import type { Env } from "../index";
 import { tenantStub, type ModuleResult } from "../tenant";
 import { berlinDay, type RepairStore } from "./store";
+import { posContext } from "../pos/routes";
+import { PAY_METHODS, type PayMethod } from "../../shared/pos";
 import { fail } from "../errors";
 import { decryptField, encryptField } from "../crypto";
 import { mailEnabled, sendMail } from "../mail";
@@ -10,9 +13,9 @@ import { hasAccess } from "../../shared/billing";
 import { renderBookingMail, renderRepairMail, type RepairMailKind } from "./mail";
 import { isLocked, recordFailure } from "../throttle";
 import {
-  PAYMENT_METHODS, REPAIR_APP_ID, REPAIR_STATUSES, STATUS_GROUPS, computeTotals, sanitizeCustomer, sanitizeIntake, sanitizeItem, sanitizePart,
-  sanitizeChecks, sanitizeCustomerCard, sanitizePrice, sanitizeRepairSettings, sanitizeSaleLine, sanitizeUsed, validateCustomer, validateIntake, validateUsed,
-  type InvoiceSnapshot, type PaymentMethod, type SaleLine, type RepairOrder, type RepairStatus, type StatusGroup,
+  REPAIR_APP_ID, REPAIR_STATUSES, STATUS_GROUPS, computeTotals, sanitizeCustomer, sanitizeIntake, sanitizeItem, sanitizePart,
+  sanitizeChecks, sanitizeCustomerCard, sanitizePrice, sanitizeRepairSettings, sanitizeUsed, validateCustomer, validateIntake, validateUsed,
+  type RepairOrder, type RepairStatus, type StatusGroup,
   PHOTO_STAGES, freeSlots, isPhotoDataUrl, isSignatureDataUrl, sanitizeBooking, sanitizePurchaseLines, sanitizeSupplier, validateBooking,
   type BookingStatus, type PhotoStage, type RepairBooking,
 } from "../../shared/repairs";
@@ -36,8 +39,9 @@ function store(env: Env, tenantId: string): Remote {
 
 /** Fehler aus dem Speicher als Antwort; der Code wird im Browser übersetzt. */
 function moduleError(c: Ctx, code: string) {
-  const status = code === "notFound" ? 404 : 409;
-  return c.json({ code: `repairs.${code}`, error: code }, status);
+  const status = code.endsWith("notFound") ? 404 : 409;
+  // Fehler der Kasse kommen schon mit Vorsilbe („pos.…“)
+  return c.json({ code: code.includes(".") ? code : `repairs.${code}`, error: code }, status);
 }
 
 async function readBody(c: Ctx): Promise<Record<string, unknown>> {
@@ -51,7 +55,6 @@ async function readBody(c: Ctx): Promise<Record<string, unknown>> {
 
 const param = (c: Ctx, name: string) => c.req.param(name) ?? "";
 const actor = (c: Ctx) => ({ id: c.get("user").id, name: c.get("user").name });
-const today = () => new Date().toISOString().slice(0, 10);
 const berlinToday = () => berlinDay(new Date().toISOString());
 const berlinTime = () => new Date().toLocaleTimeString("en-GB", { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit", hour12: false });
 const deviceName = (o: RepairOrder) => [o.intake.device.brand, o.intake.device.model].filter(Boolean).join(" ") || "Gerät";
@@ -63,17 +66,6 @@ function audit(c: Ctx, action: string, detail: Record<string, unknown>) {
     .logEvent({ userId: user.id, userName: user.name, action, detail })
     .catch((err) => console.error("[audit]", err));
   c.executionCtx.waitUntil(done);
-}
-
-/** Firmendaten für die Rechnung, IBAN und BIC entschlüsselt. */
-async function companyForInvoice(env: Env, tenantId: string): Promise<InvoiceSnapshot["company"]> {
-  const company = await tenantStub(env, tenantId).getCompany();
-  return {
-    name: company?.name ?? "", street: company?.street ?? "", postalCode: company?.postalCode ?? "", city: company?.city ?? "",
-    phone: company?.phone ?? "", email: company?.email ?? "", taxNumber: company?.taxNumber ?? "", vatId: company?.vatId ?? "",
-    iban: await decryptField(env.DATA_KEY, company?.iban ?? ""), bic: await decryptField(env.DATA_KEY, company?.bic ?? ""),
-    bankName: company?.bankName ?? "", logoDataUrl: company?.logoDataUrl ?? "",
-  };
 }
 
 /** Kunde per E-Mail benachrichtigen, wenn eingeschaltet und eine Adresse da ist. Gibt zurück, ob gesendet wird. */
@@ -129,8 +121,12 @@ repairRoutes.post("/orders", async (c) => {
   if (Object.keys(errors).length) return fail(c, "checkFields", 400, { errors });
   const code = typeof body.unlockCode === "string" ? body.unlockCode.trim().slice(0, 100) : "";
   const customerId = typeof body.customerId === "string" ? body.customerId : null;
-  const result = await store(c.env, c.get("user").tenantId).create(
+  const tenantId = c.get("user").tenantId;
+  // Anzahlung bekommt einen Beleg in der Kasse
+  const depositMethod = (PAY_METHODS.includes(body.depositMethod as PayMethod) ? body.depositMethod : "cash") as PayMethod;
+  const result = await store(c.env, tenantId).create(
     { id: customerId, data: customer }, intake, code ? await encryptField(c.env.DATA_KEY, code) : null, actor(c),
+    intake.depositCents > 0 ? await posContext(c.env, tenantId, actor(c)) : null, depositMethod,
   );
   if (!result.ok) return moduleError(c, result.code);
   audit(c, "repairCreated", { number: result.value.number });
@@ -158,7 +154,8 @@ repairRoutes.put("/orders/:id", async (c) => {
   // Entsperr-Code: fehlt = unverändert, leer = löschen
   let code: string | null | undefined;
   if (typeof body.unlockCode === "string") code = body.unlockCode.trim() ? await encryptField(c.env.DATA_KEY, body.unlockCode.trim().slice(0, 100)) : null;
-  const result = await store(c.env, c.get("user").tenantId).update(param(c, "id"), customer, intake, code, actor(c));
+  const tenantId = c.get("user").tenantId;
+  const result = await store(c.env, tenantId).update(param(c, "id"), customer, intake, code, actor(c), intake.depositCents > 0 ? await posContext(c.env, tenantId, actor(c)) : null);
   if (!result.ok) return moduleError(c, result.code);
   return orderResponse(c, result.value);
 });
@@ -203,20 +200,6 @@ repairRoutes.post("/orders/:id/items", async (c) => {
 repairRoutes.delete("/orders/:id/items/:itemId", async (c) => {
   const result = await store(c.env, c.get("user").tenantId).removeItem(param(c, "id"), param(c, "itemId"), actor(c));
   if (!result.ok) return moduleError(c, result.code);
-  return orderResponse(c, result.value);
-});
-
-repairRoutes.post("/orders/:id/pickup", async (c) => {
-  const body = await readBody(c);
-  const payment = (PAYMENT_METHODS.includes(body.paymentMethod as PaymentMethod) ? body.paymentMethod : "cash") as PaymentMethod;
-  const tenantId = c.get("user").tenantId;
-  const result = await store(c.env, tenantId).pickUp(param(c, "id"), payment, await companyForInvoice(c.env, tenantId), actor(c), today(), body.loanerReturned === true);
-  if (!result.ok) return moduleError(c, result.code);
-  audit(c, "repairPickedUp", { number: result.value.number, invoice: result.value.invoice?.number ?? null });
-  if (isSignatureDataUrl(body.signature)) {
-    const signed = await store(c.env, tenantId).sign(result.value.id, "pickup", body.signature, actor(c));
-    if (signed.ok) return orderResponse(c, signed.value);
-  }
   return orderResponse(c, result.value);
 });
 
@@ -431,15 +414,8 @@ repairRoutes.delete("/loaners/:id", managers, async (c) => {
   return c.json({ loaners: result.value });
 });
 
-// ---------- Kasse und Auswertung ----------
+// ---------- Auswertung ----------
 
-
-repairRoutes.get("/cash", async (c) => {
-  const day = /^\d{4}-\d{2}-\d{2}$/.test(c.req.query("day") ?? "") ? c.req.query("day")! : berlinDay(new Date().toISOString());
-  const result = await store(c.env, c.get("user").tenantId).cashDay(day);
-  if (!result.ok) return moduleError(c, result.code);
-  return c.json(result.value);
-});
 
 repairRoutes.get("/stats", managers, async (c) => {
   const month = /^\d{4}-\d{2}$/.test(c.req.query("month") ?? "") ? c.req.query("month")! : berlinDay(new Date().toISOString()).slice(0, 7);
@@ -489,22 +465,6 @@ repairRoutes.get("/used/:id/id-number", async (c) => {
   if (!result.ok) return moduleError(c, result.code);
   audit(c, "usedIdNumberViewed", { id: param(c, "id") });
   return c.json({ idNumber: result.value ? await decryptField(c.env.DATA_KEY, result.value) : "" });
-});
-
-repairRoutes.post("/sales", async (c) => {
-  const body = await readBody(c);
-  const lines = (Array.isArray(body.lines) ? body.lines : []).slice(0, 100).map(sanitizeSaleLine);
-  if (!lines.length || lines.some((l) => !l)) return fail(c, "checkFields", 400);
-  const raw = (body.customer && typeof body.customer === "object" ? body.customer : {}) as Record<string, unknown>;
-  const text = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
-  const customer = { name: text(raw.name, 120), phone: text(raw.phone, 40), email: text(raw.email, 200), address: text(raw.address, 300) };
-  const payment = (PAYMENT_METHODS.includes(body.paymentMethod as PaymentMethod) ? body.paymentMethod : "cash") as PaymentMethod;
-  const tenantId = c.get("user").tenantId;
-  const customerId = typeof body.customerId === "string" ? body.customerId : null;
-  const result = await store(c.env, tenantId).sell(lines as SaleLine[], customer, payment, await companyForInvoice(c.env, tenantId), actor(c), today(), customerId);
-  if (!result.ok) return moduleError(c, result.code);
-  audit(c, "repairSale", { invoice: result.value.number, cents: result.value.totalCents });
-  return c.json({ invoice: result.value });
 });
 
 // ---------- Garantie ----------
@@ -671,6 +631,7 @@ async function publicOrder(env: Env, tenantId: string, token: string) {
 /** Nur was der Kunde sehen soll: kein Name, keine Telefonnummer, keine internen Notizen. */
 async function publicView(env: Env, tenantId: string, order: RepairOrder) {
   const company = await tenantStub(env, tenantId).getCompany();
+  const tax = await tenantStub(env, tenantId).getTaxSettings();
   const settings = await store(env, tenantId).settings();
   const smallBusiness = settings.ok ? settings.value.smallBusiness : false;
   const showPrices = ["quote", "waitingParts", "repairing", "ready", "notRepaired", "pickedUp"].includes(order.status);
@@ -679,6 +640,7 @@ async function publicView(env: Env, tenantId: string, order: RepairOrder) {
       name: company?.name ?? "", phone: company?.phone ?? "", email: company?.email ?? "", street: company?.street ?? "",
       postalCode: company?.postalCode ?? "", city: company?.city ?? "", logoDataUrl: company?.logoDataUrl ?? "",
     },
+    currency: tax?.currency ?? defaultTaxSettings(company?.country ?? "DE").currency,
     number: order.number,
     status: order.status,
     quote: order.quote,

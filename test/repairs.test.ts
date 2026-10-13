@@ -45,6 +45,7 @@ describe("Reparaturen: Rechnen", () => {
     expect(parseEuro("12.5")).toBe(1250);
     expect(parseEuro("")).toBe(0);
     expect(parseEuro("abc")).toBeNull();
+    expect(parseEuro("CHF 12.50")).toBe(1250);
   });
 });
 
@@ -68,7 +69,8 @@ describe("Reparaturen: Prüfungen", () => {
     expect(intake.approvedUpToCents).toBe(0);
     expect(intake.customerLang).toBe("de");
     expect(sanitizeItem({ name: "", qty: 1 })).toBeNull();
-    expect(sanitizeItem({ name: "Display", qty: 1, unitCents: 9900, vatRate: 5 })?.vatRate).toBe(19);
+    expect(sanitizeItem({ name: "Display", qty: 1, unitCents: 9900, vatRate: 8.1 })?.vatRate).toBe(8.1);
+    expect(sanitizeItem({ name: "Display", qty: 1, unitCents: 9900, vatRate: 150 })?.vatRate).toBe(19);
     expect(sanitizeRepairSettings({ warrantyMonths: 999 }).warrantyMonths).toBe(60);
   });
   it("erlaubt nur sinnvolle Statuswechsel", () => {
@@ -135,7 +137,7 @@ describe("Reparaturen: Werkstatt-Alltag", () => {
   });
   it("prüft Preise und Kundendaten", () => {
     expect(sanitizePrice({ service: "" })).toBeNull();
-    const p = sanitizePrice({ service: "Display tauschen", priceCents: 14900, vatRate: 5, deviceType: "toaster", minutes: -5, partId: "" });
+    const p = sanitizePrice({ service: "Display tauschen", priceCents: 14900, vatRate: 150, deviceType: "toaster", minutes: -5, partId: "" });
     expect(p).toMatchObject({ deviceType: "phone", vatRate: 19, minutes: 0, partId: null, priceCents: 14900 });
     expect(sanitizeCustomerCard({ name: " Ali ", email: "ALI@X.DE", note: "Stammkunde" })).toEqual({ name: "Ali", phone: "", email: "ali@x.de", address: "", note: "Stammkunde" });
   });

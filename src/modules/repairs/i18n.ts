@@ -1,3 +1,4 @@
+import { formatMoney } from "../../money";
 import { useEffect, useState } from "react";
 import { ApiError } from "../../api";
 import { useI18n, type Lang } from "../../i18n";
@@ -56,8 +57,8 @@ export function useRepairI18n() {
     return core.errorText(error);
   };
 
-  const euro = (cents: number) =>
-    new Intl.NumberFormat(core.lang, { style: "currency", currency: "EUR" }).format(cents / 100);
+  // Name „euro“ bleibt, rechnet aber in der Währung der Firma
+  const euro = (cents: number, code?: string) => formatMoney(cents, core.lang, code);
 
   const day = (iso: string, opts: Intl.DateTimeFormatOptions = { day: "2-digit", month: "2-digit", year: "numeric" }) =>
     iso ? new Intl.DateTimeFormat(core.lang, { ...opts, ...(iso.length === 10 ? { timeZone: "UTC" } : {}) }).format(new Date(iso.length === 10 ? `${iso}T00:00:00Z` : iso)) : "";

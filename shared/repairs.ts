@@ -1,6 +1,8 @@
 // Branchen-System „Handy- & IT-Service“: Reparaturaufträge von der Geräteannahme bis zur Abholung.
 // Regeln und Prüfungen, die Browser und Server gleich verwenden. Beträge immer in Cent.
 
+import { vatRateOf, type Payment, type PayMethod, type Totals } from "./pos";
+
 export const REPAIR_APP_ID = "handy-it";
 
 export const DEVICE_TYPES = ["phone", "tablet", "laptop", "pc", "watch", "console", "other"] as const;
@@ -133,12 +135,16 @@ export interface RepairInvoice {
   number: string;
   issuedAt: string;
   totalCents: number;
-  paymentMethod: PaymentMethod;
+  /** Hauptzahlart (bei geteilter Zahlung die größte); alle Zahlungen stehen im Beleg der Kasse */
+  paymentMethod: PayMethod;
   warrantyUntil: string;
+  /** Stornobeleg, falls die Rechnung storniert wurde */
+  canceledBy?: string | null;
   /** Unveränderliche Kopie aller Angaben zum Zeitpunkt der Rechnung */
   snapshot: InvoiceSnapshot;
 }
 
+/** Zahlarten für Auszahlungen im Ankauf */
 export const PAYMENT_METHODS = ["cash", "card", "transfer"] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
@@ -152,6 +158,9 @@ export interface InvoiceSnapshot {
   totals: Totals;
   depositCents: number;
   smallBusiness: boolean;
+  /** Zahlungen laut Kasse (ältere Rechnungen haben nur paymentMethod) */
+  payments?: Payment[];
+  changeCents?: number;
 }
 
 export interface RepairOrder {
@@ -247,39 +256,13 @@ export const DEFAULT_REPAIR_SETTINGS: RepairSettings = {
   booking: { enabled: false, weekdays: [1, 2, 3, 4, 5, 6], from: "10:00", to: "18:00", slotMinutes: 30, perSlot: 1, daysAhead: 14, note: "" },
 };
 
+/** Steuersätze, wenn die Firma nichts anderes eingestellt hat (Deutschland). */
 export const VAT_RATES = [19, 7, 0] as const;
 
 // ---------- Rechnen ----------
 
-export interface Totals {
-  grossCents: number;
-  netCents: number;
-  /** Steuerbetrag je Satz */
-  vat: { rate: number; netCents: number; vatCents: number }[];
-}
-
-/**
- * Summen aus Endpreisen. Die Steuer wird je Satz aus der Bruttosumme herausgerechnet,
- * damit die Rechnung auf den Cent mit dem Kassenbetrag übereinstimmt.
- */
-export function computeTotals(items: (Pick<RepairItem, "qty" | "unitCents" | "vatRate"> & { margin?: boolean })[], smallBusiness = false): Totals {
-  const byRate = new Map<number, number>();
-  let grossCents = 0;
-  for (const item of items) {
-    const line = Math.round(item.qty * item.unitCents);
-    grossCents += line;
-    // Gebrauchtgeräte nach § 25a UStG: keine Steuer auf der Rechnung ausweisen
-    const rate = smallBusiness || item.margin ? 0 : item.vatRate;
-    byRate.set(rate, (byRate.get(rate) ?? 0) + line);
-  }
-  const vat = [...byRate.entries()]
-    .sort((a, b) => b[0] - a[0])
-    .map(([rate, gross]) => {
-      const vatCents = Math.round((gross * rate) / (100 + rate));
-      return { rate, netCents: gross - vatCents, vatCents };
-    });
-  return { grossCents, netCents: vat.reduce((s, v) => s + v.netCents, 0), vat };
-}
+// Summen und Steuer rechnet die Kasse der Plattform; hier nur weitergereicht.
+export { computeTotals, vatRateOf, type Totals } from "./pos";
 
 /** Garantie-Ende als Tag (YYYY-MM-DD), Monate ab dem Abholtag. */
 export function warrantyEnd(day: string, months: number): string {
@@ -402,7 +385,7 @@ export function sanitizeItem(input: unknown): Omit<RepairItem, "id"> | null {
     name,
     qty,
     unitCents: cents(i.unitCents),
-    vatRate: VAT_RATES.includes(i.vatRate as 19) ? (i.vatRate as number) : 19,
+    vatRate: vatRateOf(i.vatRate),
   };
 }
 
@@ -418,7 +401,7 @@ export function sanitizePart(input: unknown): Omit<RepairPart, "id" | "stock"> &
     minStock: int(p.minStock),
     purchaseCents: cents(p.purchaseCents),
     priceCents: cents(p.priceCents),
-    vatRate: VAT_RATES.includes(p.vatRate as 19) ? (p.vatRate as number) : 19,
+    vatRate: vatRateOf(p.vatRate),
   };
 }
 
@@ -438,9 +421,9 @@ export function sanitizeRepairSettings(input: unknown): RepairSettings {
   };
 }
 
-/** Euro-Eingabe („12,50“, „12.5“, „1.234,00“) in Cent; null bei ungültiger Eingabe. */
+/** Betrag („12,50“, „12.5“, „1.234,00“) in Cent; null bei ungültiger Eingabe. */
 export function parseEuro(value: string): number | null {
-  let v = value.trim().replace(/\s|€/g, "");
+  let v = value.trim().replace(/\s|€|[$£¥₺₹₴₽]|^[A-Z]{3}|[A-Z]{3}$/g, "");
   if (!v) return 0;
   if (/,\d{1,2}$/.test(v)) v = v.replace(/\./g, "").replace(",", ".");
   else v = v.replace(/,/g, "");
@@ -610,7 +593,7 @@ export function sanitizePrice(input: unknown): Omit<RepairPrice, "id"> | null {
     model: str(p.model, 100),
     service,
     priceCents: cents(p.priceCents),
-    vatRate: VAT_RATES.includes(p.vatRate as 19) ? (p.vatRate as number) : 19,
+    vatRate: vatRateOf(p.vatRate),
     partId: typeof p.partId === "string" && p.partId ? p.partId.slice(0, 64) : null,
     minutes: typeof p.minutes === "number" && Number.isFinite(p.minutes) ? Math.min(Math.max(Math.round(p.minutes), 0), 10_000) : 0,
   };
@@ -639,24 +622,7 @@ export interface Loaner {
   lentAt: string | null;
 }
 
-// ---------- Kasse ----------
-
-export interface CashDay {
-  day: string;
-  entries: {
-    at: string;
-    kind: "repair" | "sale" | "deposit" | "purchase";
-    /** Rechnungsnummer, Auftragsnummer oder Ankaufsnummer */
-    ref: string;
-    /** Für Links: Auftrag, Ankauf */
-    refId: string;
-    label: string;
-    method: PaymentMethod;
-    /** Positiv = Einnahme, negativ = Auszahlung */
-    cents: number;
-  }[];
-  byMethod: Record<PaymentMethod, { inCents: number; outCents: number }>;
-}
+// ---------- Auswertung ----------
 
 export interface RepairStats {
   month: string;

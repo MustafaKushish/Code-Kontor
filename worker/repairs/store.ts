@@ -1,18 +1,20 @@
 import {
-  CLOSED_STATUSES, DEFAULT_REPAIR_SETTINGS, PICKUP_STATUSES, STATUS_GROUPS, canChangeStatus, computeTotals, invoiceNumber, normalizeSerial,
+  CLOSED_STATUSES, DEFAULT_REPAIR_SETTINGS, PICKUP_STATUSES, STATUS_GROUPS, canChangeStatus, normalizeSerial,
   warrantyEnd,
   type InvoiceSnapshot, type PaymentMethod, type QuoteDecision, type RepairCustomer, type RepairEvent, type RepairIntake, type RepairInvoice,
   type RepairItem, type RepairOrder, type RepairOrderRow, type RepairPart, type RepairSettings, type RepairStatus, type StatusGroup,
-  type InvoiceKind, type SaleLine, type UsedDevice, type UsedDeviceInput, type WarrantyRow,
-  type CashDay, type CheckList, type Loaner, type RepairOrderRow as OrderRow, type RepairPrice, type RepairStats,
+  type InvoiceKind, type UsedDevice, type UsedDeviceInput, type WarrantyRow,
+  type CheckList, type Loaner, type RepairOrderRow as OrderRow, type RepairPrice, type RepairStats,
   MAX_PHOTOS, type BookingInput, type BookingStatus, type OrderPartOrder, type PhotoStage, type PurchaseLineInput, type PurchaseOrder,
   type PurchaseStatus, type RepairBooking, type RepairPhoto, type Supplier,
 } from "../../shared/repairs";
+import { receiptNumber, type PayMethod, type PosArticle, type PosLine, type Receipt } from "../../shared/pos";
+import { PosError, type PosContext, type PosModule, type PosStore } from "../pos/store";
 
 // Daten des Systems „Handy- & IT-Service“ in der Datenbank der Firma.
 // Läuft im Durable Object der Firma; der Kern ruft alles über TenantDatabase.repairs() auf.
 
-export const REPAIR_MIGRATIONS: string[] = [
+export const REPAIR_MIGRATIONS: (string | ((sql: SqlStorage) => void))[] = [
   `CREATE TABLE repair_customers (
      id TEXT PRIMARY KEY, name TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '', email TEXT NOT NULL DEFAULT '',
      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
@@ -117,11 +119,56 @@ export const REPAIR_MIGRATIONS: string[] = [
    );
    CREATE INDEX repair_bookings_day ON repair_bookings(day, time);
    CREATE INDEX repair_bookings_status ON repair_bookings(status, day);`,
+  // Zentrale Kasse: Rechnungen kommen aus der Kasse der Plattform, bisherige werden dorthin übernommen
+  (sql) => {
+    // Neu aufbauen: ein Auftrag kann nach einem Storno erneut abgerechnet werden (order_id nicht mehr eindeutig)
+    sql.exec(`CREATE TABLE repair_invoices_new (
+       number TEXT PRIMARY KEY, year INTEGER NOT NULL, seq INTEGER NOT NULL, order_id TEXT NOT NULL,
+       total_cents INTEGER NOT NULL, payment_method TEXT NOT NULL, warranty_until TEXT NOT NULL DEFAULT '', snapshot TEXT NOT NULL,
+       issued_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')), kind TEXT NOT NULL DEFAULT 'repair', customer_id TEXT,
+       canceled_by TEXT, UNIQUE (year, seq)
+     );
+     INSERT INTO repair_invoices_new (number, year, seq, order_id, total_cents, payment_method, warranty_until, snapshot, issued_at, kind, customer_id)
+       SELECT number, year, seq, order_id, total_cents, payment_method, warranty_until, snapshot, issued_at, kind, customer_id FROM repair_invoices;
+     DROP TABLE repair_invoices;
+     ALTER TABLE repair_invoices_new RENAME TO repair_invoices;
+     CREATE INDEX repair_invoices_customer ON repair_invoices(customer_id);
+     CREATE INDEX repair_invoices_order ON repair_invoices(order_id);`);
+    const tax = sql.exec<{ value: string }>("SELECT value FROM settings WHERE key = 'tax'").toArray()[0];
+    const currency = tax ? ((JSON.parse(tax.value) as { currency?: string }).currency ?? "EUR") : "EUR";
+    for (const r of sql.exec<Row>("SELECT * FROM repair_invoices ORDER BY year, seq").toArray()) {
+      if (sql.exec("SELECT 1 FROM pos_receipts WHERE number = ?", S(r.number)).toArray().length) continue;
+      const snap = JSON.parse(S(r.snapshot)) as InvoiceSnapshot;
+      const total = Number(r.total_cents);
+      const deposit = snap.depositCents ?? 0;
+      const payment = S(r.payment_method) as PayMethod;
+      const repair = S(r.kind) !== "sale";
+      const refs = repair ? [{ source: "repairs" as const, kind: "order", refId: S(r.order_id), label: snap.orderNumber ? `#${snap.orderNumber}` : "" }] : [];
+      const receipt: Receipt = {
+        number: S(r.number), kind: "sale", issuedAt: S(r.issued_at), cashier: null, company: snap.company, currency,
+        customer: { id: r.customer_id === null ? null : S(r.customer_id), name: snap.customer.name, address: snap.customer.address ?? "", phone: snap.customer.phone, email: snap.customer.email },
+        lines: snap.items.map((i) => ({
+          source: "repairs", kind: repair ? `order:${i.kind}` : i.margin ? "used" : i.partId ? "part" : "other", refId: repair ? S(r.order_id) : i.partId,
+          name: i.name, qty: i.qty, unitCents: i.unitCents, vatRate: i.vatRate, ...(i.margin ? { margin: true } : {}), ...(i.warrantyUntil ? { warrantyUntil: i.warrantyUntil } : {}),
+        })),
+        refs, totals: snap.totals, depositCents: deposit, dueCents: total - deposit, payments: total - deposit ? [{ method: payment, cents: total - deposit }] : [],
+        givenCents: 0, changeCents: 0, smallBusiness: snap.smallBusiness, cancels: null, canceledBy: null, closing: 0, tse: null,
+      };
+      // Abschluss 0 = vor Einführung der Kasse, zählt in keinem Kassenstand mit
+      sql.exec(
+        `INSERT INTO pos_receipts (number, year, seq, kind, issued_at, cashier, total_cents, due_cents, payments, customer_name, label, data, closing)
+         VALUES (?, ?, ?, 'sale', ?, NULL, ?, ?, ?, ?, ?, ?, 0)`,
+        receipt.number, Number(r.year), Number(r.seq), receipt.issuedAt, total, receipt.dueCents, JSON.stringify(receipt.payments),
+        snap.customer.name, refs.map((x) => x.label).join(", ") || snap.items.slice(0, 3).map((i) => i.name).join(", "), JSON.stringify(receipt),
+      );
+      for (const ref of refs) sql.exec("INSERT INTO pos_refs (number, source, kind, ref_id) VALUES (?, 'repairs', 'order', ?)", receipt.number, ref.refId);
+    }
+  },
 ];
 
 type Row = Record<string, string | number | null>;
 export class RepairError extends Error {
-  constructor(public code: "notFound" | "statusNotAllowed" | "orderClosed" | "hasInvoice" | "alreadySold" | "emptySale" | "loanerOut" | "loanerBusy" | "tooManyPhotos" | "slotTaken" | "supplierUsed" | "purchaseLocked" | "emptyPurchase") {
+  constructor(public code: "notFound" | "statusNotAllowed" | "orderClosed" | "hasInvoice" | "alreadySold" | "emptySale" | "loanerOut" | "loanerBusy" | "tooManyPhotos" | "slotTaken" | "supplierUsed" | "purchaseLocked" | "emptyPurchase" | "oneOrderPerReceipt" | "depositUsed") {
     super(code);
   }
 }
@@ -134,13 +181,16 @@ export interface Actor {
 }
 
 export class RepairStore {
-  constructor(private sql: SqlStorage, private transaction: <T>(fn: () => T) => T) {}
+  constructor(private sql: SqlStorage, private transaction: <T>(fn: () => T) => T, private pos: PosStore) {}
 
   // ---------- Einstellungen ----------
 
   settings(): RepairSettings {
     const row = this.sql.exec<{ value: string }>("SELECT value FROM settings WHERE key = 'repairs'").toArray()[0];
-    return row ? { ...DEFAULT_REPAIR_SETTINGS, ...(JSON.parse(row.value) as Partial<RepairSettings>) } : DEFAULT_REPAIR_SETTINGS;
+    const settings = row ? { ...DEFAULT_REPAIR_SETTINGS, ...(JSON.parse(row.value) as Partial<RepairSettings>) } : DEFAULT_REPAIR_SETTINGS;
+    // Kleinunternehmer gilt für die ganze Firma und steht in der Kasse; ältere Einstellung bleibt, bis die Kasse eine hat
+    const pos = this.sql.exec<{ value: string }>("SELECT value FROM settings WHERE key = 'pos'").toArray()[0];
+    return pos ? { ...settings, smallBusiness: this.pos.settings().smallBusiness } : settings;
   }
 
   saveSettings(settings: RepairSettings): RepairSettings {
@@ -149,6 +199,7 @@ export class RepairStore {
        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`,
       JSON.stringify(settings),
     );
+    if (this.pos.settings().smallBusiness !== settings.smallBusiness) this.pos.saveSettings({ ...this.pos.settings(), smallBusiness: settings.smallBusiness });
     return settings;
   }
 
@@ -218,6 +269,8 @@ export class RepairStore {
     intake: RepairIntake,
     unlockCode: string | null,
     actor: Actor,
+    pos: PosContext | null = null,
+    depositMethod: PayMethod = "cash",
   ): RepairOrder {
     const id = crypto.randomUUID();
     this.transaction(() => {
@@ -235,6 +288,7 @@ export class RepairStore {
         id, number, customerId, JSON.stringify(intake), normalizeSerial(intake.device.serial), unlockCode, randomToken(), actor.name,
       );
       this.event(id, "received", "", intake.depositCents ? `deposit:${intake.depositCents}` : "", actor);
+      if (intake.depositCents > 0 && pos) this.bookDeposit(id, number, intake, depositMethod, pos);
     });
     return this.get(id)!;
   }
@@ -243,12 +297,12 @@ export class RepairStore {
     const r = this.sql.exec<Row>("SELECT * FROM repair_orders WHERE id = ?", id).toArray()[0];
     if (!r) return null;
     const customer = this.customer(S(r.customer_id)) ?? { id: S(r.customer_id), name: "", phone: "", email: "" };
-    const invoiceRow = this.sql.exec<Row>("SELECT * FROM repair_invoices WHERE order_id = ?", id).toArray()[0];
+    const invoiceRow = this.sql.exec<Row>("SELECT * FROM repair_invoices WHERE order_id = ? ORDER BY canceled_by IS NULL DESC, issued_at DESC LIMIT 1", id).toArray()[0];
     const invoice: RepairInvoice | null = invoiceRow
       ? {
           number: S(invoiceRow.number), issuedAt: S(invoiceRow.issued_at), totalCents: Number(invoiceRow.total_cents),
-          paymentMethod: S(invoiceRow.payment_method) as PaymentMethod, warrantyUntil: S(invoiceRow.warranty_until),
-          snapshot: JSON.parse(S(invoiceRow.snapshot)) as InvoiceSnapshot,
+          paymentMethod: S(invoiceRow.payment_method) as PayMethod, warrantyUntil: S(invoiceRow.warranty_until),
+          snapshot: JSON.parse(S(invoiceRow.snapshot)) as InvoiceSnapshot, canceledBy: invoiceRow.canceled_by ? S(invoiceRow.canceled_by) : null,
         }
       : null;
     return {
@@ -290,9 +344,13 @@ export class RepairStore {
     return r.unlock_code;
   }
 
-  update(id: string, customer: Omit<RepairCustomer, "id">, intake: RepairIntake, unlockCode: string | null | undefined, actor: Actor): RepairOrder {
+  update(id: string, customer: Omit<RepairCustomer, "id">, intake: RepairIntake, unlockCode: string | null | undefined, actor: Actor, pos: PosContext | null = null): RepairOrder {
     const order = this.open(id);
+    // Eine gebuchte Anzahlung ändert sich nur über die Kasse (Storno); neu dazu kommt sie mit Beleg
+    const addDeposit = order.intake.depositCents === 0 && intake.depositCents > 0 && pos;
+    if (order.intake.depositCents > 0 || !pos) intake = { ...intake, depositCents: order.intake.depositCents };
     this.transaction(() => {
+      if (addDeposit) this.bookDeposit(id, order.number, intake, "cash", pos);
       this.sql.exec("UPDATE repair_customers SET name = ?, phone = ?, email = ? WHERE id = ?", customer.name, customer.phone, customer.email, order.customer.id);
       this.sql.exec(
         "UPDATE repair_orders SET intake = ?, serial = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?",
@@ -370,49 +428,11 @@ export class RepairStore {
     return this.get(id)!;
   }
 
-  /**
-   * Abholung: Rechnung mit fortlaufender Nummer, Garantie-Ende, Status „abgeholt“.
-   * Der Entsperr-Code wird dabei gelöscht, er wird nicht mehr gebraucht.
-   */
-  pickUp(id: string, payment: PaymentMethod, company: InvoiceSnapshot["company"], actor: Actor, today: string, loanerReturned = false): RepairOrder {
-    const order = this.get(id);
-    if (!order) throw new RepairError("notFound");
-    if (!PICKUP_STATUSES.includes(order.status)) throw new RepairError("statusNotAllowed");
-    if (order.loaner && !loanerReturned) throw new RepairError("loanerOut");
-    const settings = this.settings();
-    const totals = computeTotals(order.items, settings.smallBusiness);
-    const repaired = order.status === "ready";
-    this.transaction(() => {
-      if (totals.grossCents > 0 || order.intake.depositCents > 0) {
-        const { year, seq } = this.nextInvoice(today);
-        const snapshot: InvoiceSnapshot = {
-          company, customer: { name: order.customer.name, phone: order.customer.phone, email: order.customer.email }, orderNumber: order.number,
-          device: order.intake.device, items: order.items, totals, depositCents: order.intake.depositCents, smallBusiness: settings.smallBusiness,
-        };
-        this.sql.exec(
-          "INSERT INTO repair_invoices (number, year, seq, order_id, total_cents, payment_method, warranty_until, snapshot, customer_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-          invoiceNumber(year, seq), year, seq, id, totals.grossCents, payment, repaired ? warrantyEnd(today, settings.warrantyMonths) : "", JSON.stringify(snapshot),
-          order.customer.id,
-        );
-      }
-      if (order.loaner) {
-        this.sql.exec("UPDATE repair_loaners SET order_id = NULL, lent_at = NULL WHERE id = ?", order.loaner.id);
-        this.event(id, null, "loanerBack", order.loaner.name, actor);
-      }
-      this.sql.exec(
-        "UPDATE repair_orders SET status = 'pickedUp', unlock_code = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?",
-        id,
-      );
-      this.event(id, "pickedUp", "", "", actor);
-    });
-    return this.get(id)!;
-  }
-
   /** Auftrag löschen, nur ohne Rechnung. Teile gehen zurück ins Lager. */
   remove(id: string, actor: Actor): void {
     const order = this.get(id);
     if (!order) throw new RepairError("notFound");
-    if (order.invoice) throw new RepairError("hasInvoice");
+    if (order.invoice || this.pos.hasReceipts("repairs", id)) throw new RepairError("hasInvoice");
     this.transaction(() => {
       if (order.status !== "canceled") for (const item of order.items) if (item.partId && this.part(item.partId)) this.moveStock(item.partId, Math.ceil(item.qty), "orderDeleted", id, actor);
       this.sql.exec("UPDATE repair_loaners SET order_id = NULL, lent_at = NULL WHERE order_id = ?", id);
@@ -427,18 +447,18 @@ export class RepairStore {
     });
   }
 
-  invoices(year: number): { number: string; kind: InvoiceKind; issuedAt: string; totalCents: number; paymentMethod: PaymentMethod; orderId: string; orderNumber: number | null; customerName: string }[] {
+  invoices(year: number): { number: string; kind: InvoiceKind; issuedAt: string; totalCents: number; paymentMethod: PayMethod; orderId: string; orderNumber: number | null; customerName: string; canceledBy: string | null }[] {
     return this.sql
       .exec<Row>(
-        `SELECT i.number, i.kind, i.issued_at, i.total_cents, i.payment_method, i.order_id, i.snapshot FROM repair_invoices i WHERE i.year = ? ORDER BY i.seq DESC`,
+        `SELECT i.number, i.kind, i.issued_at, i.total_cents, i.payment_method, i.order_id, i.snapshot, i.canceled_by FROM repair_invoices i WHERE i.year = ? ORDER BY i.seq DESC`,
         year,
       )
       .toArray()
       .map((r) => {
         const snap = JSON.parse(S(r.snapshot)) as InvoiceSnapshot;
         return {
-          number: S(r.number), kind: S(r.kind) as InvoiceKind, issuedAt: S(r.issued_at), totalCents: Number(r.total_cents), paymentMethod: S(r.payment_method) as PaymentMethod,
-          orderId: S(r.order_id), orderNumber: snap.orderNumber, customerName: snap.customer.name,
+          number: S(r.number), kind: S(r.kind) as InvoiceKind, issuedAt: S(r.issued_at), totalCents: Number(r.total_cents), paymentMethod: S(r.payment_method) as PayMethod,
+          orderId: S(r.order_id), orderNumber: snap.orderNumber, customerName: snap.customer.name, canceledBy: r.canceled_by ? S(r.canceled_by) : null,
         };
       });
   }
@@ -518,7 +538,8 @@ export class RepairStore {
     return r
       ? {
           number: S(r.number), kind: S(r.kind) as InvoiceKind, orderId: S(r.order_id), issuedAt: S(r.issued_at), totalCents: Number(r.total_cents),
-          paymentMethod: S(r.payment_method) as PaymentMethod, warrantyUntil: S(r.warranty_until), snapshot: JSON.parse(S(r.snapshot)) as InvoiceSnapshot,
+          paymentMethod: S(r.payment_method) as PayMethod, warrantyUntil: S(r.warranty_until), snapshot: JSON.parse(S(r.snapshot)) as InvoiceSnapshot,
+          canceledBy: r.canceled_by ? S(r.canceled_by) : null,
         }
       : null;
   }
@@ -560,6 +581,9 @@ export class RepairStore {
       id, number, JSON.stringify(rest.device), normalizeSerial(rest.device.serial), rest.grade, rest.note, rest.purchaseCents, rest.priceCents,
       JSON.stringify(rest.seller), idNumber, rest.payout, actor.name,
     );
+    // Auszahlung an den Verkäufer gehört ins Kassenbuch (bar aus der Kasse)
+    if (rest.purchaseCents > 0)
+      this.pos.addMove({ kind: "payout", method: rest.payout, cents: -rest.purchaseCents, note: usedLabel(rest.device), ref: `A-${number}`, source: "repairs", refId: id }, actor);
     return this.usedDevice(id)!;
   }
 
@@ -572,6 +596,7 @@ export class RepairStore {
       "UPDATE repair_used_devices SET device = ?, serial = ?, grade = ?, note = ?, purchase_cents = ?, price_cents = ? WHERE id = ?",
       JSON.stringify(input.device), normalizeSerial(input.device.serial), input.grade, input.note, input.purchaseCents, input.priceCents, id,
     );
+    this.pos.updateModuleMove("repairs", id, { cents: -input.purchaseCents, method: before.payout, note: usedLabel(input.device) });
     return this.usedDevice(id)!;
   }
 
@@ -582,51 +607,167 @@ export class RepairStore {
     this.sql.exec("DELETE FROM repair_used_devices WHERE id = ?", id);
   }
 
-  /**
-   * Verkauf von Zubehör, Teilen und Gebrauchtgeräten mit Rechnung im selben Nummernkreis.
-   * Gebrauchtgeräte werden nach § 25a UStG (Differenzbesteuerung) ohne ausgewiesene Steuer berechnet.
-   */
-  sell(lines: SaleLine[], customer: InvoiceSnapshot["customer"], payment: PaymentMethod, company: InvoiceSnapshot["company"], actor: Actor, today: string, customerId: string | null = null): RepairInvoice & { kind: InvoiceKind; orderId: string } {
-    if (!lines.length) throw new RepairError("emptySale");
-    const settings = this.settings();
-    const saleId = crypto.randomUUID();
-    const warranty = warrantyEnd(today, settings.usedWarrantyMonths);
-    let number = "";
-    this.transaction(() => {
-      const items: InvoiceSnapshot["items"] = [];
-      for (const line of lines) {
+  // ---------- Kasse ----------
+
+  /** Anzahlung bei der Annahme: eigener Beleg in der Kasse, wird bei der Abholung abgezogen. */
+  private bookDeposit(id: string, number: number, intake: RepairIntake, method: PayMethod, pos: PosContext) {
+    const label = `#${number}${usedLabel(intake.device) ? ` · ${usedLabel(intake.device)}` : ""}`;
+    this.pos.book(
+      {
+        kind: "deposit",
+        lines: [{ source: "repairs", kind: "deposit", refId: id, name: label, qty: 1, unitCents: intake.depositCents, vatRate: 0 }],
+        refs: [{ source: "repairs", kind: "deposit", refId: id, label }],
+        depositCents: 0,
+        payments: [{ method, cents: intake.depositCents }],
+        customer: null,
+      },
+      pos,
+    );
+  }
+
+  /** Anbindung an die Kasse der Plattform: Zubehör, Gebrauchtgeräte und Abholungen werden dort bezahlt. */
+  posModule(): PosModule {
+    return {
+      articles: (query) => this.posArticles(query),
+      prepare: (line, ctx) => {
+        const settings = this.settings();
         if (line.kind === "part") {
-          if (!this.part(line.refId!)) throw new RepairError("notFound");
-          this.moveStock(line.refId!, -Math.ceil(line.qty), "sold", null, actor);
+          const part = line.refId ? this.part(line.refId) : null;
+          if (!part) throw new RepairError("notFound");
+          return { lines: [{ ...line, name: line.name || part.name, qty: Math.max(1, Math.round(line.qty)) }] };
         }
         if (line.kind === "used") {
-          const used = this.usedDevice(line.refId!);
+          const used = line.refId ? this.usedDevice(line.refId) : null;
           if (!used) throw new RepairError("notFound");
           if (used.status === "sold") throw new RepairError("alreadySold");
+          const warranty = warrantyEnd(ctx.today, settings.usedWarrantyMonths);
+          return { lines: [{ ...line, name: line.name || `${usedLabel(used.device)} · A-${used.number}`, qty: 1, vatRate: 0, margin: true, ...(warranty ? { warrantyUntil: warranty } : {}) }] };
         }
-        items.push({
-          id: crypto.randomUUID(), kind: line.kind === "other" ? "other" : "part", partId: line.kind === "part" ? line.refId : null, name: line.name,
-          qty: line.qty, unitCents: line.unitCents, vatRate: line.kind === "used" ? 0 : line.vatRate,
-          ...(line.kind === "used" ? { margin: true, warrantyUntil: warranty } : {}),
-        });
-      }
-      const totals = computeTotals(items, settings.smallBusiness);
-      const { year, seq } = this.nextInvoice(today);
-      number = invoiceNumber(year, seq);
-      const snapshot: InvoiceSnapshot = { company, customer, orderNumber: null, device: null, items, totals, depositCents: 0, smallBusiness: settings.smallBusiness };
+        if (line.kind === "order") {
+          const order = line.refId ? this.get(line.refId) : null;
+          if (!order) throw new RepairError("notFound");
+          if (!PICKUP_STATUSES.includes(order.status)) throw new RepairError("statusNotAllowed");
+          if (order.loaner && ctx.options?.loanerReturned !== true) throw new RepairError("loanerOut");
+          const label = `#${order.number}${usedLabel(order.intake.device) ? ` · ${usedLabel(order.intake.device)}` : ""}`;
+          return {
+            lines: order.items.map((i): PosLine => ({ source: "repairs", kind: `order:${i.kind}`, refId: order.id, name: i.name, qty: i.qty, unitCents: i.unitCents, vatRate: i.vatRate })),
+            refs: [{ source: "repairs", kind: "order", refId: order.id, label }],
+            depositCents: order.intake.depositCents,
+            customer: { id: order.customer.id, name: order.customer.name, address: order.customer.address ?? "", phone: order.customer.phone, email: order.customer.email },
+          };
+        }
+        throw new RepairError("notFound");
+      },
+      booked: (receipt, lines, refs, ctx) => this.posBooked(receipt, lines, refs, ctx),
+      canceled: (original, cancel, actor) => this.posCanceled(original, cancel, actor),
+    };
+  }
+
+  private posArticles(query: string): PosArticle[] {
+    const parts = this.parts(query)
+      .sort((a, b) => (a.category === b.category ? 0 : a.category === "accessory" ? -1 : 1))
+      .slice(0, 40)
+      .map((p): PosArticle => ({ source: "repairs", kind: "part", refId: p.id, name: p.name, detail: p.sku, priceCents: p.priceCents, vatRate: p.vatRate, stock: p.stock }));
+    const used = this.usedDevices("inStock", query)
+      .slice(0, 20)
+      .map((d): PosArticle => ({
+        source: "repairs", kind: "used", refId: d.id, name: [usedLabel(d.device), d.device.storage].filter(Boolean).join(" · "), detail: `A-${d.number}`,
+        priceCents: d.priceCents, vatRate: 0, margin: true, single: true,
+      }));
+    const orders = this.list("pickup", query, 20)
+      .orders.map((row) => this.get(row.id)!)
+      .map((o): PosArticle => ({
+        source: "repairs", kind: "order", refId: o.id, name: `#${o.number}${usedLabel(o.intake.device) ? ` · ${usedLabel(o.intake.device)}` : ""}`, detail: o.customer.name,
+        priceCents: o.items.reduce((sum, i) => sum + Math.round(i.qty * i.unitCents), 0), vatRate: 0, single: true,
+        depositCents: o.intake.depositCents, ...(o.loaner ? { loaner: o.loaner.name } : {}),
+      }));
+    return [...orders, ...used, ...parts];
+  }
+
+  /** Nach dem Bezahlen: Lager, Gebrauchtgeräte, Abholung und die Rechnung für Kundenkartei und Garantie. */
+  private posBooked(receipt: Receipt | null, lines: PosLine[], refs: { kind: string; refId: string }[], ctx: PosContext) {
+    const orderRefs = refs.filter((r) => r.kind === "order");
+    if (orderRefs.length > 1) throw new RepairError("oneOrderPerReceipt");
+    const settings = this.settings();
+    const order = orderRefs[0] ? this.get(orderRefs[0].refId) : null;
+    if (orderRefs[0] && (!order || !PICKUP_STATUSES.includes(order.status))) throw new RepairError("statusNotAllowed");
+
+    if (receipt && (order || lines.some((l) => l.kind === "part" || l.kind === "used"))) {
+      const used = lines.find((l) => l.kind === "used");
+      const warranty = order ? (order.status === "ready" ? warrantyEnd(ctx.today, settings.warrantyMonths) : "") : used?.warrantyUntil ?? "";
+      const others = receipt.lines.filter((l) => !(l.source === "repairs" && l.kind.startsWith("order:")));
+      const items: InvoiceSnapshot["items"] = [
+        ...(order?.items ?? []),
+        ...others.map((l) => ({
+          id: crypto.randomUUID(), kind: l.kind === "part" ? ("part" as const) : ("other" as const), partId: l.kind === "part" ? l.refId : null,
+          name: l.name, qty: l.qty, unitCents: l.unitCents, vatRate: l.vatRate, ...(l.margin ? { margin: true } : {}), ...(l.warrantyUntil ? { warrantyUntil: l.warrantyUntil } : {}),
+        })),
+      ];
+      const c = receipt.customer;
+      const snapshot: InvoiceSnapshot = {
+        company: receipt.company, customer: { name: c?.name ?? "", phone: c?.phone ?? "", email: c?.email ?? "", address: c?.address ?? "" },
+        orderNumber: order?.number ?? null, device: order?.intake.device ?? null, items, totals: receipt.totals, depositCents: receipt.depositCents,
+        smallBusiness: receipt.smallBusiness, payments: receipt.payments, changeCents: receipt.changeCents,
+      };
+      const main = [...receipt.payments].sort((a, b) => Math.abs(b.cents) - Math.abs(a.cents))[0]?.method ?? "cash";
+      const customerId = order?.customer.id ?? (c?.id && this.customer(c.id) ? c.id : null);
       this.sql.exec(
-        "INSERT INTO repair_invoices (number, year, seq, order_id, total_cents, payment_method, warranty_until, snapshot, kind, customer_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'sale', ?)",
-        number, year, seq, saleId, totals.grossCents, payment, lines.some((l) => l.kind === "used") ? warranty : "", JSON.stringify(snapshot),
-        customerId && this.customer(customerId) ? customerId : null,
+        "INSERT INTO repair_invoices (number, year, seq, order_id, total_cents, payment_method, warranty_until, snapshot, kind, customer_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        receipt.number, Number(receipt.number.slice(3, 7)), Number(receipt.number.slice(8)), order?.id ?? crypto.randomUUID(), receipt.totals.grossCents, main,
+        warranty, JSON.stringify(snapshot), order ? "repair" : "sale", customerId,
       );
-      for (const line of lines)
-        if (line.kind === "used")
-          this.sql.exec(
-            "UPDATE repair_used_devices SET status = 'sold', sold_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), sale_invoice = ?, buyer_name = ?, warranty_until = ?, sold_cents = ? WHERE id = ?",
-            number, customer.name, warranty, line.unitCents, line.refId,
-          );
-    });
-    return this.invoice(number)!;
+    }
+
+    for (const line of lines) {
+      if (line.kind === "part" && line.refId && this.part(line.refId)) this.moveStock(line.refId, -Math.ceil(line.qty), "sold", order?.id ?? null, ctx.actor);
+      if (line.kind === "used") {
+        const done = this.sql.exec(
+          "UPDATE repair_used_devices SET status = 'sold', sold_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), sale_invoice = ?, buyer_name = ?, warranty_until = ?, sold_cents = ? WHERE id = ? AND status != 'sold'",
+          receipt?.number ?? null, receipt?.customer?.name ?? "", line.warrantyUntil ?? "", line.unitCents, line.refId,
+        );
+        if (!done.rowsWritten) throw new RepairError("alreadySold");
+      }
+    }
+
+    if (order) {
+      if (order.loaner) {
+        this.sql.exec("UPDATE repair_loaners SET order_id = NULL, lent_at = NULL WHERE id = ?", order.loaner.id);
+        this.event(order.id, null, "loanerBack", order.loaner.name, ctx.actor);
+      }
+      // Der Entsperr-Code wird nicht mehr gebraucht
+      this.sql.exec("UPDATE repair_orders SET status = 'pickedUp', unlock_code = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?", order.id);
+      this.event(order.id, "pickedUp", "", receipt?.number ?? "", ctx.actor);
+    }
+  }
+
+  /** Storno in der Kasse: Ware zurück ins Lager, Gebrauchtgerät wieder zu verkaufen, Auftrag wieder abholbereit. */
+  private posCanceled(original: Receipt, cancel: Receipt, actor: Actor) {
+    for (const line of original.lines) {
+      if (line.source !== "repairs") continue;
+      if (line.kind === "part" && line.refId && this.part(line.refId)) this.moveStock(line.refId, Math.ceil(line.qty), "returned", null, actor);
+      if (line.kind === "used")
+        this.sql.exec(
+          "UPDATE repair_used_devices SET status = 'inStock', sold_at = NULL, sale_invoice = NULL, buyer_name = NULL, warranty_until = '', sold_cents = 0 WHERE id = ? AND sale_invoice = ?",
+          line.refId, original.number,
+        );
+    }
+    for (const ref of original.refs) {
+      if (ref.source !== "repairs") continue;
+      const order = this.get(ref.refId);
+      if (!order) continue;
+      if (ref.kind === "order" && order.status === "pickedUp") {
+        const before = [...order.history].reverse().find((e) => e.status && e.status !== "pickedUp")?.status ?? "ready";
+        this.sql.exec("UPDATE repair_orders SET status = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?", before, order.id);
+        this.event(order.id, before, "receiptCanceled", cancel.number, actor);
+      }
+      if (ref.kind === "deposit") {
+        // Schon mit der Rechnung verrechnet: erst die Rechnung stornieren
+        if (order.status === "pickedUp" && order.intake.depositCents > 0) throw new RepairError("depositUsed");
+        this.sql.exec("UPDATE repair_orders SET intake = ? WHERE id = ?", JSON.stringify({ ...order.intake, depositCents: 0 }), order.id);
+        this.event(order.id, null, "depositCanceled", cancel.number, actor);
+      }
+    }
+    this.sql.exec("UPDATE repair_invoices SET canceled_by = ? WHERE number = ?", cancel.number, original.number);
   }
 
   // ---------- Garantie ----------
@@ -637,7 +778,7 @@ export class RepairStore {
     const repairs = this.sql
       .exec<Row>(
         `SELECT i.number, i.order_id, i.issued_at, i.warranty_until, i.snapshot FROM repair_invoices i
-          WHERE i.kind = 'repair' AND i.warranty_until != '' ORDER BY i.warranty_until DESC LIMIT 500`,
+          WHERE i.kind = 'repair' AND i.warranty_until != '' AND i.canceled_by IS NULL ORDER BY i.warranty_until DESC LIMIT 500`,
       )
       .toArray()
       .map((r): WarrantyRow => {
@@ -788,7 +929,7 @@ export class RepairStore {
       .exec<Row>(
         `SELECT c.*,
                 (SELECT COUNT(*) FROM repair_orders o WHERE o.customer_id = c.id) AS orders,
-                (SELECT COALESCE(SUM(total_cents), 0) FROM repair_invoices i WHERE i.customer_id = c.id) AS total,
+                (SELECT COALESCE(SUM(total_cents), 0) FROM repair_invoices i WHERE i.customer_id = c.id AND i.canceled_by IS NULL) AS total,
                 MAX(c.created_at, COALESCE((SELECT MAX(created_at) FROM repair_orders o WHERE o.customer_id = c.id), ''),
                     COALESCE((SELECT MAX(issued_at) FROM repair_invoices i WHERE i.customer_id = c.id), '')) AS last_at
            FROM repair_customers c
@@ -851,50 +992,7 @@ export class RepairStore {
     this.sql.exec("DELETE FROM repair_customers WHERE id = ?", id);
   }
 
-  // ---------- Kasse und Auswertung ----------
-
-  /**
-   * Alle Zahlungen eines Tages (deutsche Ortszeit): Rechnungen, Anzahlungen bei Annahme, Auszahlungen im Ankauf.
-   * Anzahlungen werden als Bargeld gezählt; bei der Abholung wird nur der Rest kassiert.
-   */
-  cashDay(day: string): CashDay {
-    const local = berlinDay;
-    const from = new Date(Date.parse(`${day}T00:00:00Z`) - 86_400_000).toISOString();
-    const to = new Date(Date.parse(`${day}T00:00:00Z`) + 2 * 86_400_000).toISOString();
-    const entries: CashDay["entries"] = [];
-    for (const r of this.sql.exec<Row>("SELECT number, kind, issued_at, total_cents, payment_method, order_id, snapshot FROM repair_invoices WHERE issued_at >= ? AND issued_at < ?", from, to).toArray()) {
-      if (local(S(r.issued_at)) !== day) continue;
-      const snap = JSON.parse(S(r.snapshot)) as InvoiceSnapshot;
-      const paid = Number(r.total_cents) - (snap.depositCents ?? 0);
-      entries.push({
-        at: S(r.issued_at), kind: S(r.kind) === "sale" ? "sale" : "repair", ref: S(r.number), refId: S(r.order_id),
-        label: [snap.customer.name, snap.orderNumber ? `#${snap.orderNumber}` : ""].filter(Boolean).join(" · "),
-        method: S(r.payment_method) as PaymentMethod, cents: paid,
-      });
-    }
-    for (const r of this.sql
-      .exec<Row>(
-        `SELECT e.at, e.note, o.id, o.number, c.name FROM repair_events e JOIN repair_orders o ON o.id = e.order_id JOIN repair_customers c ON c.id = o.customer_id
-          WHERE e.note LIKE 'deposit:%' AND e.at >= ? AND e.at < ?`,
-        from, to,
-      )
-      .toArray()) {
-      if (local(S(r.at)) !== day) continue;
-      entries.push({ at: S(r.at), kind: "deposit", ref: `#${r.number}`, refId: S(r.id), label: S(r.name), method: "cash", cents: Number(S(r.note).slice(8)) || 0 });
-    }
-    for (const r of this.sql.exec<Row>("SELECT * FROM repair_used_devices WHERE purchased_at >= ? AND purchased_at < ?", from, to).toArray()) {
-      if (local(S(r.purchased_at)) !== day) continue;
-      const u = usedFromRow(r);
-      entries.push({ at: u.purchasedAt, kind: "purchase", ref: `A-${u.number}`, refId: u.id, label: [u.device.brand, u.device.model].filter(Boolean).join(" "), method: u.payout, cents: -u.purchaseCents });
-    }
-    entries.sort((a, b) => a.at.localeCompare(b.at));
-    const byMethod = { cash: { inCents: 0, outCents: 0 }, card: { inCents: 0, outCents: 0 }, transfer: { inCents: 0, outCents: 0 } };
-    for (const e of entries) {
-      if (e.cents >= 0) byMethod[e.method].inCents += e.cents;
-      else byMethod[e.method].outCents -= e.cents;
-    }
-    return { day, entries, byMethod };
-  }
+  // ---------- Auswertung ----------
 
   /** Monatsauswertung. `month` = YYYY-MM, Tage nach deutscher Ortszeit. */
   stats(month: string): RepairStats {
@@ -908,7 +1006,7 @@ export class RepairStore {
     const revenue = { repairCents: 0, saleCents: 0, invoices: 0 };
     const daily = new Map<string, number>();
     const services = new Map<string, { n: number; cents: number }>();
-    for (const r of this.sql.exec<Row>("SELECT kind, issued_at, total_cents, snapshot FROM repair_invoices WHERE issued_at >= ? AND issued_at < ?", from, to).toArray()) {
+    for (const r of this.sql.exec<Row>("SELECT kind, issued_at, total_cents, snapshot FROM repair_invoices WHERE issued_at >= ? AND issued_at < ? AND canceled_by IS NULL", from, to).toArray()) {
       if (!inMonth(S(r.issued_at))) continue;
       const cents = Number(r.total_cents);
       revenue.invoices++;
@@ -1289,12 +1387,6 @@ export class RepairStore {
     if (!this.sql.exec("SELECT 1 FROM repair_orders WHERE id = ?", id).toArray().length) throw new RepairError("notFound");
   }
 
-  private nextInvoice(today: string) {
-    const year = Number(today.slice(0, 4));
-    const seq = (this.sql.exec<{ n: number | null }>("SELECT MAX(seq) AS n FROM repair_invoices WHERE year = ?", year).one().n ?? 0) + 1;
-    return { year, seq };
-  }
-
   private open(id: string): RepairOrder {
     const order = this.get(id);
     if (!order) throw new RepairError("notFound");
@@ -1393,4 +1485,9 @@ function usedFromRow(r: Row): UsedDevice {
 function randomToken(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(18));
   return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** Gerät kurz, z. B. „Apple iPhone 13“. */
+function usedLabel(device: { brand: string; model: string }) {
+  return [device.brand, device.model].filter(Boolean).join(" ");
 }

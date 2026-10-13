@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CalendarClock, CalendarDays, ClipboardList, Hourglass, PackageCheck, PackageSearch, Plus, Repeat, Search, Settings2, ShieldCheck, ShoppingCart, TriangleAlert, Users, Wallet, Wrench } from "lucide-react";
+import { CalendarClock, CalendarDays, ClipboardList, Hourglass, PackageCheck, PackageSearch, Plus, Repeat, Search, Receipt, Settings2, ShieldCheck, ShoppingCart, TriangleAlert, Users, Wrench } from "lucide-react";
 import { api, type Me } from "../../api";
 import { AppIcon, Link } from "../../components";
 import { navigate } from "../../router";
@@ -11,13 +11,12 @@ import { OrderDetail } from "./OrderDetail";
 import { StockTab } from "./Stock";
 import { InvoicesTab } from "./Invoices";
 import { SettingsTab } from "./Settings";
-import { SalesTab } from "./Sales";
 import { UsedTab } from "./Used";
 import { WarrantyTab } from "./Warranty";
 import { PricesPanel } from "./Prices";
 import { LoanersPanel } from "./Loaners";
 import { CustomersTab, CustomerCard } from "./Customers";
-import { CashDayPanel, StatsPanel } from "./Cash";
+import { StatsPanel } from "./Stats";
 import { BookingsTab } from "./Bookings";
 import { PurchasesPanel, SuppliersPanel } from "./Purchases";
 import { StatusPill, deviceLabel } from "./parts";
@@ -34,25 +33,26 @@ export default function RepairsApp({ me, path }: { me: Me; path: string }) {
 
   if (!ready) return null;
 
+  // Verkauf und Tagesabschluss laufen über die Kasse der Plattform
+  if (section === "verkauf" || section === "kasse") return <Redirect to="/kasse" />;
   if (section === "neu") return <IntakeForm />;
   if (section === "auftrag" && id) return sub === "bearbeiten" ? <IntakeForm editId={id} /> : <OrderDetail id={id} me={me} />;
 
-  const SECTIONS: Record<string, string> = { termine: "bookings", verkauf: "sales", ankauf: "used", kunden: "customers", lager: "stock", garantie: "warranty", kasse: "cash", rechnungen: "cash" };
+  const SECTIONS: Record<string, string> = { termine: "bookings", ankauf: "used", kunden: "customers", lager: "stock", garantie: "warranty", rechnungen: "invoices" };
   const tab = SECTIONS[section ?? ""] ?? (section === "einstellungen" && isManager ? "settings" : "orders");
   const tabs = [
     { id: "orders", to: BASE, label: r("tabs.orders"), icon: ClipboardList },
     { id: "bookings", to: `${BASE}/termine`, label: r("tabs.bookings"), icon: CalendarDays },
-    { id: "sales", to: `${BASE}/verkauf`, label: r("tabs.sales"), icon: ShoppingCart },
     { id: "used", to: `${BASE}/ankauf`, label: r("tabs.used"), icon: Repeat },
     { id: "customers", to: `${BASE}/kunden`, label: r("tabs.customers"), icon: Users },
     { id: "stock", to: `${BASE}/lager`, label: r("tabs.stock"), icon: PackageSearch },
     { id: "warranty", to: `${BASE}/garantie`, label: r("tabs.warranty"), icon: ShieldCheck },
-    { id: "cash", to: `${BASE}/kasse`, label: r("tabs.cash"), icon: Wallet },
+    { id: "invoices", to: `${BASE}/rechnungen`, label: r("tabs.invoices"), icon: Receipt },
     ...(isManager ? [{ id: "settings", to: `${BASE}/einstellungen`, label: r("tabs.settings"), icon: Settings2 }] : []),
   ];
   const STOCK_SUBS: Record<string, string> = { preise: "prices", leihgeraete: "loaners", bestellungen: "purchases", lieferanten: "suppliers" };
   const stockSub = STOCK_SUBS[id ?? ""] ?? "parts";
-  const cashSub = section === "rechnungen" ? "invoices" : id === "auswertung" && isManager ? "stats" : "day";
+  const invoicesSub = id === "auswertung" && isManager ? "stats" : "invoices";
 
   return (
     <div className="stack-lg repairs">
@@ -62,7 +62,10 @@ export default function RepairsApp({ me, path }: { me: Me; path: string }) {
           <h1 className="display">{appText(app.id).name}</h1>
           <p className="muted">{appText(app.id).tagline}</p>
         </div>
-        <Link to={`${BASE}/neu`} className="button primary repairs-new"><Plus size={18} /> {r("newOrder")}</Link>
+        <div className="row gap repairs-new">
+          <Link to="/kasse" className="button"><ShoppingCart size={18} /> {r("tabs.cash")}</Link>
+          <Link to={`${BASE}/neu`} className="button primary"><Plus size={18} /> {r("newOrder")}</Link>
+        </div>
       </header>
 
       <div className="page-tabs repairs-tabs" role="tablist">
@@ -75,7 +78,6 @@ export default function RepairsApp({ me, path }: { me: Me; path: string }) {
 
       {tab === "orders" && <OrdersTab />}
       {tab === "bookings" && <BookingsTab tenantId={me.user.tenantId} isManager={isManager} />}
-      {tab === "sales" && <SalesTab />}
       {tab === "used" && <UsedTab isManager={isManager} />}
       {tab === "customers" && (id ? <CustomerCard id={id} isManager={isManager} /> : <CustomersTab />)}
       {tab === "stock" && (
@@ -94,22 +96,27 @@ export default function RepairsApp({ me, path }: { me: Me; path: string }) {
           {stockSub === "suppliers" && <SuppliersPanel isManager={isManager} />}
         </>
       )}
-      {tab === "cash" && (
+      {tab === "invoices" && (
         <>
-          <SubNav current={cashSub} items={[
-            { id: "day", to: `${BASE}/kasse`, label: r("tabs.cashDay") },
-            ...(isManager ? [{ id: "stats", to: `${BASE}/kasse/auswertung`, label: r("tabs.stats") }] : []),
-            { id: "invoices", to: `${BASE}/rechnungen`, label: r("tabs.invoices") },
-          ]} />
-          {cashSub === "day" && <CashDayPanel />}
-          {cashSub === "stats" && <StatsPanel />}
-          {cashSub === "invoices" && <InvoicesTab />}
+          {isManager && (
+            <SubNav current={invoicesSub} items={[
+              { id: "invoices", to: `${BASE}/rechnungen`, label: r("tabs.invoices") },
+              { id: "stats", to: `${BASE}/rechnungen/auswertung`, label: r("tabs.stats") },
+            ]} />
+          )}
+          {invoicesSub === "stats" && <StatsPanel />}
+          {invoicesSub === "invoices" && <InvoicesTab />}
         </>
       )}
       {tab === "warranty" && <WarrantyTab />}
       {tab === "settings" && <SettingsTab />}
     </div>
   );
+}
+
+function Redirect({ to }: { to: string }) {
+  useEffect(() => navigate(to), []);
+  return null;
 }
 
 function SubNav({ current, items }: { current: string; items: { id: string; to: string; label: string }[] }) {

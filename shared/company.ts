@@ -1,6 +1,8 @@
 // Firmendaten, die ein Kunde im Einrichtungs-Assistenten einträgt.
 // Wird im Browser (Formular) und im Worker (Speichern) gleich geprüft.
 
+import { countryTax } from "./countries";
+
 export interface CompanyProfile {
   name: string;
   legalForm: string;
@@ -91,14 +93,19 @@ export function validateCompany(profile: CompanyProfile): CompanyErrors {
   if (!/^[A-Z]{2}$/.test(profile.country)) errors.country = "countryRequired";
   if (profile.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profile.email))
     errors.email = "emailInvalid";
-  if (!profile.taxNumber.trim() && !profile.vatId.trim())
+  // Steuernummer und IBAN: Pflicht und Format je nach Land
+  const tax = countryTax(profile.country);
+  if (tax.vat.length && !profile.taxNumber.trim() && !profile.vatId.trim())
     errors.taxNumber = "taxRequired";
-  if (profile.taxNumber.trim() && !isValidTaxNumber(profile.taxNumber))
+  if (profile.country === "DE" && profile.taxNumber.trim() && !isValidTaxNumber(profile.taxNumber))
     errors.taxNumber = "taxNumberInvalid";
-  if (profile.vatId.trim() && !isValidVatId(profile.vatId))
+  // USt-IdNr. mit Ländercode gibt es nur in der EU; sonst z. B. CHE-…, TRN oder GSTIN frei eintragen
+  if (profile.vatId.trim() && (tax.eu ? !isValidVatId(profile.vatId) : profile.vatId.length > 30))
     errors.vatId = "vatIdInvalid";
-  if (!profile.iban.trim()) errors.iban = "ibanRequired";
-  else if (!isValidIban(profile.iban)) errors.iban = "ibanInvalid";
+  if (tax.iban) {
+    if (!profile.iban.trim()) errors.iban = "ibanRequired";
+    else if (!isValidIban(profile.iban)) errors.iban = "ibanInvalid";
+  } else if (profile.iban.length > 40) errors.iban = "ibanInvalid";
   if (profile.bic.trim() && !isValidBic(profile.bic)) errors.bic = "bicInvalid";
   if (profile.logoDataUrl) {
     if (!/^data:image\/(png|jpeg|svg\+xml|webp);base64,/.test(profile.logoDataUrl))
