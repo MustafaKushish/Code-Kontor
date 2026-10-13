@@ -6,20 +6,11 @@
 .pos .chips.wrap, .pay-panel .chips.wrap { flex-wrap: wrap; overflow: visible; }
 .pos-tabs { overflow-x: auto; scrollbar-width: none; }
 
-.pos-layout { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(320px, 1fr); gap: 18px; align-items: start; }
-.pos-toolbar { align-items: center; }
-.pos-toolbar .search { flex: 1; min-width: 200px; max-width: none; }
+.pos-toolbar { display: flex; align-items: center; gap: 8px; }
+.pos-toolbar .search { flex: 1; min-width: 0; max-width: none; }
+.pos .button.icon-only { width: 46px; padding: 0; justify-content: center; flex: none; }
 .pos-group-title { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin: 0; }
 .pos-group-title.pad { padding: 10px 14px 4px; }
-.pos-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
-.pos-tile {
-  display: grid; gap: 6px; align-content: space-between; min-height: 84px; padding: 12px 14px; border-radius: 18px; text-align: start;
-  border: 1px solid var(--line); background: var(--panel); color: var(--ink); font: inherit; cursor: pointer; box-shadow: var(--shadow-sm);
-  transition: transform 0.1s, border-color 0.15s;
-}
-.pos-tile:hover { border-color: var(--brand); }
-.pos-tile:active { transform: scale(0.98); }
-.pos-tile .list-main strong { font-size: 0.98rem; }
 .pos-articles { max-height: 440px; overflow: auto; }
 .pos-article { border: none; background: none; font: inherit; color: inherit; text-align: start; cursor: pointer; width: 100%; }
 .pos-article:disabled { opacity: 0.45; cursor: default; }
@@ -30,20 +21,76 @@
 .pos-icon.in { background: var(--success-soft); color: var(--success); }
 .pos-icon.out { background: color-mix(in srgb, var(--error) 12%, transparent); color: var(--error); }
 
-.pos-cart { position: sticky; top: 16px; }
-.pos-cart h2 { display: inline-flex; align-items: center; gap: 8px; }
-.notice.pos-done { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 4px 10px; }
-.pos-done .list-main { min-width: 0; display: grid; }
-.pos-done .row { grid-column: 1 / -1; flex-wrap: wrap; }
-.pos-line { display: grid; gap: 6px; padding: 8px 0; }
-.pos-line + .pos-line { border-top: 1px solid var(--line); }
-.pos-line .row { align-items: flex-start; }
-.pos-line-controls { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
-.pos-line-sum { text-align: end; font-weight: 600; font-variant-numeric: tabular-nums; margin: 0; }
-.pos-qty { min-width: 24px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; }
-.pos-line-price { width: 130px; }
-.pos-customer-toggle { display: inline-flex; align-items: center; gap: 6px; justify-self: start; }
-.pos-pay { min-height: 56px; font-size: 1.1rem; }
+
+/* Verkaufen: links der Bon mit Ziffernblock, rechts Warengruppen und Artikelraster */
+.pos-register { display: grid; grid-template-columns: minmax(300px, 380px) minmax(0, 1fr); gap: 16px; height: max(560px, calc(100dvh - 300px)); }
+.pos-order { grid-column: 1; grid-row: 1; }
+.pos-products { grid-column: 2; grid-row: 1; }
+.pos-products { display: flex; flex-direction: column; gap: 10px; min-height: 0; min-width: 0; }
+.pos-groups { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; flex: none; padding-bottom: 2px; }
+.pos-groups button {
+  flex: none; min-height: 40px; padding: 6px 14px; border-radius: 12px; border: 1px solid var(--line-strong); background: var(--panel);
+  color: var(--ink); font: inherit; font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.pos-groups button.active { background: var(--primary-bg); border-color: var(--primary-bg); color: var(--primary-fg); }
+.pos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; align-content: start; overflow-y: auto; min-height: 0; padding: 2px 2px 8px; }
+.pos-product {
+  display: grid; grid-template-rows: 1fr auto auto; gap: 4px; min-height: 104px; padding: 12px; border-radius: 14px; text-align: start;
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink); font: inherit; cursor: pointer; box-shadow: var(--shadow-sm);
+  transition: transform 0.08s, border-color 0.15s;
+}
+.pos-product:hover { border-color: var(--brand); }
+.pos-product:active { transform: scale(0.97); }
+.pos-product:disabled { opacity: 0.45; cursor: default; transform: none; }
+.pos-product.order { border-color: color-mix(in srgb, var(--success) 45%, var(--line)); }
+.pos-product-name { font-size: 0.95rem; line-height: 1.25; overflow-wrap: anywhere; }
+.pos-product small { font-size: 0.78rem; }
+.pos-product-price { font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.pos-order { display: flex; flex-direction: column; min-height: 0; border: 1px solid var(--line); border-radius: 18px; background: var(--panel); overflow: hidden; }
+.pos-order-lines { flex: 1; overflow-y: auto; min-height: 80px; }
+.pos-order-empty { padding: 18px 16px; margin: 0; }
+.pos-order-line {
+  display: grid; grid-template-columns: 2.2em minmax(0, 1fr) auto; gap: 8px; align-items: start; width: 100%; padding: 9px 14px;
+  border: none; border-bottom: 1px solid var(--line); background: none; color: var(--ink); font: inherit; text-align: start; cursor: pointer;
+}
+.pos-order-line.selected { background: color-mix(in srgb, var(--brand) 12%, transparent); }
+.pos-order-line.return .pos-order-sum, .pos-order-line.return .pos-order-qty { color: var(--error); }
+.pos-order-qty { font-weight: 700; font-variant-numeric: tabular-nums; }
+.pos-order-name { display: grid; min-width: 0; overflow-wrap: anywhere; }
+.pos-order-name small { color: var(--muted); font-size: 0.8rem; }
+.pos-order-sum { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pos-order-totals { padding: 8px 14px; border-top: 1px solid var(--line-strong); display: grid; gap: 2px; }
+.pos-order-totals p { display: flex; justify-content: space-between; margin: 0; font-variant-numeric: tabular-nums; font-size: 0.88rem; }
+.pos-order-totals .grand { font-size: 1.2rem; font-weight: 700; color: var(--ink); }
+.pos-order-actions { display: flex; gap: 6px; padding: 6px 10px; border-top: 1px solid var(--line); }
+.pos-order-actions .button { min-height: 40px; padding: 4px 12px; font-size: 0.92rem; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pos-order-actions .button.set { border-color: var(--brand); color: var(--brand); }
+.pos-pad { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--line); }
+.pos-pad button {
+  min-height: 52px; border: none; border-inline-end: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--panel-2);
+  color: var(--ink); font: inherit; font-size: 1.1rem; font-weight: 600; cursor: pointer; display: grid; place-items: center;
+}
+.pos-pad button:nth-child(4n) { border-inline-end: none; }
+.pos-pad button:active:not(:disabled) { filter: brightness(0.92); }
+.pos-pad button:disabled { color: var(--muted); cursor: default; }
+.pos-pad button.mode { background: var(--panel); font-size: 1rem; }
+.pos-pad button.mode.active { box-shadow: inset 0 0 0 2px var(--brand); color: var(--brand); }
+.pos-pad button.sign { background: var(--warn-soft); }
+.pos-pad button.back { background: color-mix(in srgb, var(--error) 18%, var(--panel)); color: var(--error); }
+.pos-pay { min-height: 60px; font-size: 1.15rem; border-radius: 0; border: none; background: var(--primary-bg); color: var(--primary-fg); justify-content: center; }
+.pos-pay:disabled { opacity: 0.5; }
+.pos-done { display: grid; justify-items: center; gap: 8px; padding: 22px 16px; text-align: center; color: var(--success); }
+.pos-done strong { color: var(--ink); font-size: 1.05rem; }
+.pos-done-change { font-size: 1.4rem; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+.pos-switch { display: none; }
+.pos-menu { position: relative; }
+.pos-menu-list { position: absolute; inset-inline-end: 0; top: calc(100% + 6px); z-index: 20; display: grid; min-width: 220px; padding: 6px; }
+.pos-menu-list button {
+  display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 8px 12px; border: none; border-radius: 10px;
+  background: none; color: var(--ink); font: inherit; text-align: start; cursor: pointer;
+}
+.pos-menu-list button:hover { background: var(--panel-2); }
 
 .pay-due { display: flex; justify-content: space-between; align-items: baseline; font-size: 1.3rem; padding: 14px 16px; border-radius: 16px; background: var(--panel-2); margin: 0; }
 .pay-due strong { font-size: 1.7rem; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
@@ -88,26 +135,32 @@
 .pos-scan-note .button { margin-inline-start: auto; }
 .pos-scan-ready { display: inline-flex; align-items: center; gap: 6px; margin: 0; }
 .pos-camera { width: 100%; max-height: 50vh; border-radius: 14px; background: #000; object-fit: cover; }
-.pos-kiosk { min-height: 100dvh; padding: 14px 18px 18px; display: grid; gap: 14px; align-content: start; background: var(--bg); }
+.pos-kiosk { height: 100dvh; padding: 12px 16px 16px; display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: 10px; background: var(--bg); overflow: hidden; }
 .pos-kiosk-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .pos-kiosk-bar > strong { font-size: 1.15rem; }
-.pos-layout.pos-big { grid-template-columns: minmax(0, 1.6fr) minmax(340px, 1fr); }
-.pos-layout.pos-big .pos-tiles { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
-.pos-layout.pos-big .pos-tile { min-height: 96px; }
-.pos-layout.pos-big .pos-tile .list-main strong { font-size: 1.1rem; }
-.pos-layout.pos-big .pos-articles { max-height: 58vh; }
-.pos-layout.pos-big .pos-pay { min-height: 68px; font-size: 1.25rem; }
+.pos-kiosk .pos-tse { margin: 0; padding: 6px 12px; font-size: 0.8rem; }
+.pos-kiosk .pos-register { grid-row: 3; height: auto; min-height: 0; }
+.pos-register.pos-big { grid-template-columns: minmax(320px, 420px) minmax(0, 1fr); }
+.pos-register.pos-big .pos-product { min-height: 116px; }
+.pos-register.pos-big .pos-product-name { font-size: 1.05rem; }
+.pos-register.pos-big .pos-pad button { min-height: 58px; }
 .pos-settings { max-width: 760px; }
 .pos-settings h2 { display: inline-flex; align-items: center; gap: 8px; }
 
-@media (max-width: 900px) {
-  .pos-layout { grid-template-columns: minmax(0, 1fr); }
-  .pos-cart { position: static; order: -1; }
-  .pos-articles { max-height: 360px; }
-}
-@media (max-width: 560px) {
-  .pos-layout.pos-big { grid-template-columns: minmax(0, 1fr); }
-  .pos-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 860px) {
+  /* Handy: Artikel und Bon im Wechsel, unten umschalten */
+  .pos-order, .pos-products { grid-column: 1; }
+  .pos-register, .pos-register.pos-big { grid-template-columns: minmax(0, 1fr); height: calc(100dvh - 210px); min-height: 480px; padding-bottom: 56px; position: relative; }
+  .pos-kiosk .pos-register { height: auto; min-height: 0; }
+  .pos-register.show-products .pos-order, .pos-register.show-order .pos-products { display: none; }
+  .pos-switch {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 6px; position: absolute; inset-inline: 0; bottom: 0; height: 50px;
+  }
+  .pos-switch button { border: 1px solid var(--line-strong); border-radius: 12px; background: var(--panel); color: var(--ink); font: inherit; font-weight: 600; cursor: pointer; }
+  .pos-switch button.active { background: var(--primary-bg); border-color: var(--primary-bg); color: var(--primary-fg); }
+  .pos-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pos-kiosk { padding: 10px; }
+  .pos-kiosk .pos-tse { display: none; }
 }
 
 /* ---------- Bon (80 mm) ---------- */
@@ -122,6 +175,7 @@
 .bon-head strong { font-size: 11pt; }
 .bon-title { text-align: center; border-block: 1px dashed #000; padding: 4px 0; }
 .bon-lines { display: grid; gap: 4px; }
+.bon-lines small { display: block; }
 .bon-lines p, .bon-totals p { display: flex; justify-content: space-between; gap: 8px; }
 .bon-lines small { color: #333; }
 .bon-totals { display: grid; gap: 2px; border-top: 1px dashed #000; padding-top: 4px; }

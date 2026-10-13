@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Barcode, Camera, CheckCircle2, Minus, Package, PackageCheck, Plus, Printer, ScanBarcode, Search, ShoppingCart, Smartphone, Trash2, UserRound } from "lucide-react";
+import { Camera, CheckCircle2, Delete, NotebookPen, PlusCircle, Printer, ScanBarcode, Search, Trash2, UserRound } from "lucide-react";
 import { api } from "../api";
 import { Field } from "../components";
 import { formatRate, standardVat, vatChoices } from "../money";
@@ -11,7 +11,7 @@ import { Dialog, MoneyInput } from "./ui";
 import { CameraScan, cameraScanAvailable, useScanner } from "./scanner";
 import { ItemDialog } from "./Items";
 
-/** Eine Zeile im Warenkorb. Aufträge stehen als ein Block; ihre Positionen rechnet der Server. */
+/** Eine Zeile im Bon. Aufträge stehen als ein Block; ihre Positionen rechnet der Server. */
 interface CartLine extends PosLine {
   key: string;
   single?: boolean;
@@ -20,8 +20,12 @@ interface CartLine extends PosLine {
   loaner?: string;
 }
 
+type PadMode = "qty" | "discount" | "price";
+
 const EMPTY_CUSTOMER: PosCustomer = { id: null, name: "", address: "", phone: "", email: "" };
 const CART_KEY = "ck-pos-cart";
+const ALL = "";
+const TILES = "*";
 
 function loadCart(): CartLine[] {
   try {
@@ -31,78 +35,115 @@ function loadCart(): CartLine[] {
   }
 }
 
-const ICONS: Record<string, typeof Package> = { item: Barcode, order: PackageCheck, used: Smartphone, part: Package };
+const lineTotal = (l: { qty: number; unitCents: number }) => Math.round(l.qty * l.unitCents);
+/** Zahl aus dem Ziffernblock, z. B. „1,5“ → 1.5 */
+const padNumber = (text: string) => Number(text.replace(",", ".")) || 0;
 
-/** Verkaufen: scannen, suchen oder antippen, Warenkorb, bezahlen, Beleg drucken. */
+/**
+ * Verkaufen wie an einer Ladenkasse: Warengruppen oben, Artikel zum Antippen, rechts der Bon
+ * mit Ziffernblock (Menge, Rabatt, Preis), Scanner und Artikelnummer über die Suche.
+ */
 export function Register({ isManager, kiosk }: { isManager: boolean; kiosk?: boolean }) {
   const { p, money, posError } = usePosI18n();
   const [settings] = usePosSettings();
+  const [catalog, setCatalog] = useState<PosArticle[]>([]);
+  const [group, setGroup] = useState(ALL);
   const [query, setQuery] = useState("");
-  const [articles, setArticles] = useState<PosArticle[]>([]);
+  const [results, setResults] = useState<PosArticle[] | null>(null);
   const [cart, setCart] = useState<CartLine[]>(loadCart);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [mode, setMode] = useState<PadMode>("qty");
+  const [buffer, setBuffer] = useState<string | null>(null);
   const [customer, setCustomer] = useState<PosCustomer>(EMPTY_CUSTOMER);
-  const [showCustomer, setShowCustomer] = useState(false);
-  const [free, setFree] = useState(false);
-  const [paying, setPaying] = useState(false);
+  const [note, setNote] = useState("");
+  const [dialog, setDialog] = useState<"customer" | "note" | "free" | "pay" | "camera" | null>(null);
+  const [creating, setCreating] = useState<string | null>(null);
   const [loanerBack, setLoanerBack] = useState(false);
   const [done, setDone] = useState<{ receipt: Receipt | null } | null>(null);
   const [printing, setPrinting] = useState<"bon" | "a4" | null>(null);
-  const [error, setError] = useState("");
   const [scanNote, setScanNote] = useState<{ code: string; unknown: boolean } | null>(null);
-  const [creating, setCreating] = useState<string | null>(null);
-  const [camera, setCamera] = useState(false);
+  const [view, setView] = useState<"products" | "order">("products");
+  const [error, setError] = useState("");
 
   useEffect(() => {
     try {
       sessionStorage.setItem(CART_KEY, JSON.stringify(cart));
     } catch {
-      // ohne Speicher geht der Warenkorb beim Neuladen verloren
+      // ohne Speicher geht der Bon beim Neuladen verloren
     }
   }, [cart]);
 
-  const search = (q: string) =>
-    api<{ articles: PosArticle[] }>(`/pos/articles?q=${encodeURIComponent(q)}`)
-      .then((d) => setArticles(d.articles))
-      .catch((e) => setError(posError(e)));
+  const loadCatalog = () =>
+    api<{ articles: PosArticle[] }>("/pos/catalog")
+      .then((d) => (setCatalog(d.articles), d.articles))
+      .catch((e) => (setError(posError(e)), [] as PosArticle[]));
 
+  // Erster Aufruf; dabei auch die Übergabe aus einem System, z. B. „In der Kasse abrechnen“ im Reparaturauftrag
   useEffect(() => {
-    const timer = setTimeout(() => search(query), query ? 200 : 0);
+    const orderId = new URLSearchParams(location.search).get("auftrag");
+    if (orderId) history.replaceState(null, "", location.pathname);
+    loadCatalog().then((articles) => {
+      if (!orderId) return;
+      const article = articles.find((a) => a.kind === "order" && a.refId === orderId);
+      if (article) add(article);
+      else setError(p("moduleErrors.statusNotAllowed"));
+    });
+  }, []);
+
+  // Suche über alle Systeme (auch Kundennamen bei Aufträgen); leer = Raster nach Warengruppe
+  useEffect(() => {
+    if (!query.trim()) return setResults(null);
+    const timer = setTimeout(
+      () => api<{ articles: PosArticle[] }>(`/pos/articles?q=${encodeURIComponent(query.trim())}`).then((d) => setResults(d.articles)).catch((e) => setError(posError(e))),
+      200,
+    );
     return () => clearTimeout(timer);
   }, [query]);
 
-  // Übergabe aus einem System, z. B. „In der Kasse abrechnen“ im Reparaturauftrag
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const orderId = params.get("auftrag");
-    if (!orderId) return;
-    history.replaceState(null, "", location.pathname);
-    api<{ articles: PosArticle[] }>("/pos/articles?q=")
-      .then((d) => {
-        const article = d.articles.find((a) => a.kind === "order" && a.refId === orderId);
-        if (article) add(article);
-        else setError(p("moduleErrors.statusNotAllowed"));
-      })
-      .catch((e) => setError(posError(e)));
-  }, []);
+  const groups = useMemo(() => {
+    const seen: string[] = [];
+    for (const a of catalog) if (!seen.includes(a.group ?? "")) seen.push(a.group ?? "");
+    return seen;
+  }, [catalog]);
+  const hasTiles = catalog.some((a) => a.tile);
+  const groupLabel = (g: string) => (g.startsWith("@") ? p(`moduleGroups.${g.slice(1)}`) : g || p("sell.noGroup"));
+  const shown = results ?? (group === ALL ? catalog : group === TILES ? catalog.filter((a) => a.tile) : catalog.filter((a) => (a.group ?? "") === group));
 
   const add = (a: PosArticle) => {
     setDone(null);
     setScanNote(null);
+    setError("");
     setCart((c) => {
       // Gleicher Artikel erhöht die Menge; freie Beträge nur, wenn Name, Preis und Satz gleich sind
       const same = a.refId
-        ? c.find((l) => l.source === a.source && l.kind === a.kind && l.refId === a.refId)
+        ? c.find((l) => l.source === a.source && l.kind === a.kind && l.refId === a.refId && !l.discountPct && l.qty > 0)
         : c.find((l) => l.source === a.source && !l.refId && l.name === a.name && l.unitCents === a.priceCents && l.vatRate === a.vatRate);
       if (same && a.single) return c;
-      if (same) return c.map((l) => (l === same ? { ...l, qty: l.qty + 1 } : l));
+      if (same) {
+        setSelected(same.key);
+        return c.map((l) => (l === same ? { ...l, qty: l.qty + 1 } : l));
+      }
+      const key = crypto.randomUUID();
+      setSelected(key);
       return [...c, {
-        key: crypto.randomUUID(), source: a.source, kind: a.kind, refId: a.refId,
+        key, source: a.source, kind: a.kind, refId: a.refId,
         name: a.name, qty: 1, unitCents: a.priceCents, vatRate: a.vatRate, margin: a.margin, single: a.single, stock: a.stock, depositCents: a.depositCents, loaner: a.loaner,
       }];
     });
+    setMode("qty");
+    setBuffer(null);
+  };
+  const change = (key: string, patch: Partial<CartLine>) => setCart((c) => c.map((l) => (l.key === key ? { ...l, ...patch } : l)));
+  const remove = (key: string) => {
+    setCart((c) => {
+      const rest = c.filter((l) => l.key !== key);
+      setSelected(rest.at(-1)?.key ?? null);
+      return rest;
+    });
+    setBuffer(null);
   };
 
-  /** Barcode vom Scanner, von der Kamera oder Enter in der Suche. Gibt zurück, ob etwas gefunden wurde. */
+  /** Barcode vom Scanner, von der Kamera oder Enter in der Suche (auch Artikelnummer). Gibt zurück, ob etwas gefunden wurde. */
   const scan = async (raw: string) => {
     const code = cleanBarcode(raw);
     if (!code) return false;
@@ -115,7 +156,7 @@ export function Register({ isManager, kiosk }: { isManager: boolean; kiosk?: boo
         return true;
       }
       if (hits.length > 1) {
-        setArticles(hits);
+        setResults(hits);
         setScanNote({ code, unknown: false });
         return true;
       }
@@ -130,196 +171,230 @@ export function Register({ isManager, kiosk }: { isManager: boolean; kiosk?: boo
     const q = query.trim();
     if (!q) return;
     if (!q.includes(" ") && (await scan(q))) return;
-    // Kein Barcode: Enter nimmt den einzigen Treffer der Suche
+    // Kein Code: Enter nimmt den einzigen Treffer der Suche
     if (/\d/.test(q) && !q.includes(" ")) return;
     setScanNote(null);
-    const only = articles.filter((a) => !(a.single && cart.some((l) => l.kind === a.kind && l.refId === a.refId)));
+    const only = (results ?? []).filter((a) => !inCart(a));
     if (only.length === 1) {
       add(only[0]!);
       setQuery("");
     }
   };
 
-  useScanner((code) => void scan(code), !paying && !free && !creating && !camera && !printing);
-  const change = (key: string, patch: Partial<CartLine>) => setCart((c) => c.map((l) => (l.key === key ? { ...l, ...patch } : l)));
-  const remove = (key: string) => setCart((c) => c.filter((l) => l.key !== key));
+  const busy = dialog !== null || creating !== null || printing !== null;
+  useScanner((code) => void scan(code), !busy);
 
-  const totals = useMemo(() => computeTotals(cart, settings?.smallBusiness ?? false), [cart, settings]);
+  // ---------- Ziffernblock ----------
+
+  const line = cart.find((l) => l.key === selected) ?? null;
+  const fixed = (l: CartLine) => l.kind === "order";
+  const canQty = (l: CartLine) => !fixed(l) && !l.single;
+  const canSign = (l: CartLine) => l.source === "pos";
+
+  const apply = (l: CartLine, m: PadMode, text: string) => {
+    const n = padNumber(text);
+    if (m === "qty") return change(l.key, { qty: (l.qty < 0 ? -1 : 1) * Math.min(Math.abs(n), 10_000) });
+    if (m === "price") return change(l.key, { unitCents: Math.round(n * 100) * (l.unitCents < 0 ? -1 : 1), discountPct: undefined, listCents: undefined });
+    const pct = Math.min(Math.max(Math.round(n), 0), 100);
+    const list = l.listCents ?? l.unitCents;
+    change(l.key, pct ? { discountPct: pct, listCents: list, unitCents: Math.round((list * (100 - pct)) / 100) } : { discountPct: undefined, listCents: undefined, unitCents: list });
+  };
+
+  const press = (key: string) => {
+    if (!line || fixed(line)) return;
+    if (mode === "qty" && !canQty(line)) return;
+    if (key === "sign") {
+      if (!canSign(line)) return;
+      if (mode === "price") change(line.key, { unitCents: -line.unitCents });
+      else change(line.key, { qty: -line.qty });
+      return;
+    }
+    if (key === "back") {
+      const text = (buffer ?? "").slice(0, -1);
+      // Leere Menge löscht die Zeile, wie an jeder Ladenkasse
+      if (mode === "qty" && !buffer) return remove(line.key);
+      setBuffer(text);
+      apply(line, mode, text);
+      return;
+    }
+    if (key === "," && (buffer ?? "").includes(",")) return;
+    const text = ((buffer ?? "") + key).slice(0, 9);
+    setBuffer(text);
+    apply(line, mode, text);
+  };
+  const pickMode = (m: PadMode) => (setMode(m), setBuffer(null));
+
+  const select = (key: string) => {
+    setSelected(key);
+    setMode("qty");
+    setBuffer(null);
+  };
+
+  // ---------- Summen und Bezahlen ----------
+
+  const payable = cart.filter((l) => l.qty !== 0);
+  const totals = useMemo(() => computeTotals(payable, settings?.smallBusiness ?? false), [cart, settings]);
+  const taxes = totals.vat.reduce((s, v) => s + v.vatCents, 0);
   const deposit = cart.reduce((s, l) => s + (l.depositCents ?? 0), 0);
   const due = totals.grossCents - deposit;
   const loaner = cart.find((l) => l.loaner)?.loaner;
+  const count = cart.reduce((s, l) => s + (canQty(l) ? Math.abs(l.qty) : 1), 0);
 
   const pay = async (payments: { method: string; cents: number }[]) => {
     const { receipt } = await api<{ receipt: Receipt | null }>("/pos/checkout", {
       method: "POST",
       body: {
-        lines: cart.map(({ key, single, stock, depositCents, loaner: _, ...l }) => l),
+        lines: payable.map(({ key, single, stock, depositCents, loaner: _, ...l }) => l),
         payments,
-        customer: showCustomer ? customer : null,
+        customer: customer.name || customer.address || customer.phone || customer.email ? customer : null,
+        note,
         options: { loanerReturned: loanerBack },
       },
     });
-    setPaying(false);
+    setDialog(null);
     setCart([]);
+    setSelected(null);
     setCustomer(EMPTY_CUSTOMER);
-    setShowCustomer(false);
+    setNote("");
     setLoanerBack(false);
     setQuery("");
     setDone({ receipt });
-    setScanNote(null);
-    search("");
+    setView("order");
+    loadCatalog();
     if (receipt && settings?.print !== "ask") setPrinting(settings?.print ?? null);
   };
 
-  const tiles = articles.filter((a) => a.tile);
-  const groups = (["item", "order", "used", "part"] as const)
-    .map((kind) => ({ kind, items: articles.filter((a) => a.kind === kind && !a.tile) }))
-    .filter((g) => g.items.length);
   const inCart = (a: PosArticle) => !!a.single && cart.some((l) => l.kind === a.kind && l.refId === a.refId);
 
+  const PAD: { key: string; label: string; mode?: PadMode; className?: string }[] = [
+    { key: "1", label: "1" }, { key: "2", label: "2" }, { key: "3", label: "3" }, { key: "qty", label: p("sell.padQty"), mode: "qty" },
+    { key: "4", label: "4" }, { key: "5", label: "5" }, { key: "6", label: "6" }, { key: "discount", label: "%", mode: "discount" },
+    { key: "7", label: "7" }, { key: "8", label: "8" }, { key: "9", label: "9" }, { key: "price", label: p("sell.padPrice"), mode: "price" },
+    { key: "sign", label: "+/−", className: "sign" }, { key: "0", label: "0" }, { key: ",", label: ",", className: "comma" }, { key: "back", label: "", className: "back" },
+  ];
+
   return (
-    <div className={kiosk ? "pos-layout pos-big" : "pos-layout"}>
-      <div className="stack">
-        <div className="row gap pos-toolbar">
+    <div className={`pos-register ${kiosk ? "pos-big" : ""} show-${view}`}>
+      <section className="pos-products" aria-label={p("sell.products")}>
+        <div className="pos-toolbar">
           <label className="search">
             <Search size={18} />
             <input type="search" value={query} onChange={(e) => (setQuery(e.target.value), setScanNote(null))} placeholder={p("sell.search")} aria-label={p("sell.search")}
               onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), onSearchEnter())} />
           </label>
-          {cameraScanAvailable && <button className="button" onClick={() => setCamera(true)} aria-label={p("scan.camera")} title={p("scan.camera")}><Camera size={18} /></button>}
-          <button className="button" onClick={() => setFree(true)}><Plus size={18} /> {p("sell.free")}</button>
+          {cameraScanAvailable && <button className="button icon-only" onClick={() => setDialog("camera")} aria-label={p("scan.camera")} title={p("scan.camera")}><Camera size={18} /></button>}
+          <button className="button icon-only" onClick={() => setDialog("free")} aria-label={p("sell.free")} title={p("sell.free")}><PlusCircle size={18} /></button>
         </div>
+        {!query && (groups.length > 1 || hasTiles) && (
+          <div className="pos-groups" role="tablist" aria-label={p("sell.groupsLabel")}>
+            {[ALL, ...(hasTiles ? [TILES] : []), ...groups].map((g) => (
+              <button key={g || "all"} role="tab" aria-selected={group === g} className={group === g ? "active" : ""} onClick={() => setGroup(g)}>
+                {g === ALL ? p("sell.all") : g === TILES ? p("sell.groups.tile") : groupLabel(g)}
+              </button>
+            ))}
+          </div>
+        )}
         {kiosk && !scanNote && <p className="muted small pos-scan-ready"><ScanBarcode size={16} aria-hidden /> {p("scan.ready")}</p>}
         {scanNote && (
           <div className={scanNote.unknown ? "notice pos-scan-note warn" : "notice pos-scan-note"}>
             <ScanBarcode size={18} aria-hidden />
             <span>{scanNote.unknown ? p("scan.unknown", { code: scanNote.code }) : p("scan.several", { code: scanNote.code })}</span>
-            {scanNote.unknown && isManager && <button className="button small-button" onClick={() => setCreating(scanNote.code)}><Plus size={15} /> {p("scan.create")}</button>}
+            {scanNote.unknown && isManager && <button className="button small-button" onClick={() => setCreating(scanNote.code)}>{p("scan.create")}</button>}
           </div>
         )}
         {error && <p className="error">{error}</p>}
-        {tiles.length === 0 && groups.length === 0 && <p className="card empty muted">{query ? p("sell.noMatch") : p("sell.nothingYet")}</p>}
-        {tiles.length > 0 && (
-          <section className="stack-sm">
-            <h3 className="pos-group-title">{p("sell.groups.tile")}</h3>
-            <div className="pos-tiles">
-              {tiles.map((a) => (
-                <button key={`${a.source}-${a.kind}-${a.refId}`} className="pos-tile" onClick={() => add(a)} disabled={inCart(a)}>
-                  <span className="list-main"><strong>{a.name}</strong></span>
-                  <strong className="pos-price">{money(a.priceCents)}</strong>
-                </button>
-              ))}
-            </div>
-          </section>
-        )}
-        {groups.map(({ kind, items }) => {
-          const Icon = ICONS[kind]!;
-          return (
-            <section key={kind} className="stack-sm">
-              <h3 className="pos-group-title">{p(`sell.groups.${kind}`)}</h3>
-              <div className="card list-card pos-articles">
-                {items.map((a) => (
-                  <button key={`${a.source}-${a.kind}-${a.refId}`} className="list-row pos-article" onClick={() => add(a)} disabled={inCart(a)}>
-                    <span className={`pos-icon ${kind}`}><Icon size={16} /></span>
-                    <span className="list-main">
-                      <strong>{a.name}</strong>
-                      <small className={a.stock !== undefined && a.stock <= 0 ? "error" : "muted"}>
-                        {[a.detail, a.stock !== undefined ? p("sell.stock", { n: a.stock }) : "", a.depositCents ? p("sell.deposit", { amount: money(a.depositCents) }) : "", a.loaner ? p("sell.loaner", { name: a.loaner }) : ""].filter(Boolean).join(" · ")}
-                      </small>
-                    </span>
-                    <strong className="pos-price">{money(a.priceCents)}</strong>
-                  </button>
-                ))}
-              </div>
-            </section>
-          );
-        })}
-      </div>
-
-      <section className="card stack pos-cart" aria-label={p("sell.cart")}>
-        <div className="section-head">
-          <h2><ShoppingCart size={18} aria-hidden /> {p("sell.cart")}</h2>
-          {cart.length > 0 && <button className="text-button" onClick={() => setCart([])}>{p("sell.clear")}</button>}
+        {shown.length === 0 && <p className="card empty muted">{query ? p("sell.noMatch") : p("sell.nothingYet")}</p>}
+        <div className="pos-grid">
+          {shown.map((a) => (
+            <button key={`${a.source}-${a.kind}-${a.refId ?? a.name}`} className={`pos-product ${a.kind}`} onClick={() => add(a)} disabled={inCart(a)}>
+              <strong className="pos-product-name">{a.kind === "order" ? p("sell.orderLine", { label: a.name }) : a.name}</strong>
+              <small className={a.stock !== undefined && a.stock <= 0 ? "error" : "muted"}>
+                {[a.kind === "order" ? a.detail : a.code ? `${p("sell.nr")} ${a.code}` : "", a.stock !== undefined ? p("sell.stock", { n: a.stock }) : "", a.loaner ? p("sell.loaner", { name: a.loaner }) : ""].filter(Boolean).join(" · ")}
+              </small>
+              <span className="pos-product-price">{money(a.priceCents)}</span>
+            </button>
+          ))}
         </div>
-        {done && (
-          <div className="notice success pos-done">
-            <CheckCircle2 size={18} />
-            <span className="list-main">
-              <strong>{done.receipt ? `${p("pay.done")} · ${done.receipt.number}` : p("pay.nothingToPay")}</strong>
-              {done.receipt && <small>{done.receipt.changeCents ? p("pay.changeBig", { amount: money(done.receipt.changeCents) }) : p("pay.noChange")}</small>}
-            </span>
-            {done.receipt && (
-              <span className="row gap-sm">
-                <button className="button small-button" onClick={() => setPrinting("bon")}><Printer size={15} /> {p("pay.printBon")}</button>
-                <button className="button small-button" onClick={() => setPrinting("a4")}>{p("pay.printA4")}</button>
-              </span>
-            )}
-          </div>
-        )}
-        {cart.length === 0 && !done && <p className="muted">{p("sell.cartEmpty")}</p>}
-        {cart.map((l) => (
-          <div key={l.key} className="pos-line">
-            <div className="row gap">
-              <span className="list-main">
-                <strong>{l.kind === "order" ? p("sell.orderLine", { label: l.name }) : l.name}</strong>
-                {l.margin && <small className="muted">§ 25a</small>}
-                {l.depositCents ? <small className="muted">{p("sell.deposit", { amount: money(l.depositCents) })}</small> : null}
-              </span>
-              <button className="icon-button" onClick={() => remove(l.key)} aria-label={p("sell.remove")}><Trash2 size={16} /></button>
-            </div>
-            {l.kind === "order" ? (
-              <p className="pos-line-sum">{money(l.unitCents)}</p>
-            ) : (
-              <div className="pos-line-controls">
-                {!l.single && (
-                  <>
-                    <button className="icon-button" onClick={() => change(l.key, { qty: Math.max(1, l.qty - 1) })} aria-label="−"><Minus size={16} /></button>
-                    <span className="pos-qty">{l.qty}</span>
-                    <button className="icon-button" onClick={() => change(l.key, { qty: l.qty + 1 })} aria-label="+"><Plus size={16} /></button>
-                  </>
-                )}
-                <span className="pos-line-price"><MoneyInput cents={l.unitCents} onChange={(c) => c !== null && change(l.key, { unitCents: c })} /></span>
-              </div>
-            )}
-          </div>
-        ))}
-
-        {cart.length > 0 && (
-          <>
-            {showCustomer ? (
-              <div className="stack-sm pos-customer">
-                <div className="grid two">
-                  <Field label={p("sell.name")}><input value={customer.name} onChange={(e) => setCustomer({ ...customer, name: e.target.value })} /></Field>
-                  <Field label={p("sell.phone")}><input value={customer.phone} onChange={(e) => setCustomer({ ...customer, phone: e.target.value })} /></Field>
-                </div>
-                <Field label={p("sell.address")}><textarea rows={2} value={customer.address} onChange={(e) => setCustomer({ ...customer, address: e.target.value })} /></Field>
-                <Field label={p("sell.email")}><input type="email" value={customer.email} onChange={(e) => setCustomer({ ...customer, email: e.target.value })} /></Field>
-              </div>
-            ) : (
-              <button className="text-button pos-customer-toggle" onClick={() => setShowCustomer(true)}><UserRound size={16} /> {p("sell.customerAdd")}</button>
-            )}
-            {totals.grossCents >= 25000 && !customer.address && !cart.some((l) => l.kind === "order") && <p className="muted small">{p("sell.customerHint")}</p>}
-            <div className="repair-totals">
-              {!settings?.smallBusiness && totals.vat.filter((v) => v.rate > 0).map((v) => (
-                <p key={v.rate}><span className="muted">{p("sell.vat", { rate: v.rate })}</span><span>{money(v.vatCents)}</span></p>
-              ))}
-              <p><span>{p("sell.sum")}</span><strong>{money(totals.grossCents)}</strong></p>
-              {deposit > 0 && <p><span className="muted">{p("sell.depositPaid")}</span><span>− {money(deposit)}</span></p>}
-              <p className="grand"><span>{due < 0 ? p("sell.toRefund") : p("sell.toPay")}</span><strong>{money(Math.abs(due))}</strong></p>
-            </div>
-            <button className="button primary pos-pay" onClick={() => setPaying(true)}>{p("sell.pay")} · {money(Math.abs(due))}</button>
-          </>
-        )}
       </section>
 
-      {free && <FreeLineDialog onClose={() => setFree(false)} onAdd={(l) => (add({ source: "pos", kind: "item", refId: null, name: l.name, detail: "", priceCents: l.unitCents, vatRate: l.vatRate }), setFree(false))} />}
-      {camera && <CameraScan onClose={() => setCamera(false)} onCode={(code) => (setCamera(false), void scan(code))} />}
+      <section className="pos-order" aria-label={p("sell.order")}>
+        <div className="pos-order-lines">
+          {done && (
+            <div className="pos-done">
+              <CheckCircle2 size={34} aria-hidden />
+              <strong>{done.receipt ? `${p("pay.done")} · ${done.receipt.number}` : p("pay.nothingToPay")}</strong>
+              {done.receipt && <span className="pos-done-change">{done.receipt.changeCents ? p("pay.changeBig", { amount: money(done.receipt.changeCents) }) : p("pay.noChange")}</span>}
+              {done.receipt && (
+                <span className="row gap-sm wrap">
+                  <button className="button small-button" onClick={() => setPrinting("bon")}><Printer size={15} /> {p("pay.printBon")}</button>
+                  <button className="button small-button" onClick={() => setPrinting("a4")}>{p("pay.printA4")}</button>
+                </span>
+              )}
+              <button className="button primary" onClick={() => (setDone(null), setView("products"))}>{p("pay.newSale")}</button>
+            </div>
+          )}
+          {!done && cart.length === 0 && <p className="muted pos-order-empty">{p("sell.cartEmpty")}</p>}
+          {cart.map((l) => (
+            <button key={l.key} className={`pos-order-line ${l.key === selected ? "selected" : ""} ${l.qty < 0 ? "return" : ""}`} onClick={() => select(l.key)}>
+              <span className="pos-order-qty">{canQty(l) ? l.qty.toLocaleString() : 1}</span>
+              <span className="pos-order-name">
+                {l.kind === "order" ? p("sell.orderLine", { label: l.name }) : l.name}
+                <small>
+                  {[
+                    canQty(l) && l.qty !== 1 ? p("sell.each", { price: money(l.unitCents) }) : "",
+                    l.discountPct ? p("sell.discount", { n: l.discountPct }) : "",
+                    l.margin ? "§ 25a" : "",
+                    l.depositCents ? p("sell.deposit", { amount: money(l.depositCents) }) : "",
+                  ].filter(Boolean).join(" · ")}
+                </small>
+              </span>
+              <strong className="pos-order-sum">{money(lineTotal(l))}</strong>
+            </button>
+          ))}
+        </div>
+
+        <div className="pos-order-totals">
+          {!settings?.smallBusiness && <p className="muted"><span>{p("sell.taxes")}</span><span>{money(taxes)}</span></p>}
+          {deposit > 0 && <p className="muted"><span>{p("sell.depositPaid")}</span><span>− {money(deposit)}</span></p>}
+          <p className="grand"><span>{due < 0 ? p("sell.toRefund") : p("sell.total")}</span><strong>{money(Math.abs(due))}</strong></p>
+        </div>
+
+        <div className="pos-order-actions">
+          <button className={`button ${customer.name ? "set" : ""}`} onClick={() => setDialog("customer")}><UserRound size={16} /> {customer.name || p("sell.customer")}</button>
+          <button className={`button ${note ? "set" : ""}`} onClick={() => setDialog("note")}><NotebookPen size={16} /> {p("sell.note")}</button>
+          {cart.length > 0 && <button className="button icon-only push-end" onClick={() => (setCart([]), setSelected(null))} aria-label={p("sell.clear")} title={p("sell.clear")}><Trash2 size={16} /></button>}
+        </div>
+
+        <div className="pos-pad">
+          {PAD.map((b) => (
+            <button key={b.key} className={`${b.className ?? ""} ${b.mode ? "mode" : ""} ${b.mode && mode === b.mode ? "active" : ""}`}
+              disabled={!line || fixed(line) || (b.mode === "qty" && !canQty(line)) || (b.key === "sign" && !canSign(line))}
+              onClick={() => (b.mode ? pickMode(b.mode) : press(b.key))} aria-label={b.key === "back" ? p("sell.remove") : b.label}>
+              {b.key === "back" ? <Delete size={20} /> : b.label}
+            </button>
+          ))}
+        </div>
+
+        <button className="button pos-pay" disabled={payable.length === 0} onClick={() => setDialog("pay")}>
+          {p("sell.payButton")}{payable.length > 0 ? ` · ${money(Math.abs(due))}` : ""}
+        </button>
+      </section>
+
+      <nav className="pos-switch" aria-label={p("sell.order")}>
+        <button className={view === "products" ? "active" : ""} onClick={() => setView("products")}>{p("sell.products")}</button>
+        <button className={view === "order" ? "active" : ""} onClick={() => setView("order")}>{p("sell.order")}{count ? ` (${count.toLocaleString()}) · ${money(Math.abs(due))}` : ""}</button>
+      </nav>
+
+      {dialog === "free" && <FreeLineDialog onClose={() => setDialog(null)} onAdd={(l) => (add({ source: "pos", kind: "item", refId: null, name: l.name, detail: "", priceCents: l.unitCents, vatRate: l.vatRate }), setDialog(null))} />}
+      {dialog === "customer" && <CustomerDialog customer={customer} onClose={() => setDialog(null)} onSave={(c) => (setCustomer(c), setDialog(null))} hint={totals.grossCents >= 25000 && !cart.some((l) => l.kind === "order")} />}
+      {dialog === "note" && <NoteDialog note={note} onClose={() => setDialog(null)} onSave={(n) => (setNote(n), setDialog(null))} />}
+      {dialog === "camera" && <CameraScan onClose={() => setDialog(null)} onCode={(code) => (setDialog(null), void scan(code))} />}
       {creating !== null && (
         <ItemDialog item={null} barcode={creating} onClose={() => setCreating(null)}
-          onSaved={(item) => (setCreating(null), setScanNote(null), search(query), item.barcode ? void scan(item.barcode) : undefined)} />
+          onSaved={(item) => (setCreating(null), setScanNote(null), loadCatalog(), item.barcode ? void scan(item.barcode) : undefined)} />
       )}
-      {paying && (
-        <Dialog title={p("pay.title")} onClose={() => setPaying(false)}>
+      {dialog === "pay" && (
+        <Dialog title={p("pay.title")} onClose={() => setDialog(null)}>
           <PayPanel
             dueCents={due}
             onPay={pay}
@@ -335,6 +410,41 @@ export function Register({ isManager, kiosk }: { isManager: boolean; kiosk?: boo
       )}
       {printing && done?.receipt && <ReceiptPrint receipt={done.receipt} format={printing} onClose={() => setPrinting(null)} />}
     </div>
+  );
+}
+
+function CustomerDialog({ customer, hint, onClose, onSave }: { customer: PosCustomer; hint: boolean; onClose: () => void; onSave: (c: PosCustomer) => void }) {
+  const { p } = usePosI18n();
+  const [form, setForm] = useState(customer);
+  return (
+    <Dialog title={p("sell.customerAdd")} onClose={onClose}>
+      <form className="stack" onSubmit={(e) => (e.preventDefault(), onSave(form))}>
+        <div className="grid two">
+          <Field label={p("sell.name")}><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} autoFocus /></Field>
+          <Field label={p("sell.phone")}><input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></Field>
+        </div>
+        <Field label={p("sell.address")}><textarea rows={2} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></Field>
+        <Field label={p("sell.email")}><input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Field>
+        {hint && !form.address && <p className="muted small">{p("sell.customerHint")}</p>}
+        <div className="row gap">
+          <button className="button primary">{p("sell.apply")}</button>
+          {customer.name && <button type="button" className="button" onClick={() => onSave(EMPTY_CUSTOMER)}>{p("sell.remove")}</button>}
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
+function NoteDialog({ note, onClose, onSave }: { note: string; onClose: () => void; onSave: (n: string) => void }) {
+  const { p } = usePosI18n();
+  const [text, setText] = useState(note);
+  return (
+    <Dialog title={p("sell.noteTitle")} onClose={onClose}>
+      <form className="stack" onSubmit={(e) => (e.preventDefault(), onSave(text.trim()))}>
+        <textarea rows={3} maxLength={300} value={text} placeholder={p("sell.notePlaceholder")} onChange={(e) => setText(e.target.value)} autoFocus />
+        <button className="button primary">{p("sell.apply")}</button>
+      </form>
+    </Dialog>
   );
 }
 

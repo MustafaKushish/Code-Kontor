@@ -56,6 +56,10 @@ export function PosSettingsTab({ country }: { country: string }) {
 
       <section className="card stack">
         <label className="check">
+          <input type="checkbox" checked={form.directKiosk} onChange={(e) => set({ directKiosk: e.target.checked })} />
+          <span>{p("settings.directKiosk")}</span>
+        </label>
+        <label className="check">
           <input type="checkbox" checked={form.smallBusiness} onChange={(e) => set({ smallBusiness: e.target.checked })} />
           <span>{p("settings.smallBusiness")}</span>
         </label>

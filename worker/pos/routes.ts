@@ -119,6 +119,13 @@ posRoutes.get("/articles", async (c) => {
   return c.json({ articles: result.value });
 });
 
+posRoutes.get("/catalog", async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const result = await store(c.env, tenantId).catalog(await sources(c.env, tenantId));
+  if (!result.ok) return posError(c, result.code);
+  return c.json({ articles: result.value });
+});
+
 posRoutes.get("/scan", async (c) => {
   const tenantId = c.get("user").tenantId;
   const code = cleanBarcode(c.req.query("code"));
@@ -201,7 +208,10 @@ posRoutes.post("/checkout", async (c) => {
   const options = body.options && typeof body.options === "object" ? { loanerReturned: (body.options as Record<string, unknown>).loanerReturned === true } : {};
   const ctx = await posContext(c.env, tenantId, actor(c), options);
   const result = await store(c.env, tenantId).checkout(
-    { lines: lines as PosLine[], payments: sanitizePayments(body.payments), customer: sanitizeCustomer(body.customer) },
+    {
+      lines: lines as PosLine[], payments: sanitizePayments(body.payments), customer: sanitizeCustomer(body.customer),
+      note: typeof body.note === "string" ? body.note.trim().slice(0, 300) : "",
+    },
     ctx,
   );
   if (!result.ok) return posError(c, result.code);
