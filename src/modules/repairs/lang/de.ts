@@ -31,7 +31,7 @@ export const de = {
   },
   devices: { phone: "Smartphone", tablet: "Tablet", laptop: "Laptop", pc: "PC", watch: "Smartwatch", console: "Spielkonsole", other: "Sonstiges" },
   accessories: { charger: "Netzteil", cable: "Ladekabel", case: "Hülle", sim: "SIM-Karte", memoryCard: "Speicherkarte", pen: "Stift", box: "Originalkarton" },
-  payment: { cash: "Bar", card: "Karte", transfer: "Überweisung" },
+  payment: { cash: "Bar", card: "Karte", transfer: "Überweisung", voucher: "Gutschein" },
   list: {
     newBookings: "{n} neue Terminanfragen",
     todayBookings: "{n} Termine heute",
@@ -100,6 +100,8 @@ export const de = {
   order: {
     back: "Alle Aufträge",
     events: {
+      receiptCanceled: "Beleg storniert",
+      depositCanceled: "Anzahlung storniert",
       quoteApproved: "Kostenvoranschlag angenommen",
       quoteRejected: "Kostenvoranschlag abgelehnt",
       edited: "Angaben geändert",
@@ -174,6 +176,7 @@ export const de = {
     pickupFree: "Ohne Positionen wird keine Rechnung erstellt.",
     paymentMethod: "Bezahlt mit",
     pickupConfirm: "Abholung buchen",
+    toPos: "In der Kasse abrechnen",
     pickedUp: "Abgeholt am {day}",
     invoice: "Rechnung {number}",
     edit: "Bearbeiten",
@@ -216,6 +219,7 @@ export const de = {
     margin: "Marge {percent} %",
   },
   invoices: {
+    canceled: "storniert ({number})",
     empty: "In diesem Jahr gibt es noch keine Rechnungen.",
     sum: "Summe {year}",
     number: "Nummer",

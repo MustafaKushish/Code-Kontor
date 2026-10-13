@@ -29,6 +29,7 @@ export const ar: Dict = {
     accounting: "المحاسبة",
     accountingShort: "الرواتب",
     time: "الأوقات",
+    pos: "الصندوق",
   },
   theme: { label: "المظهر", light: "فاتح", dark: "داكن", system: "مثل الجهاز", text: "فاتح أو داكن أو تلقائي حسب جهازك." },
   palette: {

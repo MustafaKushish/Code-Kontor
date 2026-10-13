@@ -31,7 +31,7 @@ export const ru: RepairDict = {
   },
   devices: { phone: "Смартфон", tablet: "Планшет", laptop: "Ноутбук", pc: "ПК", watch: "Смарт-часы", console: "Игровая приставка", other: "Другое" },
   accessories: { charger: "Блок питания", cable: "Кабель для зарядки", case: "Чехол", sim: "SIM-карта", memoryCard: "Карта памяти", pen: "Стилус", box: "Оригинальная коробка" },
-  payment: { cash: "Наличные", card: "Карта", transfer: "Перевод" },
+  payment: { cash: "Наличные", card: "Карта", transfer: "Перевод", voucher: "Подарочный сертификат" },
   list: {
     newBookings: "Новых заявок на запись: {n}",
     todayBookings: "Записей на сегодня: {n}",
@@ -100,6 +100,8 @@ export const ru: RepairDict = {
   order: {
     back: "Все заказы",
     events: {
+      receiptCanceled: "Чек отменён",
+      depositCanceled: "Предоплата отменена",
       quoteApproved: "Смета принята",
       quoteRejected: "Смета отклонена",
       edited: "Данные изменены",
@@ -174,6 +176,7 @@ export const ru: RepairDict = {
     pickupFree: "Без позиций счёт не создаётся.",
     paymentMethod: "Способ оплаты",
     pickupConfirm: "Оформить выдачу",
+    toPos: "Оформить на кассе",
     pickedUp: "Выдан {day}",
     invoice: "Счёт {number}",
     edit: "Редактировать",
@@ -216,6 +219,7 @@ export const ru: RepairDict = {
     margin: "Маржа {percent} %",
   },
   invoices: {
+    canceled: "отменён ({number})",
     empty: "В этом году счетов пока нет.",
     sum: "Сумма за {year}",
     number: "Номер",

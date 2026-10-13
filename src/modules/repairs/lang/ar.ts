@@ -31,7 +31,7 @@ export const ar: RepairDict = {
   },
   devices: { phone: "هاتف ذكي", tablet: "جهاز لوحي", laptop: "حاسوب محمول", pc: "حاسوب مكتبي", watch: "ساعة ذكية", console: "جهاز ألعاب", other: "أخرى" },
   accessories: { charger: "محوّل الشحن", cable: "كابل الشحن", case: "غطاء", sim: "شريحة SIM", memoryCard: "بطاقة ذاكرة", pen: "قلم", box: "العلبة الأصلية" },
-  payment: { cash: "نقدًا", card: "بطاقة", transfer: "تحويل بنكي" },
+  payment: { cash: "نقدًا", card: "بطاقة", transfer: "تحويل بنكي", voucher: "قسيمة" },
   list: {
     newBookings: "{n} طلبات مواعيد جديدة",
     todayBookings: "{n} مواعيد اليوم",
@@ -100,6 +100,8 @@ export const ar: RepairDict = {
   order: {
     back: "كل الطلبات",
     events: {
+      receiptCanceled: "تم إلغاء الإيصال",
+      depositCanceled: "تم إلغاء الدفعة المقدمة",
       quoteApproved: "تمت الموافقة على عرض السعر",
       quoteRejected: "تم رفض عرض السعر",
       edited: "تم تعديل البيانات",
@@ -174,6 +176,7 @@ export const ar: RepairDict = {
     pickupFree: "لن تُنشأ فاتورة إذا لم توجد بنود.",
     paymentMethod: "طريقة الدفع",
     pickupConfirm: "تسجيل التسليم",
+    toPos: "المحاسبة في الصندوق",
     pickedUp: "تم التسليم في {day}",
     invoice: "الفاتورة {number}",
     edit: "تعديل",
@@ -216,6 +219,7 @@ export const ar: RepairDict = {
     margin: "هامش الربح {percent} %",
   },
   invoices: {
+    canceled: "ملغاة ({number})",
     empty: "لا توجد فواتير في هذا العام بعد.",
     sum: "مجموع {year}",
     number: "الرقم",

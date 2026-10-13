@@ -31,7 +31,7 @@ export const tr: RepairDict = {
   },
   devices: { phone: "Akıllı telefon", tablet: "Tablet", laptop: "Dizüstü bilgisayar", pc: "Bilgisayar", watch: "Akıllı saat", console: "Oyun konsolu", other: "Diğer" },
   accessories: { charger: "Adaptör", cable: "Şarj kablosu", case: "Kılıf", sim: "SIM kart", memoryCard: "Hafıza kartı", pen: "Kalem", box: "Orijinal kutu" },
-  payment: { cash: "Nakit", card: "Kart", transfer: "Havale" },
+  payment: { cash: "Nakit", card: "Kart", transfer: "Havale", voucher: "Hediye çeki" },
   list: {
     newBookings: "{n} yeni randevu talebi",
     todayBookings: "Bugün {n} randevu",
@@ -100,6 +100,8 @@ export const tr: RepairDict = {
   order: {
     back: "Tüm siparişler",
     events: {
+      receiptCanceled: "Fiş iptal edildi",
+      depositCanceled: "Ön ödeme iptal edildi",
       quoteApproved: "Fiyat teklifi onaylandı",
       quoteRejected: "Fiyat teklifi reddedildi",
       edited: "Bilgiler değiştirildi",
@@ -174,6 +176,7 @@ export const tr: RepairDict = {
     pickupFree: "Kalem yoksa fatura oluşturulmaz.",
     paymentMethod: "Ödeme şekli",
     pickupConfirm: "Teslimi kaydet",
+    toPos: "Kasada hesapla",
     pickedUp: "{day} tarihinde teslim alındı",
     invoice: "Fatura {number}",
     edit: "Düzenle",
@@ -216,6 +219,7 @@ export const tr: RepairDict = {
     margin: "Kâr marjı %{percent}",
   },
   invoices: {
+    canceled: "iptal edildi ({number})",
     empty: "Bu yıl henüz fatura yok.",
     sum: "{year} toplamı",
     number: "Numara",

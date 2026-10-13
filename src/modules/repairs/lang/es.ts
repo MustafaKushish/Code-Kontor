@@ -31,7 +31,7 @@ export const es: RepairDict = {
   },
   devices: { phone: "Smartphone", tablet: "Tablet", laptop: "Portátil", pc: "PC", watch: "Smartwatch", console: "Videoconsola", other: "Otro" },
   accessories: { charger: "Cargador", cable: "Cable de carga", case: "Funda", sim: "Tarjeta SIM", memoryCard: "Tarjeta de memoria", pen: "Lápiz", box: "Caja original" },
-  payment: { cash: "Efectivo", card: "Tarjeta", transfer: "Transferencia" },
+  payment: { cash: "Efectivo", card: "Tarjeta", transfer: "Transferencia", voucher: "Vale" },
   list: {
     newBookings: "{n} solicitudes de cita nuevas",
     todayBookings: "{n} citas hoy",
@@ -100,6 +100,8 @@ export const es: RepairDict = {
   order: {
     back: "Todas las reparaciones",
     events: {
+      receiptCanceled: "Recibo anulado",
+      depositCanceled: "Anticipo anulado",
       quoteApproved: "Presupuesto aceptado",
       quoteRejected: "Presupuesto rechazado",
       edited: "Datos modificados",
@@ -174,6 +176,7 @@ export const es: RepairDict = {
     pickupFree: "Sin conceptos no se crea ninguna factura.",
     paymentMethod: "Pagado con",
     pickupConfirm: "Registrar recogida",
+    toPos: "Cobrar en caja",
     pickedUp: "Recogido el {day}",
     invoice: "Factura {number}",
     edit: "Editar",
@@ -216,6 +219,7 @@ export const es: RepairDict = {
     margin: "Margen {percent} %",
   },
   invoices: {
+    canceled: "anulada ({number})",
     empty: "Aún no hay facturas este año.",
     sum: "Total {year}",
     number: "Número",

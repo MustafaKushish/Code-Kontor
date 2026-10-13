@@ -4,6 +4,7 @@ import type { TaxSettings } from "../shared/countries";
 import { emptyEmployee, type Advisor, type Employee, type MonthEntry } from "../shared/accounting";
 import { localDay, type Absence, type RequestStatus, type TimeEntry, type TimeRequest, type TimeRequestData, type TimeSettings } from "../shared/time";
 import { REPAIR_MIGRATIONS, RepairError, RepairStore } from "./repairs/store";
+import { POS_MIGRATIONS, PosError, PosStore } from "./pos/store";
 
 // Die eigene Datenbank eines Kunden. Jede Firma bekommt bei der Anmeldung
 // ein eigenes Durable Object mit eigener SQLite-Datenbank, getrennt von allen anderen.
@@ -39,10 +40,12 @@ const MIGRATIONS: string[] = [
    );
    CREATE INDEX time_requests_status ON time_requests(status, created_at);
    CREATE INDEX time_requests_employee ON time_requests(employee_id, created_at);`,
+  // Kasse für alle Systeme
+  POS_MIGRATIONS,
 ];
 
 // Tabellen der Branchen-Systeme, je System eigens gezählt, damit sie unabhängig vom Kern wachsen.
-const MODULE_MIGRATIONS: Record<string, string[]> = {
+const MODULE_MIGRATIONS: Record<string, (string | ((sql: SqlStorage) => void))[]> = {
   repairs: REPAIR_MIGRATIONS,
 };
 
@@ -91,27 +94,58 @@ export class TenantDatabase extends DurableObject<Record<string, never>> {
       const done = this.sql.exec<{ v: number | null }>("SELECT MAX(version) AS v FROM _module_migrations WHERE module = ?", module).one().v ?? 0;
       for (let version = done + 1; version <= steps.length; version++) {
         this.ctx.storage.transactionSync(() => {
-          this.sql.exec(steps[version - 1]!);
+          const step = steps[version - 1]!;
+          if (typeof step === "function") step(this.sql);
+          else this.sql.exec(step);
           this.sql.exec("INSERT INTO _module_migrations (module, version) VALUES (?, ?)", module, version);
         });
       }
     }
   }
 
-  // ---------- Handy- & IT-Service (worker/repairs) ----------
+  // ---------- Kasse (worker/pos) und Handy- & IT-Service (worker/repairs) ----------
 
-  private repairStore?: RepairStore;
+  private storesCache?: { pos: PosStore; repairs: RepairStore };
+  private txDepth = 0;
 
-  async repairs(action: string, args: unknown[]): Promise<ModuleResult<unknown>> {
-    this.repairStore ??= new RepairStore(this.sql, (fn) => this.ctx.storage.transactionSync(fn));
-    const method = (this.repairStore as unknown as Record<string, unknown>)[action];
-    if (action === "constructor" || typeof method !== "function") return { ok: false, code: "notFound" };
+  /** Kasse und Module teilen sich eine Datenbank; verschachtelte Transaktionen laufen in der äußeren mit. */
+  private stores() {
+    if (!this.storesCache) {
+      const transaction = <T>(fn: () => T): T => {
+        if (this.txDepth) return fn();
+        this.txDepth++;
+        try {
+          return this.ctx.storage.transactionSync(fn);
+        } finally {
+          this.txDepth--;
+        }
+      };
+      const pos = new PosStore(this.sql, transaction);
+      const repairs = new RepairStore(this.sql, transaction, pos);
+      pos.register("repairs", repairs.posModule());
+      this.storesCache = { pos, repairs };
+    }
+    return this.storesCache;
+  }
+
+  private call(target: object, action: string, args: unknown[], prefix: { pos: string; repairs: string }): ModuleResult<unknown> {
+    const method = (target as Record<string, unknown>)[action];
+    if (action === "constructor" || action === "posModule" || typeof method !== "function") return { ok: false, code: "notFound" };
     try {
-      return { ok: true, value: (method as (...a: unknown[]) => unknown).apply(this.repairStore, args) };
+      return { ok: true, value: (method as (...a: unknown[]) => unknown).apply(target, args) };
     } catch (error) {
-      if (error instanceof RepairError) return { ok: false, code: error.code };
+      if (error instanceof RepairError) return { ok: false, code: prefix.repairs + error.code };
+      if (error instanceof PosError) return { ok: false, code: prefix.pos + error.code };
       throw error;
     }
+  }
+
+  async repairs(action: string, args: unknown[]): Promise<ModuleResult<unknown>> {
+    return this.call(this.stores().repairs, action, args, { repairs: "", pos: "pos." });
+  }
+
+  async pos(action: string, args: unknown[]): Promise<ModuleResult<unknown>> {
+    return this.call(this.stores().pos, action, args, { repairs: "repairs.", pos: "" });
   }
 
   async getCompany(): Promise<CompanyProfile | null> {

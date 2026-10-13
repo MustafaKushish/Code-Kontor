@@ -22,6 +22,8 @@ import { findApp } from "../shared/apps";
 const RepairsApp = lazy(() => import("./modules/repairs/RepairsApp"));
 const RepairStatusPage = lazy(() => import("./modules/repairs/StatusPage"));
 const RepairBookingPage = lazy(() => import("./modules/repairs/BookingPage"));
+// Die Kasse gehört zur Plattform (eine für alle Systeme), wird aber auch erst bei Bedarf geladen
+const PosApp = lazy(() => import("./pos/PosApp"));
 
 export function App() {
   const [me, setMe] = useState<Me | null>(null);
@@ -99,6 +101,8 @@ export function App() {
     page = <Suspense fallback={null}><RepairsApp me={me} path={path} /></Suspense>;
   } else if (section === "app" && id && findApp(id) && me.installedApps.includes(id)) {
     page = <InstalledApp app={findApp(id)!} />;
+  } else if (section === "kasse") {
+    page = <Suspense fallback={null}><PosApp me={me} path={path} /></Suspense>;
   } else if (section === "team" && isManager) {
     page = <Team me={me} />;
   } else if (section === "buchhaltung" && isManager) {

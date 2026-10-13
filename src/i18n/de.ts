@@ -30,6 +30,7 @@ export const de = {
     accounting: "Buchhaltung",
     accountingShort: "Löhne",
     time: "Zeiten",
+    pos: "Kasse",
   },
   theme: { label: "Darstellung", light: "Hell", dark: "Dunkel", system: "Wie Gerät", text: "Hell, dunkel oder automatisch wie dein Gerät." },
   palette: {

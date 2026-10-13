@@ -2,21 +2,23 @@ import { formatRate, standardVat, vatChoices } from "../../money";
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft, BadgeCheck, Check, ClipboardCheck, Copy, Eye, FileText, History, KeyRound, Link2, ListChecks, Mail, Package, Pencil, Phone, Plus, Printer,
-  MessageCircle, Receipt, Repeat, ShieldCheck, Smartphone, Tags, Trash2, TriangleAlert, Truck, Undo2, UserRound, Wrench, X,
+  MessageCircle, Receipt, Repeat, ShieldCheck, ShoppingCart, Smartphone, Tags, Trash2, TriangleAlert, Truck, Undo2, UserRound, Wrench, X,
 } from "lucide-react";
 import qrcode from "qrcode-generator";
 import { api, type Me } from "../../api";
 import { Link } from "../../components";
 import { navigate } from "../../router";
 import {
-  PAYMENT_METHODS, PICKUP_STATUSES, canChangeStatus, computeTotals, isClosed, priceMatches,
-  type CheckList, type Loaner, type PaymentMethod, type RepairItemKind, type RepairOrder, type RepairPart, type RepairPrice, type RepairSettings, type RepairStatus,
+  PICKUP_STATUSES, canChangeStatus, computeTotals, isClosed, priceMatches,
+  type CheckList, type Loaner, type RepairItemKind, type RepairOrder, type RepairPart, type RepairPrice, type RepairSettings, type RepairStatus,
 } from "../../../shared/repairs";
 import { useRepairI18n } from "./i18n";
 import { ChecksEditor, ChecksSummary, Dialog, MoneyInput, SignaturePad, StatusPill, deviceLabel } from "./parts";
 import { MessageDialog, PhotosCard, SignatureCard } from "./Media";
 import { startPurchase } from "./Purchases";
 import { PrintView, type PrintKind } from "./Print";
+import { PayPanel } from "../../pos/PayPanel";
+import type { Payment } from "../../../shared/pos";
 
 const BASE = "/app/handy-it";
 
@@ -30,7 +32,7 @@ const PRIMARY: Partial<Record<RepairStatus, RepairStatus>> = {
   repairing: "ready",
   canceled: "received",
 };
-const EVENTS = ["quoteApproved", "quoteRejected", "edited", "loanerOut", "loanerBack", "outChecked", "signed", "signedPickup", "message", "partOrdered", "partArrived"];
+const EVENTS = ["quoteApproved", "quoteRejected", "edited", "loanerOut", "loanerBack", "outChecked", "signed", "signedPickup", "message", "partOrdered", "partArrived", "receiptCanceled", "depositCanceled"];
 const ALL: RepairStatus[] = ["received", "diagnosis", "quote", "waitingParts", "repairing", "ready", "notRepaired", "canceled"];
 
 export function OrderDetail({ id, me }: { id: string; me: Me }) {
@@ -177,6 +179,7 @@ export function OrderDetail({ id, me }: { id: string; me: Me }) {
                 {order.invoice && (
                   <p className="muted">
                     {r("order.invoice", { number: order.invoice.number })} · {euro(order.invoice.totalCents)} · {r(`payment.${order.invoice.paymentMethod}`)}
+                    {order.invoice.canceledBy && <span className="error"> · {r("invoices.canceled", { number: order.invoice.canceledBy })}</span>}
                     {order.invoice.warrantyUntil && <> · {r("order.warrantyUntil", { day: day(order.invoice.warrantyUntil) })}</>}
                   </p>
                 )}
@@ -200,7 +203,11 @@ export function OrderDetail({ id, me }: { id: string; me: Me }) {
                   </p>
                 )}
                 {PICKUP_STATUSES.includes(order.status) && (
-                  <button className="button primary block" disabled={busy} onClick={() => setPickup(true)}><ClipboardCheck size={18} /> {r("order.pickup")}</button>
+                  <>
+                    <button className="button primary block" disabled={busy} onClick={() => setPickup(true)}><ClipboardCheck size={18} /> {r("order.pickup")}</button>
+                    {/* Mit weiteren Artikeln (z. B. Hülle) zusammen abrechnen */}
+                    <Link to={`/kasse?auftrag=${order.id}`} className="button block"><ShoppingCart size={18} /> {r("order.toPos")}</Link>
+                  </>
                 )}
                 {primary && (
                   <button className={`button ${PICKUP_STATUSES.includes(order.status) || (order.status === "quote" && order.quote === "pending") ? "" : "primary"} block`} disabled={busy} onClick={() => changeStatus(primary)}>
@@ -458,11 +465,16 @@ export function OrderDetail({ id, me }: { id: string; me: Me }) {
           order={order}
           total={Math.max(0, totals.grossCents - order.intake.depositCents)}
           onClose={() => setPickup(false)}
-          onConfirm={async (paymentMethod, loanerReturned, signature) => {
-            if (await run(() => api(`/repairs/orders/${id}/pickup`, { method: "POST", body: { paymentMethod, loanerReturned, signature } }))) {
-              setPickup(false);
-              setPrint("invoice");
-            }
+          onConfirm={async (payments, loanerReturned, signature) => {
+            // Abgerechnet wird in der Kasse der Plattform (ein Nummernkreis, ein Tagesabschluss)
+            const { receipt } = await api<{ receipt: { number: string } | null }>("/pos/checkout", {
+              method: "POST",
+              body: { lines: [{ source: "repairs", kind: "order", refId: id, name: "", qty: 1, unitCents: 0, vatRate: 0 }], payments, options: { loanerReturned } },
+            });
+            if (signature) await api(`/repairs/orders/${id}/signature`, { method: "PUT", body: { kind: "pickup", data: signature } }).catch(() => {});
+            await run(() => api(`/repairs/orders/${id}`));
+            setPickup(false);
+            if (receipt) setPrint("invoice");
           }}
         />
       )}
@@ -576,41 +588,36 @@ function AddItemDialog({ kind: initialKind, defaultLabor, onClose, onAdd }: {
 }
 
 function PickupDialog({ order, total, onClose, onConfirm }: {
-  order: RepairOrder; total: number; onClose: () => void; onConfirm: (m: PaymentMethod, loanerReturned: boolean, signature: string | null) => void;
+  order: RepairOrder; total: number; onClose: () => void; onConfirm: (payments: Payment[], loanerReturned: boolean, signature: string | null) => Promise<void>;
 }) {
-  const { r, euro } = useRepairI18n();
-  const [method, setMethod] = useState<PaymentMethod>("cash");
+  const { r } = useRepairI18n();
   const [signature, setSignature] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
   const [loanerBack, setLoanerBack] = useState(false);
   return (
     <Dialog title={r("order.pickup")} onClose={onClose}>
       <div className="stack">
         <p>{r("order.pickupText")}</p>
         {order.items.length === 0 && <p className="muted small">{r("order.pickupFree")}</p>}
-        <p className="pickup-total"><span>{r("order.toPay")}</span><strong>{euro(total)}</strong></p>
-        {(order.items.length > 0 || order.intake.depositCents > 0) && (
-          <div className="field">
-            <span className="field-label">{r("order.paymentMethod")}</span>
-            <div className="segmented three">
-              {PAYMENT_METHODS.map((m) => (
-                <button type="button" key={m} className={method === m ? "active" : ""} onClick={() => setMethod(m)}>{r(`payment.${m}`)}</button>
-              ))}
-            </div>
-          </div>
-        )}
-        {order.status === "ready" && !order.outChecks && <p className="notice"><ListChecks size={16} /> {r("checks.outMissing")}</p>}
-        {order.loaner && (
-          <label className="check notice">
-            <input type="checkbox" checked={loanerBack} onChange={(e) => setLoanerBack(e.target.checked)} />
-            <span>{r("loaner.backConfirm", { name: order.loaner.name })}</span>
-          </label>
-        )}
-        <div className="field">
-          <span className="field-label">{r("signature.pickupTitle")}</span>
-          <SignaturePad onChange={setSignature} />
-        </div>
-        <button className="button primary" disabled={busy || (!!order.loaner && !loanerBack)} onClick={() => (setBusy(true), onConfirm(method, loanerBack, signature))}><ClipboardCheck size={18} /> {r("order.pickupConfirm")}</button>
+        <PayPanel
+          dueCents={total}
+          onPay={(payments) => onConfirm(payments, loanerBack, signature)}
+          blocked={!!order.loaner && !loanerBack}
+          extra={
+            <>
+              {order.status === "ready" && !order.outChecks && <p className="notice"><ListChecks size={16} /> {r("checks.outMissing")}</p>}
+              {order.loaner && (
+                <label className="check notice">
+                  <input type="checkbox" checked={loanerBack} onChange={(e) => setLoanerBack(e.target.checked)} />
+                  <span>{r("loaner.backConfirm", { name: order.loaner.name })}</span>
+                </label>
+              )}
+              <div className="field">
+                <span className="field-label">{r("signature.pickupTitle")}</span>
+                <SignaturePad onChange={setSignature} />
+              </div>
+            </>
+          }
+        />
       </div>
     </Dialog>
   );

@@ -29,6 +29,7 @@ export const uk: Dict = {
     accounting: "Бухгалтерія",
     accountingShort: "Зарплата",
     time: "Час",
+    pos: "Каса",
   },
   theme: { label: "Вигляд", light: "Світлий", dark: "Темний", system: "Як на пристрої", text: "Світлий, темний або автоматично, як на вашому пристрої." },
   palette: {

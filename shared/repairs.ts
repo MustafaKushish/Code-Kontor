@@ -1,6 +1,8 @@
 // Branchen-System „Handy- & IT-Service“: Reparaturaufträge von der Geräteannahme bis zur Abholung.
 // Regeln und Prüfungen, die Browser und Server gleich verwenden. Beträge immer in Cent.
 
+import { vatRateOf, type Payment, type PayMethod, type Totals } from "./pos";
+
 export const REPAIR_APP_ID = "handy-it";
 
 export const DEVICE_TYPES = ["phone", "tablet", "laptop", "pc", "watch", "console", "other"] as const;
@@ -133,12 +135,16 @@ export interface RepairInvoice {
   number: string;
   issuedAt: string;
   totalCents: number;
-  paymentMethod: PaymentMethod;
+  /** Hauptzahlart (bei geteilter Zahlung die größte); alle Zahlungen stehen im Beleg der Kasse */
+  paymentMethod: PayMethod;
   warrantyUntil: string;
+  /** Stornobeleg, falls die Rechnung storniert wurde */
+  canceledBy?: string | null;
   /** Unveränderliche Kopie aller Angaben zum Zeitpunkt der Rechnung */
   snapshot: InvoiceSnapshot;
 }
 
+/** Zahlarten für Auszahlungen im Ankauf */
 export const PAYMENT_METHODS = ["cash", "card", "transfer"] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
@@ -152,6 +158,9 @@ export interface InvoiceSnapshot {
   totals: Totals;
   depositCents: number;
   smallBusiness: boolean;
+  /** Zahlungen laut Kasse (ältere Rechnungen haben nur paymentMethod) */
+  payments?: Payment[];
+  changeCents?: number;
 }
 
 export interface RepairOrder {
@@ -250,42 +259,10 @@ export const DEFAULT_REPAIR_SETTINGS: RepairSettings = {
 /** Steuersätze, wenn die Firma nichts anderes eingestellt hat (Deutschland). */
 export const VAT_RATES = [19, 7, 0] as const;
 
-/** Steuersatz aus einer Eingabe: 0 bis unter 100 Prozent, sonst der Normalsatz. */
-export function vatRateOf(value: unknown, fallback = 19): number {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value < 100 ? Math.round(value * 100) / 100 : fallback;
-}
-
 // ---------- Rechnen ----------
 
-export interface Totals {
-  grossCents: number;
-  netCents: number;
-  /** Steuerbetrag je Satz */
-  vat: { rate: number; netCents: number; vatCents: number }[];
-}
-
-/**
- * Summen aus Endpreisen. Die Steuer wird je Satz aus der Bruttosumme herausgerechnet,
- * damit die Rechnung auf den Cent mit dem Kassenbetrag übereinstimmt.
- */
-export function computeTotals(items: (Pick<RepairItem, "qty" | "unitCents" | "vatRate"> & { margin?: boolean })[], smallBusiness = false): Totals {
-  const byRate = new Map<number, number>();
-  let grossCents = 0;
-  for (const item of items) {
-    const line = Math.round(item.qty * item.unitCents);
-    grossCents += line;
-    // Gebrauchtgeräte nach § 25a UStG: keine Steuer auf der Rechnung ausweisen
-    const rate = smallBusiness || item.margin ? 0 : item.vatRate;
-    byRate.set(rate, (byRate.get(rate) ?? 0) + line);
-  }
-  const vat = [...byRate.entries()]
-    .sort((a, b) => b[0] - a[0])
-    .map(([rate, gross]) => {
-      const vatCents = Math.round((gross * rate) / (100 + rate));
-      return { rate, netCents: gross - vatCents, vatCents };
-    });
-  return { grossCents, netCents: vat.reduce((s, v) => s + v.netCents, 0), vat };
-}
+// Summen und Steuer rechnet die Kasse der Plattform; hier nur weitergereicht.
+export { computeTotals, vatRateOf, type Totals } from "./pos";
 
 /** Garantie-Ende als Tag (YYYY-MM-DD), Monate ab dem Abholtag. */
 export function warrantyEnd(day: string, months: number): string {
@@ -645,24 +622,7 @@ export interface Loaner {
   lentAt: string | null;
 }
 
-// ---------- Kasse ----------
-
-export interface CashDay {
-  day: string;
-  entries: {
-    at: string;
-    kind: "repair" | "sale" | "deposit" | "purchase";
-    /** Rechnungsnummer, Auftragsnummer oder Ankaufsnummer */
-    ref: string;
-    /** Für Links: Auftrag, Ankauf */
-    refId: string;
-    label: string;
-    method: PaymentMethod;
-    /** Positiv = Einnahme, negativ = Auszahlung */
-    cents: number;
-  }[];
-  byMethod: Record<PaymentMethod, { inCents: number; outCents: number }>;
-}
+// ---------- Auswertung ----------
 
 export interface RepairStats {
   month: string;

@@ -967,3 +967,59 @@ input[aria-invalid="true"] { border-color: var(--error); }
 .sidebar-foot .legal-links { margin: 0 0 4px; justify-content: flex-start; }
 .legal-links.mobile-only { display: none; }
 @media (max-width: 900px) { .legal-links.mobile-only { display: flex; } }
+
+/* ---------- Gemeinsam für Kasse und Systeme: Dialoge, Beträge, Druck (A4) ---------- */
+.money-input { position: relative; display: block; }
+.money-input input { padding-inline-end: 34px; text-align: end; font-variant-numeric: tabular-nums; }
+.money-input span { position: absolute; inset-inline-end: 14px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+.repair-dialog-backdrop {
+  position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 16px;
+  background: rgb(10 11 16 / 0.5); backdrop-filter: blur(4px); animation: fade 0.15s;
+}
+.repair-dialog { width: min(480px, 100%); max-height: calc(100dvh - 32px); overflow: auto; box-shadow: var(--shadow-lift); }
+.repair-dialog.wide { width: min(680px, 100%); }
+@keyframes fade { from { opacity: 0; } }
+.segmented.three { grid-template-columns: repeat(3, 1fr); }
+/* ---------- Druck: Annahmeschein, Kostenvoranschlag, Rechnung ---------- */
+.print-layer { position: fixed; inset: 0; z-index: 95; overflow: auto; background: rgb(10 11 16 / 0.55); backdrop-filter: blur(4px); padding: 16px; }
+.print-toolbar { position: sticky; top: 0; z-index: 1; display: flex; gap: 10px; justify-content: center; margin-bottom: 16px; }
+.print-sheet {
+  width: min(210mm, 100%); min-height: 297mm; margin: 0 auto; padding: 16mm 15mm; background: #fff; color: #111;
+  font: 10.5pt/1.45 Inter, system-ui, sans-serif; display: grid; gap: 14px; align-content: start; box-shadow: var(--shadow-lift);
+}
+.print-sheet h1 { font-size: 20pt; letter-spacing: -0.02em; }
+.print-sheet h2 { font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.08em; color: #666; margin-bottom: 3px; font-family: Inter, sans-serif; font-weight: 700; }
+.print-head { display: flex; justify-content: space-between; gap: 20px; border-bottom: 2px solid #111; padding-bottom: 12px; }
+.print-company { font-size: 13pt; display: block; }
+.print-logo { max-height: 48px; max-width: 180px; object-fit: contain; display: block; margin-bottom: 6px; }
+.print-meta { text-align: end; display: grid; gap: 2px; align-content: start; }
+.print-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px 20px; }
+.print-table { width: 100%; border-collapse: collapse; }
+.print-table th { text-align: start; font-size: 8.5pt; color: #666; border-bottom: 1px solid #111; padding: 4px 6px; }
+.print-table td { padding: 6px; border-bottom: 1px solid #ddd; vertical-align: top; }
+.print-table .num { text-align: end; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.print-table small { color: #666; }
+/* Summenblock (Kasse und Module) */
+.repair-totals { display: grid; gap: 4px; border-top: 1px solid var(--line-strong); padding-top: 10px; }
+.repair-totals p { display: flex; justify-content: space-between; gap: 12px; font-variant-numeric: tabular-nums; }
+.repair-totals .grand { font-size: 1.1rem; }
+
+.print-totals { justify-self: end; min-width: 260px; display: grid; gap: 3px; }
+.print-totals p { display: flex; justify-content: space-between; gap: 20px; font-variant-numeric: tabular-nums; }
+.print-totals .grand { border-top: 1px solid #111; padding-top: 4px; font-size: 12pt; }
+.print-terms { font-size: 8.5pt; color: #444; border-top: 1px solid #ddd; padding-top: 8px; white-space: pre-wrap; }
+.print-sign { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 26px; font-size: 8.5pt; color: #666; }
+.print-sign span { display: block; border-bottom: 1px solid #111; height: 30px; margin-bottom: 4px; }
+.print-signature { display: block; height: 30px; width: auto; max-width: 100%; border-bottom: 1px solid #111; margin-bottom: 4px; object-fit: contain; object-position: left bottom; }
+.print-qr { display: flex; gap: 12px; align-items: center; font-size: 9pt; }
+.print-qr .small { color: #666; word-break: break-all; }
+.print-foot { margin-top: auto; border-top: 1px solid #ddd; padding-top: 8px; font-size: 8pt; color: #666; display: flex; flex-wrap: wrap; gap: 4px 18px; }
+
+@media print {
+  @page { size: A4; margin: 0; }
+  body.ck-printing { background: #fff; }
+  body.ck-printing::after { display: none; }
+  body.ck-printing #root, body.ck-printing .print-toolbar { display: none !important; }
+  body.ck-printing .print-layer { position: static; overflow: visible; background: none; backdrop-filter: none; padding: 0; }
+  body.ck-printing .print-sheet { box-shadow: none; width: 210mm; min-height: 297mm; }
+}

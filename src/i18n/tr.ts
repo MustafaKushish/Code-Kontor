@@ -29,6 +29,7 @@ export const tr: Dict = {
     accounting: "Muhasebe",
     accountingShort: "Bordro",
     time: "Süreler",
+    pos: "Kasa",
   },
   theme: { label: "Görünüm", light: "Açık", dark: "Koyu", system: "Cihaz gibi", text: "Açık, koyu ya da cihazına göre otomatik." },
   palette: {
