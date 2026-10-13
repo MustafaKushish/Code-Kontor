@@ -601,6 +601,12 @@ export const de = {
     desktop: "In der Adresszeile auf das Installieren-Symbol klicken oder im Browsermenü „App installieren“ wählen.",
     everywhere: "Funktioniert auf Windows, macOS, Linux, ChromeOS, Android, iPhone und iPad. Deine Daten liegen sicher in der Cloud und sind auf allen Geräten gleich.",
   },
+  legal: {
+    back: "Zurück",
+    imprint: "Impressum",
+    privacy: "Datenschutz",
+    label: "Rechtliches",
+  },
   billing: {
     title: "Abo",
     trial: "Testphase: noch {days} Tage gratis (bis {date})",

@@ -14,6 +14,7 @@ import { AccountPage } from "./pages/Account";
 import { AccountingPage } from "./pages/Accounting";
 import { TimePage } from "./pages/Time";
 import { TerminalPage } from "./pages/Terminal";
+import { ImprintPage, PrivacyPage } from "./pages/Legal";
 import { findApp } from "../shared/apps";
 
 export function App() {
@@ -46,6 +47,9 @@ export function App() {
   // Stempeluhr: eigene Ansicht ohne Anmeldung
   const [, firstPart, terminalToken] = path.split("/");
   if (firstPart === "terminal" && terminalToken) return <TerminalPage token={terminalToken} />;
+  // Rechtstexte immer erreichbar, mit und ohne Anmeldung
+  if (firstPart === "impressum") return <ImprintPage />;
+  if (firstPart === "datenschutz") return <PrivacyPage />;
 
   if (loading) return <div className="splash"><img src="/icon.svg" alt="" width={56} height={56} /></div>;
 

@@ -600,6 +600,12 @@ export const ar: Dict = {
     desktop: "انقر على أيقونة التثبيت في شريط العنوان، أو اختر «تثبيت التطبيق» من قائمة المتصفح.",
     everywhere: "يعمل على Windows وmacOS وLinux وChromeOS وAndroid وiPhone وiPad. بياناتك محفوظة بأمان في السحابة ومتطابقة على جميع أجهزتك.",
   },
+  legal: {
+    back: "رجوع",
+    imprint: "بيانات الناشر",
+    privacy: "الخصوصية",
+    label: "معلومات قانونية",
+  },
   billing: {
     title: "الاشتراك",
     trial: "الفترة التجريبية: متبقٍ {days} يومًا مجانًا (حتى {date})",
