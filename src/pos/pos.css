@@ -1,0 +1,118 @@
+/* ---------- Kasse ---------- */
+.pos .small, .pay-panel .small { font-size: 0.85rem; }
+.pos .pre-line, .bon .pre-line { white-space: pre-line; }
+.pos .push-end { margin-inline-start: auto; }
+.pos .small-button { min-height: 34px; padding: 4px 12px; font-size: 0.88rem; }
+.pos .chips.wrap, .pay-panel .chips.wrap { flex-wrap: wrap; overflow: visible; }
+.pos-tabs { overflow-x: auto; scrollbar-width: none; }
+
+.pos-layout { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(320px, 1fr); gap: 18px; align-items: start; }
+.pos-toolbar { align-items: center; }
+.pos-toolbar .search { flex: 1; min-width: 200px; max-width: none; }
+.pos-group-title { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin: 0; }
+.pos-group-title.pad { padding: 10px 14px 4px; }
+.pos-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.pos-tile {
+  display: grid; gap: 6px; align-content: space-between; min-height: 84px; padding: 12px 14px; border-radius: 18px; text-align: start;
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink); font: inherit; cursor: pointer; box-shadow: var(--shadow-sm);
+  transition: transform 0.1s, border-color 0.15s;
+}
+.pos-tile:hover { border-color: var(--brand); }
+.pos-tile:active { transform: scale(0.98); }
+.pos-tile .list-main strong { font-size: 0.98rem; }
+.pos-articles { max-height: 440px; overflow: auto; }
+.pos-article { border: none; background: none; font: inherit; color: inherit; text-align: start; cursor: pointer; width: 100%; }
+.pos-article:disabled { opacity: 0.45; cursor: default; }
+.pos-price { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pos-icon { width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; flex: none; background: var(--panel-2); color: var(--muted); }
+.pos-icon.order { background: var(--success-soft); color: var(--success); }
+.pos-icon.used { background: color-mix(in srgb, var(--brand) 14%, transparent); color: var(--brand); }
+.pos-icon.in { background: var(--success-soft); color: var(--success); }
+.pos-icon.out { background: color-mix(in srgb, var(--error) 12%, transparent); color: var(--error); }
+
+.pos-cart { position: sticky; top: 16px; }
+.pos-cart h2 { display: inline-flex; align-items: center; gap: 8px; }
+.notice.pos-done { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 4px 10px; }
+.pos-done .list-main { min-width: 0; display: grid; }
+.pos-done .row { grid-column: 1 / -1; flex-wrap: wrap; }
+.pos-line { display: grid; gap: 6px; padding: 8px 0; }
+.pos-line + .pos-line { border-top: 1px solid var(--line); }
+.pos-line .row { align-items: flex-start; }
+.pos-line-controls { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+.pos-line-sum { text-align: end; font-weight: 600; font-variant-numeric: tabular-nums; margin: 0; }
+.pos-qty { min-width: 24px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; }
+.pos-line-price { width: 130px; }
+.pos-customer-toggle { display: inline-flex; align-items: center; gap: 6px; justify-self: start; }
+.pos-pay { min-height: 56px; font-size: 1.1rem; }
+
+.pay-due { display: flex; justify-content: space-between; align-items: baseline; font-size: 1.3rem; padding: 14px 16px; border-radius: 16px; background: var(--panel-2); margin: 0; }
+.pay-due strong { font-size: 1.7rem; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.pay-methods { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
+.pay-methods button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 52px; border-radius: 14px;
+  border: 1px solid var(--line-strong); background: var(--panel); color: var(--ink); font: inherit; font-weight: 600; cursor: pointer;
+}
+.pay-methods button.active { background: var(--primary-bg); border-color: var(--primary-bg); color: var(--primary-fg); }
+.pay-change { display: flex; justify-content: space-between; align-items: baseline; margin: 0; padding: 10px 14px; border-radius: 14px; background: var(--panel-2); font-variant-numeric: tabular-nums; }
+.pay-change strong { font-size: 1.3rem; }
+.pay-change.has { background: var(--success-soft); color: var(--success); }
+.pay-change.open { background: var(--warn-soft); }
+.pay-split { display: inline-flex; align-items: center; gap: 6px; justify-self: start; }
+.pay-part { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+.pay-part .chip { grid-column: 1 / -1; justify-self: start; }
+.pay-confirm { min-height: 54px; font-size: 1.05rem; }
+
+.pos-date { max-width: 180px; }
+.pos-badge { display: inline-block; margin-inline-start: 8px; padding: 1px 8px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; background: var(--panel-2); color: var(--muted); vertical-align: 1px; }
+.pos-badge.cancel { background: color-mix(in srgb, var(--error) 12%, transparent); color: var(--error); }
+.pos-badge.deposit { background: var(--warn-soft); color: inherit; }
+.pos-row-meta { display: grid; justify-items: end; gap: 2px; font-variant-numeric: tabular-nums; }
+.pos-receipt-lines { display: grid; gap: 6px; }
+.pos-receipt-lines p, .pos-expected p { display: flex; justify-content: space-between; gap: 12px; margin: 0; font-variant-numeric: tabular-nums; }
+.pos-expected { display: grid; gap: 6px; padding: 12px 14px; border-radius: 16px; background: var(--panel-2); }
+.pos-expected .grand { border-top: 1px solid var(--line-strong); padding-top: 8px; font-size: 1.1rem; }
+.pos-methods-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.pos-methods-grid .stat-tile strong { font-size: 1.35rem; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.pos-methods-grid small svg { vertical-align: -2px; }
+.pos-count summary { cursor: pointer; font-weight: 600; }
+.pos-denominations { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-top: 10px; }
+.pos-denominations label { display: grid; gap: 4px; font-size: 0.9rem; color: var(--muted); }
+.pos-counted { font-size: 1.25rem; font-variant-numeric: tabular-nums; }
+.pos-quick-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 0.8fr) auto; gap: 8px; align-items: center; }
+.pos-settings { max-width: 760px; }
+.pos-settings h2 { display: inline-flex; align-items: center; gap: 8px; }
+
+@media (max-width: 900px) {
+  .pos-layout { grid-template-columns: minmax(0, 1fr); }
+  .pos-cart { position: static; order: -1; }
+  .pos-articles { max-height: 360px; }
+}
+@media (max-width: 560px) {
+  .pos-quick-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; }
+  .pos-quick-row input:first-child { grid-column: 1 / -1; }
+  .pos-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* ---------- Bon (80 mm) ---------- */
+.bon-sheet {
+  width: 80mm; max-width: 100%; margin: 0 auto; padding: 6mm 4mm; background: #fff; color: #000; box-shadow: var(--shadow-lift);
+  font: 9.5pt/1.35 ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+.bon { display: grid; gap: 8px; }
+.bon p { margin: 0; }
+.bon-head { display: grid; justify-items: center; text-align: center; gap: 1px; }
+.bon-head img { max-width: 50mm; max-height: 18mm; object-fit: contain; margin-bottom: 4px; }
+.bon-head strong { font-size: 11pt; }
+.bon-title { text-align: center; border-block: 1px dashed #000; padding: 4px 0; }
+.bon-lines { display: grid; gap: 4px; }
+.bon-lines p, .bon-totals p { display: flex; justify-content: space-between; gap: 8px; }
+.bon-lines small { color: #333; }
+.bon-totals { display: grid; gap: 2px; border-top: 1px dashed #000; padding-top: 4px; }
+.bon-totals .grand { font-size: 11pt; font-weight: 700; }
+.bon-notes { display: grid; gap: 4px; border-top: 1px dashed #000; padding-top: 6px; font-size: 8.5pt; text-align: center; }
+.bon-thanks { font-weight: 700; }
+
+@media print {
+  body.ck-printing-bon .bon-sheet { box-shadow: none; width: 72mm; padding: 0; page: bon; }
+}
+@page bon { size: 80mm auto; margin: 4mm; }

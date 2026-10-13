@@ -28,6 +28,7 @@ import {
 import { newRecoveryCodes, newTotpSecret, normalizeRecoveryCode, otpauthUrl, verifyTotp } from "./totp";
 import type { CompanyProfile } from "../shared/company";
 import { repairRoutes, repairStatusRoutes } from "./repairs/routes";
+import { posRoutes } from "./pos/routes";
 
 export { TenantDatabase };
 
@@ -1359,6 +1360,7 @@ app.post("/assistant", async (c) => {
 
 // ---------- Branchen-Systeme ----------
 
+app.route("/pos", posRoutes);
 app.route("/repairs", repairRoutes);
 
 app.notFound((c) => fail(c, "notFound", 404));

@@ -29,6 +29,7 @@ export const pl: Dict = {
     accounting: "Księgowość",
     accountingShort: "Płace",
     time: "Czas pracy",
+    pos: "Kasa",
   },
   theme: { label: "Wygląd", light: "Jasny", dark: "Ciemny", system: "Jak urządzenie", text: "Jasny, ciemny lub automatycznie jak Twoje urządzenie." },
   palette: {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CalendarClock, ClipboardList, Hourglass, PackageCheck, PackageSearch, Plus, Receipt, Search, Settings2, TriangleAlert, Wrench } from "lucide-react";
+import { CalendarClock, CalendarDays, ClipboardList, Hourglass, PackageCheck, PackageSearch, Plus, Repeat, Search, Receipt, Settings2, ShieldCheck, ShoppingCart, TriangleAlert, Users, Wrench } from "lucide-react";
 import { api, type Me } from "../../api";
 import { AppIcon, Link } from "../../components";
 import { navigate } from "../../router";
@@ -11,12 +11,20 @@ import { OrderDetail } from "./OrderDetail";
 import { StockTab } from "./Stock";
 import { InvoicesTab } from "./Invoices";
 import { SettingsTab } from "./Settings";
+import { UsedTab } from "./Used";
+import { WarrantyTab } from "./Warranty";
+import { PricesPanel } from "./Prices";
+import { LoanersPanel } from "./Loaners";
+import { CustomersTab, CustomerCard } from "./Customers";
+import { StatsPanel } from "./Stats";
+import { BookingsTab } from "./Bookings";
+import { PurchasesPanel, SuppliersPanel } from "./Purchases";
 import { StatusPill, deviceLabel } from "./parts";
 import "./repairs.css";
 
 export const BASE = "/app/handy-it";
 
-/** System „Handy- & IT-Service“: Aufträge, Lager, Rechnungen, Einstellungen. */
+/** System „Handy- & IT-Service“: Aufträge, Verkauf, Ankauf, Kunden, Lager, Garantie, Kasse, Einstellungen. */
 export default function RepairsApp({ me, path }: { me: Me; path: string }) {
   const { r, appText, ready } = useRepairI18n();
   const app = findApp("handy-it")!;
@@ -25,16 +33,26 @@ export default function RepairsApp({ me, path }: { me: Me; path: string }) {
 
   if (!ready) return null;
 
+  // Verkauf und Tagesabschluss laufen über die Kasse der Plattform
+  if (section === "verkauf" || section === "kasse") return <Redirect to="/kasse" />;
   if (section === "neu") return <IntakeForm />;
   if (section === "auftrag" && id) return sub === "bearbeiten" ? <IntakeForm editId={id} /> : <OrderDetail id={id} me={me} />;
 
-  const tab = section === "lager" ? "stock" : section === "rechnungen" ? "invoices" : section === "einstellungen" && isManager ? "settings" : "orders";
+  const SECTIONS: Record<string, string> = { termine: "bookings", ankauf: "used", kunden: "customers", lager: "stock", garantie: "warranty", rechnungen: "invoices" };
+  const tab = SECTIONS[section ?? ""] ?? (section === "einstellungen" && isManager ? "settings" : "orders");
   const tabs = [
     { id: "orders", to: BASE, label: r("tabs.orders"), icon: ClipboardList },
+    { id: "bookings", to: `${BASE}/termine`, label: r("tabs.bookings"), icon: CalendarDays },
+    { id: "used", to: `${BASE}/ankauf`, label: r("tabs.used"), icon: Repeat },
+    { id: "customers", to: `${BASE}/kunden`, label: r("tabs.customers"), icon: Users },
     { id: "stock", to: `${BASE}/lager`, label: r("tabs.stock"), icon: PackageSearch },
+    { id: "warranty", to: `${BASE}/garantie`, label: r("tabs.warranty"), icon: ShieldCheck },
     { id: "invoices", to: `${BASE}/rechnungen`, label: r("tabs.invoices"), icon: Receipt },
     ...(isManager ? [{ id: "settings", to: `${BASE}/einstellungen`, label: r("tabs.settings"), icon: Settings2 }] : []),
   ];
+  const STOCK_SUBS: Record<string, string> = { preise: "prices", leihgeraete: "loaners", bestellungen: "purchases", lieferanten: "suppliers" };
+  const stockSub = STOCK_SUBS[id ?? ""] ?? "parts";
+  const invoicesSub = id === "auswertung" && isManager ? "stats" : "invoices";
 
   return (
     <div className="stack-lg repairs">
@@ -44,10 +62,13 @@ export default function RepairsApp({ me, path }: { me: Me; path: string }) {
           <h1 className="display">{appText(app.id).name}</h1>
           <p className="muted">{appText(app.id).tagline}</p>
         </div>
-        <Link to={`${BASE}/neu`} className="button primary repairs-new"><Plus size={18} /> {r("newOrder")}</Link>
+        <div className="row gap repairs-new">
+          <Link to="/kasse" className="button"><ShoppingCart size={18} /> {r("tabs.cash")}</Link>
+          <Link to={`${BASE}/neu`} className="button primary"><Plus size={18} /> {r("newOrder")}</Link>
+        </div>
       </header>
 
-      <div className="page-tabs" role="tablist">
+      <div className="page-tabs repairs-tabs" role="tablist">
         {tabs.map(({ id: tabId, to, label, icon: Icon }) => (
           <button key={tabId} role="tab" aria-selected={tab === tabId} className={tab === tabId ? "active" : ""} onClick={() => navigate(to)}>
             <Icon size={17} aria-hidden /> {label}
@@ -56,9 +77,54 @@ export default function RepairsApp({ me, path }: { me: Me; path: string }) {
       </div>
 
       {tab === "orders" && <OrdersTab />}
-      {tab === "stock" && <StockTab isManager={isManager} />}
-      {tab === "invoices" && <InvoicesTab />}
+      {tab === "bookings" && <BookingsTab tenantId={me.user.tenantId} isManager={isManager} />}
+      {tab === "used" && <UsedTab isManager={isManager} />}
+      {tab === "customers" && (id ? <CustomerCard id={id} isManager={isManager} /> : <CustomersTab />)}
+      {tab === "stock" && (
+        <>
+          <SubNav current={stockSub} items={[
+            { id: "parts", to: `${BASE}/lager`, label: r("tabs.parts") },
+            { id: "prices", to: `${BASE}/lager/preise`, label: r("tabs.prices") },
+            { id: "loaners", to: `${BASE}/lager/leihgeraete`, label: r("tabs.loaners") },
+            { id: "purchases", to: `${BASE}/lager/bestellungen`, label: r("tabs.purchases") },
+            { id: "suppliers", to: `${BASE}/lager/lieferanten`, label: r("tabs.suppliers") },
+          ]} />
+          {stockSub === "parts" && <StockTab isManager={isManager} />}
+          {stockSub === "prices" && <PricesPanel isManager={isManager} />}
+          {stockSub === "loaners" && <LoanersPanel isManager={isManager} />}
+          {stockSub === "purchases" && <PurchasesPanel isManager={isManager} sub={sub} />}
+          {stockSub === "suppliers" && <SuppliersPanel isManager={isManager} />}
+        </>
+      )}
+      {tab === "invoices" && (
+        <>
+          {isManager && (
+            <SubNav current={invoicesSub} items={[
+              { id: "invoices", to: `${BASE}/rechnungen`, label: r("tabs.invoices") },
+              { id: "stats", to: `${BASE}/rechnungen/auswertung`, label: r("tabs.stats") },
+            ]} />
+          )}
+          {invoicesSub === "stats" && <StatsPanel />}
+          {invoicesSub === "invoices" && <InvoicesTab />}
+        </>
+      )}
+      {tab === "warranty" && <WarrantyTab />}
       {tab === "settings" && <SettingsTab />}
+    </div>
+  );
+}
+
+function Redirect({ to }: { to: string }) {
+  useEffect(() => navigate(to), []);
+  return null;
+}
+
+function SubNav({ current, items }: { current: string; items: { id: string; to: string; label: string }[] }) {
+  return (
+    <div className="chips sub-nav" role="tablist">
+      {items.map((i) => (
+        <button key={i.id} role="tab" aria-selected={current === i.id} className={current === i.id ? "chip active" : "chip"} onClick={() => navigate(i.to)}>{i.label}</button>
+      ))}
     </div>
   );
 }
@@ -75,7 +141,7 @@ function OrdersTab() {
     }
   });
   const [query, setQuery] = useState("");
-  const [data, setData] = useState<{ orders: RepairOrderRow[]; counts: Record<StatusGroup, number>; lowStock: number } | null>(null);
+  const [data, setData] = useState<{ orders: RepairOrderRow[]; counts: Record<StatusGroup, number>; lowStock: number; bookings: { new: number; today: number } } | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -112,6 +178,11 @@ function OrdersTab() {
             <strong>{data.counts.pickup}</strong><small>{r("list.statPickup")}</small>
           </button>
         </div>
+      )}
+      {!!data && (data.bookings.new > 0 || data.bookings.today > 0) && (
+        <Link to={`${BASE}/termine`} className="notice repairs-low"><CalendarDays size={17} /> {[
+          data.bookings.new ? r("list.newBookings", { n: data.bookings.new }) : "", data.bookings.today ? r("list.todayBookings", { n: data.bookings.today }) : "",
+        ].filter(Boolean).join(" · ")}</Link>
       )}
       {!!data?.lowStock && (
         <Link to={`${BASE}/lager`} className="notice repairs-low"><TriangleAlert size={17} /> {r("list.lowStock", { n: data.lowStock })}</Link>

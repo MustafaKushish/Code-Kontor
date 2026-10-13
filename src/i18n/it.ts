@@ -29,6 +29,7 @@ export const it: Dict = {
     accounting: "Contabilità",
     accountingShort: "Paghe",
     time: "Presenze",
+    pos: "Cassa",
   },
   theme: { label: "Aspetto", light: "Chiaro", dark: "Scuro", system: "Come il dispositivo", text: "Chiaro, scuro o automatico come il tuo dispositivo." },
   palette: {

@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Calculator, Clock, Laptop, LayoutDashboard, LogOut, Moon, Search, Settings, ShieldCheck, Store, Sun, Users } from "lucide-react";
+import { Calculator, Clock, ShoppingCart, Laptop, LayoutDashboard, LogOut, Moon, Search, Settings, ShieldCheck, Store, Sun, Users } from "lucide-react";
 import type { Me } from "../api";
 import { AppIcon, Avatar, Link, Logo } from "../components";
 import { useTheme, type ThemeChoice } from "../theme";
@@ -14,6 +14,7 @@ import { LegalLinks } from "../pages/Legal";
 
 const NAV = [
   { to: "/", label: "nav.overview", short: "nav.startShort", icon: LayoutDashboard },
+  { to: "/kasse", label: "nav.pos", short: "nav.pos", icon: ShoppingCart },
   { to: "/zeiten", label: "nav.time", short: "nav.time", icon: Clock },
   { to: "/katalog", label: "nav.catalog", short: "nav.catalogShort", icon: Store, notInTabbar: true },
   { to: "/team", label: "nav.team", short: "nav.team", icon: Users, managersOnly: true },
