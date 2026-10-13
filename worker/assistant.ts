@@ -101,7 +101,7 @@ interface GeminiChunk {
 const BLOCKED = new Set(["SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST", "SPII", "RECITATION"]);
 
 /** Ausweichmodelle, wenn Google das Hauptmodell gerade überlastet meldet (HTTP 503/500/429). */
-export const FALLBACK_MODELS = ["gemini-flash-lite-latest", "gemini-pro-latest"];
+export const FALLBACK_MODELS = ["gemini-flash-lite-latest", "gemini-3.7-flash", "gemini-3.5-flash", "gemma-4-31b-it"];
 const RETRYABLE = new Set([429, 500, 503, 504]);
 
 /** Stellt die Frage an Gemini und liefert die Antwort Stück für Stück. */
