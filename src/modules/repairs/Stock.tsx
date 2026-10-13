@@ -1,8 +1,9 @@
+import { formatRate, standardVat, vatChoices } from "../../money";
 import { useEffect, useState, type FormEvent } from "react";
 import { Minus, Plus, Search, Trash2 } from "lucide-react";
 import { api } from "../../api";
 import { Field } from "../../components";
-import { VAT_RATES, type RepairPart } from "../../../shared/repairs";
+import { type RepairPart } from "../../../shared/repairs";
 import { useRepairI18n } from "./i18n";
 import { Dialog, MoneyInput } from "./parts";
 
@@ -65,8 +66,8 @@ export function StockTab({ isManager }: { isManager: boolean }) {
 }
 
 function PartDialog({ part, isManager, onClose, onSaved }: { part: RepairPart | null; isManager: boolean; onClose: () => void; onSaved: () => void }) {
-  const { r, repairError, dateTime } = useRepairI18n();
-  const [form, setForm] = useState<PartForm>(part ? { ...part } : EMPTY);
+  const { r, repairError, dateTime, lang } = useRepairI18n();
+  const [form, setForm] = useState<PartForm>(part ? { ...part } : { ...EMPTY, vatRate: standardVat() });
   const [delta, setDelta] = useState("");
   const [moves, setMoves] = useState<{ at: string; delta: number; reason: string; orderNumber: number | null; userName: string | null }[]>([]);
   const [error, setError] = useState("");
@@ -124,7 +125,7 @@ function PartDialog({ part, isManager, onClose, onSaved }: { part: RepairPart | 
           </Field>
           <Field label={r("order.vat")}>
             <select value={form.vatRate} onChange={(e) => set({ vatRate: Number(e.target.value) })}>
-              {VAT_RATES.map((v) => <option key={v} value={v}>{v} %</option>)}
+              {vatChoices(form.vatRate).map((v) => <option key={v} value={v}>{formatRate(v, lang)}</option>)}
             </select>
           </Field>
           <Field label={r("stock.minStock")}><input type="number" min={0} value={form.minStock} onChange={(e) => set({ minStock: Math.max(0, Number(e.target.value) || 0) })} /></Field>

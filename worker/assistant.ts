@@ -90,6 +90,7 @@ export interface GeminiOptions {
   model?: string;
   /** Für Tests austauschbar. */
   fetch?: typeof fetch;
+  wait?: (ms: number) => Promise<void>;
 }
 
 interface GeminiChunk {
@@ -99,31 +100,49 @@ interface GeminiChunk {
 
 const BLOCKED = new Set(["SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST", "SPII", "RECITATION"]);
 
+/** Ausweichmodelle, wenn Google das Hauptmodell gerade überlastet meldet (HTTP 503/500/429). */
+export const FALLBACK_MODELS = ["gemini-flash-lite-latest", "gemini-3.7-flash", "gemini-3.5-flash", "gemma-4-31b-it"];
+const RETRYABLE = new Set([429, 500, 503, 504]);
+
 /** Stellt die Frage an Gemini und liefert die Antwort Stück für Stück. */
 export async function* askAssistant(options: GeminiOptions, ctx: AssistantContext, messages: ChatMessage[]): AsyncGenerator<StreamEvent> {
-  const model = options.model || DEFAULT_MODEL;
   const doFetch = options.fetch ?? fetch;
-  let response: Response;
-  try {
-    response = await doFetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": options.apiKey },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: systemPrompt(ctx) }] },
-        contents: messages.map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })),
-        generationConfig: { maxOutputTokens: 2048, temperature: 0.4 },
-      }),
-    });
-  } catch (error) {
-    console.error("assistant", error);
-    yield { type: "error", code: "assistantFailed" };
-    return;
+  const primary = options.model || DEFAULT_MODEL;
+  // Überlastung dauert meist nur Sekunden: zum Schluss das Hauptmodell nach kurzer Pause noch einmal.
+  const models = [...new Set([primary, ...FALLBACK_MODELS]), primary];
+  const wait = options.wait ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
+  const body = JSON.stringify({
+    systemInstruction: { parts: [{ text: systemPrompt(ctx) }] },
+    contents: messages.map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })),
+    generationConfig: { maxOutputTokens: 2048, temperature: 0.4 },
+  });
+
+  let response: Response | null = null;
+  let lastStatus = 0;
+  for (const [i, model] of models.entries()) {
+    if (i === models.length - 1) await wait(1500);
+    try {
+      response = await doFetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": options.apiKey },
+        body,
+      });
+    } catch (error) {
+      console.error("assistant", model, error);
+      response = null;
+      continue;
+    }
+    if (response.ok && response.body) break;
+    lastStatus = response.status;
+    console.error("assistant", model, response.status, await response.text().catch(() => ""));
+    // Falscher Schlüssel oder ungültige Anfrage: andere Modelle helfen nicht.
+    if (!RETRYABLE.has(response.status) && response.status !== 404) break;
+    response = null;
   }
 
-  if (!response.ok || !response.body) {
-    console.error("assistant", response.status, await response.text().catch(() => ""));
-    if (response.status === 429) yield { type: "error", code: "assistantBusy" };
-    else if (response.status === 401 || response.status === 403) yield { type: "error", code: "assistantNotConfigured" };
+  if (!response || !response.ok || !response.body) {
+    if (lastStatus === 401 || lastStatus === 403) yield { type: "error", code: "assistantNotConfigured" };
+    else if (RETRYABLE.has(lastStatus)) yield { type: "error", code: "assistantBusy" };
     else yield { type: "error", code: "assistantFailed" };
     return;
   }

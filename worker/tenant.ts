@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import type { CompanyProfile } from "../shared/company";
+import type { TaxSettings } from "../shared/countries";
 import { emptyEmployee, type Advisor, type Employee, type MonthEntry } from "../shared/accounting";
 import { localDay, type Absence, type RequestStatus, type TimeEntry, type TimeRequest, type TimeRequestData, type TimeSettings } from "../shared/time";
 import { REPAIR_MIGRATIONS, RepairError, RepairStore } from "./repairs/store";
@@ -307,6 +308,24 @@ export class TenantDatabase extends DurableObject<Record<string, never>> {
     const before = this.sql.exec<{ n: number }>("SELECT COUNT(*) AS n FROM time_requests WHERE id = ? AND employee_id = ? AND status = 'pending'", id, employeeId).one().n;
     this.sql.exec("DELETE FROM time_requests WHERE id = ? AND employee_id = ? AND status = 'pending'", id, employeeId);
     return before > 0;
+  }
+
+  /** Eigene Steuer-Einstellungen; null, solange die Vorgaben des Landes gelten. */
+  async getTaxSettings(): Promise<TaxSettings | null> {
+    const rows = this.sql.exec<{ value: string }>("SELECT value FROM settings WHERE key = 'tax'").toArray();
+    return rows.length ? (JSON.parse(rows[0]!.value) as TaxSettings) : null;
+  }
+
+  async saveTaxSettings(settings: TaxSettings | null): Promise<void> {
+    if (!settings) {
+      this.sql.exec("DELETE FROM settings WHERE key = 'tax'");
+      return;
+    }
+    this.sql.exec(
+      `INSERT INTO settings (key, value) VALUES ('tax', ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`,
+      JSON.stringify(settings),
+    );
   }
 
   async getTimeSettings(): Promise<TimeSettings> {

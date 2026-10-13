@@ -1,3 +1,4 @@
+import { formatRate, standardVat, vatChoices } from "../../money";
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft, BadgeCheck, Check, ClipboardCheck, Copy, Eye, FileText, History, KeyRound, Link2, ListChecks, Mail, Package, Pencil, Phone, Plus, Printer,
@@ -8,7 +9,7 @@ import { api, type Me } from "../../api";
 import { Link } from "../../components";
 import { navigate } from "../../router";
 import {
-  PAYMENT_METHODS, PICKUP_STATUSES, VAT_RATES, canChangeStatus, computeTotals, isClosed, priceMatches,
+  PAYMENT_METHODS, PICKUP_STATUSES, canChangeStatus, computeTotals, isClosed, priceMatches,
   type CheckList, type Loaner, type PaymentMethod, type RepairItemKind, type RepairOrder, type RepairPart, type RepairPrice, type RepairSettings, type RepairStatus,
 } from "../../../shared/repairs";
 import { useRepairI18n } from "./i18n";
@@ -484,12 +485,12 @@ function AddItemDialog({ kind: initialKind, defaultLabor, onClose, onAdd }: {
   kind: RepairItemKind; defaultLabor: number; onClose: () => void;
   onAdd: (item: { kind: RepairItemKind; partId: string | null; name: string; qty: number; unitCents: number; vatRate: number }) => void;
 }) {
-  const { r, euro } = useRepairI18n();
+  const { r, euro, lang } = useRepairI18n();
   const [kind, setKind] = useState(initialKind);
   const [name, setName] = useState(initialKind === "labor" ? r("order.addLabor") : "");
   const [qty, setQty] = useState("1");
   const [cents, setCents] = useState<number | null>(initialKind === "labor" ? defaultLabor : 0);
-  const [vatRate, setVatRate] = useState(19);
+  const [vatRate, setVatRate] = useState(standardVat);
   const [part, setPart] = useState<RepairPart | null>(null);
   const [query, setQuery] = useState("");
   const [parts, setParts] = useState<RepairPart[]>([]);
@@ -561,7 +562,7 @@ function AddItemDialog({ kind: initialKind, defaultLabor, onClose, onAdd }: {
               <label className="field">
                 <span className="field-label">{r("order.vat")}</span>
                 <select value={vatRate} onChange={(e) => setVatRate(Number(e.target.value))}>
-                  {VAT_RATES.map((v) => <option key={v} value={v}>{v} %</option>)}
+                  {vatChoices(vatRate).map((v) => <option key={v} value={v}>{formatRate(v, lang)}</option>)}
                 </select>
               </label>
             </div>

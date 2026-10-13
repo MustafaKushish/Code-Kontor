@@ -1,9 +1,10 @@
+import { formatRate, vatChoices } from "../../money";
 import { useEffect, useState } from "react";
 import { Minus, Plus, Printer, Search, ShoppingCart, Smartphone, Trash2, UserCheck, UserRound } from "lucide-react";
 import { api } from "../../api";
 import { Field } from "../../components";
 import {
-  PAYMENT_METHODS, VAT_RATES, computeTotals,
+  PAYMENT_METHODS, computeTotals,
   type InvoiceKind, type PaymentMethod, type RepairCustomer, type RepairInvoice, type RepairPart, type SaleLine, type UsedDevice,
 } from "../../../shared/repairs";
 import { useRepairI18n } from "./i18n";
@@ -248,7 +249,7 @@ export function SalesTab() {
 }
 
 function OtherLineDialog({ onClose, onAdd }: { onClose: () => void; onAdd: (l: SaleLine) => void }) {
-  const { r } = useRepairI18n();
+  const { r, lang } = useRepairI18n();
   const [name, setName] = useState("");
   const [cents, setCents] = useState(0);
   const [vat, setVat] = useState(19);
@@ -260,7 +261,7 @@ function OtherLineDialog({ onClose, onAdd }: { onClose: () => void; onAdd: (l: S
           <Field label={r("order.unitPrice")}><MoneyInput cents={cents} onChange={(c) => c !== null && setCents(c)} /></Field>
           <Field label={r("order.vat")}>
             <select value={vat} onChange={(e) => setVat(Number(e.target.value))}>
-              {VAT_RATES.map((v) => <option key={v} value={v}>{v} %</option>)}
+              {vatChoices().map((v) => <option key={v} value={v}>{formatRate(v, lang)}</option>)}
             </select>
           </Field>
         </div>

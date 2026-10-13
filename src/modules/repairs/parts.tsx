@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Check, Eraser, Minus, X } from "lucide-react";
 import { CHECKS_FOR, MAX_PHOTO_CHARS, parseEuro, type CheckItem, type CheckList, type CheckResult, type DeviceType, type RepairDevice, type RepairStatus } from "../../../shared/repairs";
 import { centsToInput, useRepairI18n } from "./i18n";
+import { currencySymbol } from "../../money";
 
 const STATUS_TONE: Record<RepairStatus, string> = {
   received: "neutral",
@@ -25,14 +26,16 @@ export const deviceLabel = (d: Pick<RepairDevice, "brand" | "model">) => [d.bran
 
 /** Eingabe für Euro-Beträge; gibt Cent zurück (null bei ungültiger Eingabe). */
 export function MoneyInput({ cents, onChange, id, placeholder }: { cents: number; onChange: (cents: number | null) => void; id?: string; placeholder?: string }) {
+  const { lang } = useRepairI18n();
+  const symbol = currencySymbol(lang);
   const [text, setText] = useState(centsToInput(cents));
   useEffect(() => {
     if (parseEuro(text) !== cents) setText(centsToInput(cents));
   }, [cents]);
   return (
     <span className="money-input">
-      <input id={id} inputMode="decimal" value={text} placeholder={placeholder ?? "0,00"} onChange={(e) => (setText(e.target.value), onChange(parseEuro(e.target.value)))} />
-      <span aria-hidden>€</span>
+      <input id={id} inputMode="decimal" style={{ paddingInlineEnd: `${20 + symbol.length * 10}px` }} value={text} placeholder={placeholder ?? "0,00"} onChange={(e) => (setText(e.target.value), onChange(parseEuro(e.target.value)))} />
+      <span aria-hidden>{symbol}</span>
     </span>
   );
 }

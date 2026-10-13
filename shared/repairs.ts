@@ -247,7 +247,13 @@ export const DEFAULT_REPAIR_SETTINGS: RepairSettings = {
   booking: { enabled: false, weekdays: [1, 2, 3, 4, 5, 6], from: "10:00", to: "18:00", slotMinutes: 30, perSlot: 1, daysAhead: 14, note: "" },
 };
 
+/** Steuersätze, wenn die Firma nichts anderes eingestellt hat (Deutschland). */
 export const VAT_RATES = [19, 7, 0] as const;
+
+/** Steuersatz aus einer Eingabe: 0 bis unter 100 Prozent, sonst der Normalsatz. */
+export function vatRateOf(value: unknown, fallback = 19): number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value < 100 ? Math.round(value * 100) / 100 : fallback;
+}
 
 // ---------- Rechnen ----------
 
@@ -402,7 +408,7 @@ export function sanitizeItem(input: unknown): Omit<RepairItem, "id"> | null {
     name,
     qty,
     unitCents: cents(i.unitCents),
-    vatRate: VAT_RATES.includes(i.vatRate as 19) ? (i.vatRate as number) : 19,
+    vatRate: vatRateOf(i.vatRate),
   };
 }
 
@@ -418,7 +424,7 @@ export function sanitizePart(input: unknown): Omit<RepairPart, "id" | "stock"> &
     minStock: int(p.minStock),
     purchaseCents: cents(p.purchaseCents),
     priceCents: cents(p.priceCents),
-    vatRate: VAT_RATES.includes(p.vatRate as 19) ? (p.vatRate as number) : 19,
+    vatRate: vatRateOf(p.vatRate),
   };
 }
 
@@ -438,9 +444,9 @@ export function sanitizeRepairSettings(input: unknown): RepairSettings {
   };
 }
 
-/** Euro-Eingabe („12,50“, „12.5“, „1.234,00“) in Cent; null bei ungültiger Eingabe. */
+/** Betrag („12,50“, „12.5“, „1.234,00“) in Cent; null bei ungültiger Eingabe. */
 export function parseEuro(value: string): number | null {
-  let v = value.trim().replace(/\s|€/g, "");
+  let v = value.trim().replace(/\s|€|[$£¥₺₹₴₽]|^[A-Z]{3}|[A-Z]{3}$/g, "");
   if (!v) return 0;
   if (/,\d{1,2}$/.test(v)) v = v.replace(/\./g, "").replace(",", ".");
   else v = v.replace(/,/g, "");
@@ -610,7 +616,7 @@ export function sanitizePrice(input: unknown): Omit<RepairPrice, "id"> | null {
     model: str(p.model, 100),
     service,
     priceCents: cents(p.priceCents),
-    vatRate: VAT_RATES.includes(p.vatRate as 19) ? (p.vatRate as number) : 19,
+    vatRate: vatRateOf(p.vatRate),
     partId: typeof p.partId === "string" && p.partId ? p.partId.slice(0, 64) : null,
     minutes: typeof p.minutes === "number" && Number.isFinite(p.minutes) ? Math.min(Math.max(Math.round(p.minutes), 0), 10_000) : 0,
   };

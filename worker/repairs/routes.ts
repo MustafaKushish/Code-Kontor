@@ -1,3 +1,4 @@
+import { defaultTaxSettings } from "../../shared/countries";
 import { Hono, type Context } from "hono";
 import type { Env } from "../index";
 import { tenantStub, type ModuleResult } from "../tenant";
@@ -671,6 +672,7 @@ async function publicOrder(env: Env, tenantId: string, token: string) {
 /** Nur was der Kunde sehen soll: kein Name, keine Telefonnummer, keine internen Notizen. */
 async function publicView(env: Env, tenantId: string, order: RepairOrder) {
   const company = await tenantStub(env, tenantId).getCompany();
+  const tax = await tenantStub(env, tenantId).getTaxSettings();
   const settings = await store(env, tenantId).settings();
   const smallBusiness = settings.ok ? settings.value.smallBusiness : false;
   const showPrices = ["quote", "waitingParts", "repairing", "ready", "notRepaired", "pickedUp"].includes(order.status);
@@ -679,6 +681,7 @@ async function publicView(env: Env, tenantId: string, order: RepairOrder) {
       name: company?.name ?? "", phone: company?.phone ?? "", email: company?.email ?? "", street: company?.street ?? "",
       postalCode: company?.postalCode ?? "", city: company?.city ?? "", logoDataUrl: company?.logoDataUrl ?? "",
     },
+    currency: tax?.currency ?? defaultTaxSettings(company?.country ?? "DE").currency,
     number: order.number,
     status: order.status,
     quote: order.quote,
