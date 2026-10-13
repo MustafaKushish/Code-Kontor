@@ -200,7 +200,7 @@ export const de = {
     installed: "Installiert",
     view: "Ansehen",
     none: "Kein System gefunden. Versuch einen anderen Suchbegriff.",
-    categories: { Dienstleistung: "Dienstleistung", Handel: "Handel", Handwerk: "Handwerk", Gastronomie: "Gastronomie" },
+    categories: { Dienstleistung: "Dienstleistung", Handel: "Handel", Handwerk: "Handwerk", Gastronomie: "Gastronomie", Zusatz: "Zusatzmodul" },
   },
   detail: {
     confirmRemove: "{name} wirklich entfernen? Deine Daten bleiben gespeichert.",
@@ -705,6 +705,12 @@ export const de = {
       tagline: "Reparaturen für Handy, Tablet, Laptop und Smartwatch",
       description: "Geräteannahme mit IMEI und Fehlerbild, Kostenvoranschlag mit Freigabe durch den Kunden, Ersatzteile aus dem Lager, Abholung mit Rechnung und Garantie und eine Statusseite für deine Kunden.",
       features: ["Geräteannahme mit Annahmeschein", "Statusseite & E-Mail für Kunden", "Kostenvoranschlag mit Online-Freigabe", "Ersatzteile & Zubehör im Lager", "Abholung mit Rechnung & Garantie"],
+    },
+    kasse: {
+      name: "Kasse",
+      tagline: "Eine Kasse für alle Systeme, mit Scanner und Kassenplätzen",
+      description: "Verkaufen per Barcode-Scanner oder Kacheln, bezahlen mit Bar, Karte, Überweisung oder Gutschein, Artikel mit EAN und Bestand, mehrere Kassenplätze mit eigenem Kassenbuch und Tagesabschluss. Arbeitet mit allen installierten Systemen zusammen.",
+      features: ["Barcode-Scanner & Vollbild-Kassenmodus", "Artikel mit EAN & Bestand", "Bar, Karte, Überweisung, Gutschein", "Mehrere Kassenplätze", "Kassenbuch & Tagesabschluss (Z-Bon)"],
     },
     einzelhandel: {
       name: "Einzelhandel",

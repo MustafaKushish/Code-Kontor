@@ -8,8 +8,8 @@ export interface CatalogApp {
   name: string;
   tagline: string;
   description: string;
-  category: "Dienstleistung" | "Handel" | "Handwerk" | "Gastronomie";
-  icon: "scissors" | "wrench" | "utensils" | "shopping" | "smartphone" | "car" | "briefcase";
+  category: "Dienstleistung" | "Handel" | "Handwerk" | "Gastronomie" | "Zusatz";
+  icon: "scissors" | "wrench" | "utensils" | "shopping" | "smartphone" | "car" | "briefcase" | "register";
   /** Akzentfarbe der Karte, als Farbton (0–360) */
   hue: number;
   /** Monatspreis in Euro (Platzhalter bis zur Preisliste) */
@@ -57,6 +57,20 @@ export const CATALOG: CatalogApp[] = [
     priceMonthly: 39,
     status: "ready",
     features: ["Geräteannahme mit Annahmeschein", "Statusseite & E-Mail für Kunden", "Kostenvoranschlag mit Online-Freigabe", "Ersatzteile & Zubehör im Lager", "Abholung mit Rechnung & Garantie"],
+  },
+  {
+    // Zusatzmodul: eine Kasse für alle installierten Systeme (siehe worker/pos)
+    id: "kasse",
+    name: "Kasse",
+    tagline: "Eine Kasse für alle Systeme, mit Scanner und Kassenplätzen",
+    description:
+      "Verkaufen per Barcode-Scanner oder Kacheln, bezahlen mit Bar, Karte, Überweisung oder Gutschein, Artikel mit EAN und Bestand, mehrere Kassenplätze mit eigenem Kassenbuch und Tagesabschluss. Arbeitet mit allen installierten Systemen zusammen.",
+    category: "Zusatz",
+    icon: "register",
+    hue: 185,
+    priceMonthly: 19,
+    status: "ready",
+    features: ["Barcode-Scanner & Vollbild-Kassenmodus", "Artikel mit EAN & Bestand", "Bar, Karte, Überweisung, Gutschein", "Mehrere Kassenplätze", "Kassenbuch & Tagesabschluss (Z-Bon)"],
   },
   {
     id: "einzelhandel",

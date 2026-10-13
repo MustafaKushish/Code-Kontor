@@ -17,6 +17,7 @@ import { setTaxSettings } from "./money";
 import { TerminalPage } from "./pages/Terminal";
 import { ImprintPage, PrivacyPage } from "./pages/Legal";
 import { findApp } from "../shared/apps";
+import { POS_APP_ID } from "../shared/pos";
 
 // Branchen-Systeme werden erst geladen, wenn sie gebraucht werden
 const RepairsApp = lazy(() => import("./modules/repairs/RepairsApp"));
@@ -24,6 +25,7 @@ const RepairStatusPage = lazy(() => import("./modules/repairs/StatusPage"));
 const RepairBookingPage = lazy(() => import("./modules/repairs/BookingPage"));
 // Die Kasse gehört zur Plattform (eine für alle Systeme), wird aber auch erst bei Bedarf geladen
 const PosApp = lazy(() => import("./pos/PosApp"));
+const PosKiosk = lazy(() => import("./pos/PosApp").then((m) => ({ default: m.Kiosk })));
 
 export function App() {
   const [me, setMe] = useState<Me | null>(null);
@@ -93,16 +95,25 @@ export function App() {
 
   let page;
   const [, section, id] = path.split("/");
+  const hasPos = me.installedApps.includes(POS_APP_ID);
+  // Kassenmodus: ganzer Bildschirm ohne Menü
+  if (section === "kasse" && id === "modus" && hasPos) return <Suspense fallback={null}><PosKiosk me={me} /></Suspense>;
+
   if (section === "katalog" && id && findApp(id)) {
     page = <AppDetail app={findApp(id)!} me={me} onAppsChanged={setInstalledApps} />;
   } else if (section === "katalog") {
     page = <Catalog me={me} />;
   } else if (section === "app" && id === "handy-it" && me.installedApps.includes(id)) {
     page = <Suspense fallback={null}><RepairsApp me={me} path={path} /></Suspense>;
+  } else if (section === "app" && id === POS_APP_ID && hasPos) {
+    page = <Suspense fallback={null}><PosApp me={me} path="/kasse" /></Suspense>;
   } else if (section === "app" && id && findApp(id) && me.installedApps.includes(id)) {
     page = <InstalledApp app={findApp(id)!} />;
-  } else if (section === "kasse") {
+  } else if (section === "kasse" && hasPos) {
     page = <Suspense fallback={null}><PosApp me={me} path={path} /></Suspense>;
+  } else if (section === "kasse") {
+    // Ohne gebuchtes Kassenmodul: zeigen, was es kann, und buchen lassen
+    page = <AppDetail app={findApp(POS_APP_ID)!} me={me} onAppsChanged={setInstalledApps} />;
   } else if (section === "team" && isManager) {
     page = <Team me={me} />;
   } else if (section === "buchhaltung" && isManager) {

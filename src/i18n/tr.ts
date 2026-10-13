@@ -199,7 +199,7 @@ export const tr: Dict = {
     installed: "Yüklü",
     view: "İncele",
     none: "Sistem bulunamadı. Başka bir arama dene.",
-    categories: { Dienstleistung: "Hizmet", Handel: "Ticaret", Handwerk: "Zanaat", Gastronomie: "Yeme-içme" },
+    categories: { Dienstleistung: "Hizmet", Handel: "Ticaret", Handwerk: "Zanaat", Gastronomie: "Yeme-içme", Zusatz: "Ek modül" },
   },
   detail: {
     confirmRemove: "{name} gerçekten kaldırılsın mı? Verilerin saklı kalır.",
@@ -704,6 +704,12 @@ export const tr: Dict = {
       tagline: "Telefon, tablet, dizüstü ve akıllı saat tamiri",
       description: "IMEI ve arıza kaydıyla cihaz kabulü, müşterinin çevrimiçi onayladığı fiyat teklifi, stoktan yedek parça, fatura ve garantiyle teslim ve müşterileriniz için durum sayfası.",
       features: ["Kabul fişiyle cihaz kabulü", "Müşteriye durum sayfası ve e-posta", "Çevrimiçi onaylı fiyat teklifi", "Stokta yedek parça ve aksesuar", "Fatura ve garantiyle teslim"],
+    },
+    kasse: {
+      name: "Kasa",
+      tagline: "Tüm sistemler için tek kasa, tarayıcı ve kasa noktalarıyla",
+      description: "Barkod tarayıcı veya kutucuklarla satış, nakit, kart, havale veya hediye çekiyle ödeme, EAN ve stoklu ürünler, her biri kendi kasa defteri ve gün sonu olan birden fazla kasa noktası. Kurulu tüm sistemlerle birlikte çalışır.",
+      features: ["Barkod tarayıcı & tam ekran kasa modu", "EAN ve stoklu ürünler", "Nakit, kart, havale, hediye çeki", "Birden fazla kasa noktası", "Kasa defteri & gün sonu (Z raporu)"],
     },
     einzelhandel: {
       name: "Perakende",

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DatabaseSync } from "node:sqlite";
 import { computeTotals, parseAmount, sanitizeLine, sanitizePosSettings, settlePayments } from "../shared/pos";
-import { POS_MIGRATIONS, PosError, PosStore, type PosContext } from "../worker/pos/store";
+import { POS_MIGRATIONS, POS_MODULE_MIGRATIONS, PosError, PosStore, type PosContext } from "../worker/pos/store";
 import { REPAIR_MIGRATIONS, RepairError, RepairStore } from "../worker/repairs/store";
 import { sanitizeIntake, sanitizePart, sanitizeUsed } from "../shared/repairs";
 
@@ -42,7 +42,7 @@ describe("Kasse: Zahlungen", () => {
 
 // ---------- Kasse mit echter SQLite-Datenbank (wie im Durable Object) ----------
 
-function database() {
+function database(seed?: (db: DatabaseSync) => void) {
   const db = new DatabaseSync(":memory:");
   const sql = {
     exec(query: string, ...params: (string | number | null)[]) {
@@ -83,12 +83,15 @@ function database() {
     }
   };
   db.exec("CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT (datetime('now')))");
+  db.exec("CREATE TABLE installed_apps (app_id TEXT PRIMARY KEY, installed_at TEXT NOT NULL DEFAULT (datetime('now')))");
   db.exec(POS_MIGRATIONS);
+  seed?.(db);
   for (const step of REPAIR_MIGRATIONS) typeof step === "function" ? step(sql) : sql.exec(step);
+  for (const step of POS_MODULE_MIGRATIONS) typeof step === "function" ? step(sql) : sql.exec(step);
   const pos = new PosStore(sql, transaction);
   const repairs = new RepairStore(sql, transaction, pos);
   pos.register("repairs", repairs.posModule());
-  return { pos, repairs };
+  return { pos, repairs, db };
 }
 
 const actor = { id: "u1", name: "Mia" };
@@ -232,5 +235,73 @@ describe("Kasse: Sprachen", async () => {
       expect(text.trim(), p).not.toBe("");
       expect(vars(text), p).toBe(vars(get(dicts[0][1], p) as string));
     }
+  });
+});
+
+describe("Kasse: Kassenplätze, Artikelstamm und Scanner", () => {
+  const at = (register: string) => ({ ...ctx(), actor: { ...actor, register } });
+
+  it("übernimmt Schnellartikel als Kacheln und behält die Kasse für Handy-Shops", () => {
+    const { pos, db } = database((d) => {
+      d.exec("INSERT INTO installed_apps (app_id) VALUES ('handy-it')");
+      d.prepare("INSERT INTO settings (key, value) VALUES ('pos', ?)").run(
+        JSON.stringify({ methods: ["cash", "card"], quickItems: [{ id: "q1", name: "Kaffee", priceCents: 250, vatRate: 19 }], footer: "Danke" }),
+      );
+    });
+    expect(pos.items()).toMatchObject([{ id: "q1", name: "Kaffee", tile: true, stock: null }]);
+    expect(pos.settings().footer).toBe("Danke");
+    expect(pos.settings()).not.toHaveProperty("quickItems");
+    expect(db.prepare("SELECT app_id FROM installed_apps ORDER BY app_id").all().map((r) => r.app_id)).toEqual(["handy-it", "kasse"]);
+    expect(pos.articles("", []).map((a) => a.name)).toEqual(["Kaffee"]);
+  });
+
+  it("führt Bargeld und Abschluss je Kassenplatz, Belegnummern bleiben fortlaufend", () => {
+    const { pos } = database();
+    const second = pos.saveRegister(null, "Kasse 2");
+    expect(pos.registers().map((r) => r.name)).toEqual(["Kasse 1", "Kasse 2"]);
+    const a = pos.checkout({ lines: [line("Brot", 300)], payments: [{ method: "cash", cents: 300 }], customer: null }, at("main"))!;
+    const b = pos.checkout({ lines: [line("Milch", 150)], payments: [{ method: "cash", cents: 150 }], customer: null }, at(second.id))!;
+    expect([a.number, b.number]).toEqual(["RE-2026-0001", "RE-2026-0002"]);
+    expect(b.register).toEqual(second);
+    pos.addMove({ kind: "in", method: "cash", cents: 5000, note: "" }, { ...actor, register: second.id });
+    expect(pos.state("main").expectedCents).toBe(300);
+    expect(pos.state(second.id).expectedCents).toBe(5150);
+    const z = pos.close({ countedCents: 5150, bankCents: 0, note: "" }, { ...actor, register: second.id });
+    expect(z.register).toEqual(second);
+    expect(pos.state(second.id).receipts).toBe(0);
+    expect(pos.state("main").receipts).toBe(1);
+    expect(pos.receipts({ register: second.id, query: "Milch" }).map((r) => r.number)).toEqual(["RE-2026-0002"]);
+    expect(() => pos.removeRegister(second.id)).toThrow(PosError);
+    expect(() => pos.removeRegister("main")).toThrow(PosError);
+    const empty = pos.saveRegister(null, "Kasse 3");
+    pos.removeRegister(empty.id);
+    expect(pos.registers()).toHaveLength(2);
+    // Unbekannter Kassenplatz bucht auf Kasse 1
+    expect(pos.checkout({ lines: [line("Ei", 50)], payments: [{ method: "cash", cents: 50 }], customer: null }, at("weg"))!.register!.id).toBe("main");
+  });
+
+  it("findet Artikel per Barcode und führt den Bestand", () => {
+    const { pos } = database();
+    const cola = pos.saveItem(null, { name: "Cola 0,5 l", barcode: "4006381333931", group: "Getränke", priceCents: 199, vatRate: 19, tile: false, stock: 24 });
+    expect(() => pos.saveItem(null, { name: "Doppelt", barcode: "4006381333931", group: "", priceCents: 1, vatRate: 19, tile: false, stock: null })).toThrow(PosError);
+    const [hit] = pos.scan("4006381333931", []);
+    expect(hit).toMatchObject({ source: "pos", kind: "item", refId: cola.id, priceCents: 199, stock: 24 });
+    expect(pos.articles("", [])).toEqual([]);
+    expect(pos.articles("getr", []).map((a) => a.name)).toEqual(["Cola 0,5 l"]);
+    const sale = pos.checkout({ lines: [{ ...line("Cola 0,5 l", 199, 3), refId: cola.id }], payments: [{ method: "cash", cents: 597 }], customer: null }, ctx())!;
+    expect(pos.item(cola.id)!.stock).toBe(21);
+    pos.cancel(sale.number, ctx());
+    expect(pos.item(cola.id)!.stock).toBe(24);
+    pos.removeItem(cola.id);
+    expect(() => pos.checkout({ lines: [{ ...line("Cola", 199), refId: cola.id }], payments: [{ method: "cash", cents: 199 }], customer: null }, ctx())).toThrow(PosError);
+  });
+
+  it("scannt Teile, Gebrauchtgeräte und Aufträge im Handy-Modul", () => {
+    const { pos, repairs } = database();
+    repairs.savePart(null, { ...sanitizePart({ name: "Panzerglas", sku: "PG-13", priceCents: 1990, category: "accessory" }), stock: 3 }, actor);
+    repairs.buyDevice(sanitizeUsed({ device: { brand: "Apple", model: "iPhone 12", serial: "356938035643809" }, purchaseCents: 20000, priceCents: 34900, payout: "cash", seller: { name: "Ali" } }), null, actor);
+    expect(pos.scan("pg-13", ["repairs"]).map((a) => a.name)).toEqual(["Panzerglas"]);
+    expect(pos.scan("356938035643809", ["repairs"])[0]).toMatchObject({ kind: "used", single: true });
+    expect(pos.scan("356938035643809", [])).toEqual([]);
   });
 });

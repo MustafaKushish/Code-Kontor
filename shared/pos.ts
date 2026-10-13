@@ -2,6 +2,9 @@
 // Module (z. B. Handy- & IT-Service) übergeben ihre Posten an die Kasse; Belegnummern,
 // Zahlarten, Kassenbuch und Tagesabschluss gibt es nur hier.
 
+/** Die Kasse als buchbares Modul im App-Katalog. */
+export const POS_APP_ID = "kasse";
+
 export const PAY_METHODS = ["cash", "card", "transfer", "voucher"] as const;
 export type PayMethod = (typeof PAY_METHODS)[number];
 
@@ -85,11 +88,14 @@ export interface Receipt {
   canceledBy: string | null;
   /** Nummer des Tagesabschlusses, sobald der Beleg darin steckt */
   closing: number | null;
+  /** Kassenplatz, an dem gebucht wurde (fehlt bei Belegen aus der Zeit vor den Kassenplätzen) */
+  register?: PosRegister;
   /** Daten der TSE (nur Deutschland), solange keine angebunden ist: null */
   tse: null | { serial: string; signature: string; counter: number; start: string; end: string };
 }
 
 export type ReceiptRow = Pick<Receipt, "number" | "kind" | "issuedAt" | "cashier" | "dueCents" | "payments" | "cancels" | "canceledBy" | "closing"> & {
+  registerId: string;
   totalCents: number;
   customerName: string;
   label: string;
@@ -114,6 +120,7 @@ export interface CashMove {
 
 /** Stand seit dem letzten Tagesabschluss (X-Bericht). */
 export interface CashState {
+  register: PosRegister;
   since: string | null;
   openingCents: number;
   receipts: number;
@@ -143,16 +150,32 @@ export interface Closing extends Omit<CashState, "moves"> {
   note: string;
 }
 
-export interface QuickItem {
+/** Ein Kassenplatz (Kasse 1, Kasse 2 …): eigenes Bargeld, eigenes Kassenbuch, eigener Tagesabschluss. */
+export interface PosRegister {
   id: string;
   name: string;
+}
+
+export const MAIN_REGISTER: PosRegister = { id: "main", name: "Kasse 1" };
+
+/** Artikel aus dem Artikelstamm der Kasse, z. B. mit Barcode (EAN) im Einzelhandel. */
+export interface PosItem {
+  id: string;
+  name: string;
+  /** Barcode, z. B. EAN-13; leer = ohne */
+  barcode: string;
+  /** Warengruppe, z. B. „Getränke“ */
+  group: string;
   priceCents: number;
   vatRate: number;
+  /** Als Kachel beim Verkaufen zeigen (Schnellartikel) */
+  tile: boolean;
+  /** Lagerbestand; null = ohne Bestandsführung */
+  stock: number | null;
 }
 
 export interface PosSettings {
   methods: PayMethod[];
-  quickItems: QuickItem[];
   smallBusiness: boolean;
   /** Text unten auf dem Bon, z. B. Öffnungszeiten oder Umtausch */
   footer: string;
@@ -160,7 +183,7 @@ export interface PosSettings {
   print: "bon" | "a4" | "ask";
 }
 
-export const DEFAULT_POS_SETTINGS: PosSettings = { methods: ["cash", "card"], quickItems: [], smallBusiness: false, footer: "", print: "ask" };
+export const DEFAULT_POS_SETTINGS: PosSettings = { methods: ["cash", "card"], smallBusiness: false, footer: "", print: "ask" };
 
 /** Artikel, den die Kasse zum Suchen anbietet (Schnellartikel oder aus einem Modul). */
 export interface PosArticle {
@@ -180,6 +203,8 @@ export interface PosArticle {
   depositCents?: number;
   /** Leihgerät, das vor der Abholung zurück sein muss */
   loaner?: string;
+  /** Als Kachel zeigen (Schnellwahl der Kasse) */
+  tile?: boolean;
 }
 
 // ---------- Rechnen ----------
@@ -306,20 +331,9 @@ export function sanitizeCustomer(input: unknown): PosCustomer | null {
 export function sanitizePosSettings(input: unknown): PosSettings {
   const s = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   const methods = Array.isArray(s.methods) ? PAY_METHODS.filter((m) => (s.methods as unknown[]).includes(m)) : DEFAULT_POS_SETTINGS.methods;
-  const quickItems = Array.isArray(s.quickItems)
-    ? s.quickItems
-        .slice(0, 48)
-        .map((q) => (q && typeof q === "object" ? (q as Record<string, unknown>) : {}))
-        .map((q) => ({
-          id: typeof q.id === "string" && q.id ? q.id.slice(0, 64) : crypto.randomUUID(),
-          name: str(q.name, 80), priceCents: int(q.priceCents, 0, MAX_CENTS), vatRate: vatRateOf(q.vatRate),
-        }))
-        .filter((q) => q.name)
-    : [];
   return {
     // Bar geht immer, sonst kann die Kasse kein Rückgeld geben
     methods: methods.includes("cash") ? methods : ["cash", ...methods],
-    quickItems,
     smallBusiness: s.smallBusiness === true,
     footer: str(s.footer, 400),
     print: s.print === "bon" || s.print === "a4" ? s.print : "ask",
@@ -341,3 +355,31 @@ export function parseAmount(value: string): number | null {
 
 /** Scheine und Münzen zum Zählen (Euro-Raum); andere Währungen zählen den Gesamtbetrag. */
 export const EURO_DENOMINATIONS = [50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100, 50, 20, 10, 5, 2, 1];
+
+/** Barcode aus Scanner oder Eingabe: Ziffern, Buchstaben und - . / bis 48 Zeichen, sonst leer. */
+export function cleanBarcode(value: unknown): string {
+  const code = typeof value === "string" ? value.trim() : "";
+  return /^[0-9A-Za-z\-./]{1,48}$/.test(code) ? code : "";
+}
+
+/** Stimmt die Prüfziffer einer EAN-8, EAN-13 oder UPC-A (12 Stellen)? Andere Codes gelten als gültig. */
+export function eanValid(code: string): boolean {
+  if (!/^\d+$/.test(code) || ![8, 12, 13].includes(code.length)) return true;
+  const digits = code.split("").map(Number);
+  const check = digits.pop()!;
+  const sum = digits.reverse().reduce((s, d, i) => s + d * (i % 2 === 0 ? 3 : 1), 0);
+  return (10 - (sum % 10)) % 10 === check;
+}
+
+export function sanitizeItem(input: unknown, fallbackVat = 19): Omit<PosItem, "id"> | null {
+  const i = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const name = str(i.name, 120);
+  if (!name) return null;
+  const stock = i.stock === null || i.stock === undefined || i.stock === "" ? null : int(i.stock, -1_000_000, 1_000_000);
+  return {
+    name, barcode: cleanBarcode(i.barcode), group: str(i.group, 60), priceCents: int(i.priceCents, 0, MAX_CENTS),
+    vatRate: vatRateOf(i.vatRate, fallbackVat), tile: i.tile === true, stock,
+  };
+}
+
+export const sanitizeRegisterName = (value: unknown) => str(value, 40);

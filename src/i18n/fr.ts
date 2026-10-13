@@ -199,7 +199,7 @@ export const fr: Dict = {
     installed: "Installé",
     view: "Voir",
     none: "Aucun système trouvé. Essaie un autre terme.",
-    categories: { Dienstleistung: "Services", Handel: "Commerce", Handwerk: "Artisanat", Gastronomie: "Restauration" },
+    categories: { Dienstleistung: "Services", Handel: "Commerce", Handwerk: "Artisanat", Gastronomie: "Restauration", Zusatz: "Module complémentaire" },
   },
   detail: {
     confirmRemove: "Vraiment supprimer {name} ? Tes données restent enregistrées.",
@@ -704,6 +704,12 @@ export const fr: Dict = {
       tagline: "Réparations de smartphones, tablettes, ordinateurs et montres connectées",
       description: "Dépôt d'appareil avec IMEI et description de la panne, devis validé en ligne par le client, pièces détachées en stock, retrait avec facture et garantie, et une page de suivi pour vos clients.",
       features: ["Dépôt avec bon de dépôt", "Page de suivi & e-mail pour les clients", "Devis avec validation en ligne", "Pièces & accessoires en stock", "Retrait avec facture & garantie"],
+    },
+    kasse: {
+      name: "Caisse",
+      tagline: "Une caisse pour tous les systèmes, avec scanner et plusieurs postes",
+      description: "Vendre au lecteur de codes-barres ou par tuiles, encaisser en espèces, carte, virement ou bon, articles avec EAN et stock, plusieurs postes de caisse avec leur propre livre de caisse et clôture. Fonctionne avec tous les systèmes installés.",
+      features: ["Lecteur de codes-barres & mode caisse plein écran", "Articles avec EAN & stock", "Espèces, carte, virement, bon", "Plusieurs postes de caisse", "Livre de caisse & clôture (ticket Z)"],
     },
     einzelhandel: {
       name: "Commerce de détail",
