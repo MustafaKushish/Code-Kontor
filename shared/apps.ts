@@ -47,16 +47,16 @@ export const CATALOG: CatalogApp[] = [
   },
   {
     id: "handy-it",
-    name: "Handy- & IT-Service",
-    tagline: "Reparaturen, Geräteannahme und Zubehörverkauf",
+    name: "IT- & Smartgeräte-Service",
+    tagline: "Reparaturen für Handy, Tablet, Laptop und Smartwatch",
     description:
-      "Geräteannahme mit Seriennummer und Fehlerbild, Reparaturstatus per SMS oder E-Mail, Zubehörverkauf und Ankauf.",
+      "Geräteannahme mit IMEI und Fehlerbild, Kostenvoranschlag mit Freigabe durch den Kunden, Ersatzteile aus dem Lager, Abholung mit Rechnung und Garantie und eine Statusseite für deine Kunden.",
     category: "Handwerk",
     icon: "smartphone",
     hue: 265,
     priceMonthly: 39,
-    status: "preview",
-    features: ["Geräteannahme", "Reparaturstatus für Kunden", "Zubehör & Lager", "An- und Verkauf", "Garantie-Verwaltung"],
+    status: "ready",
+    features: ["Geräteannahme mit Annahmeschein", "Statusseite & E-Mail für Kunden", "Kostenvoranschlag mit Online-Freigabe", "Ersatzteile & Zubehör im Lager", "Abholung mit Rechnung & Garantie"],
   },
   {
     id: "einzelhandel",

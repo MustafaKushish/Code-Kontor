@@ -677,10 +677,10 @@ export const de = {
       features: ["Reparaturaufträge", "Fahrzeugakte", "Ersatzteillager", "Kostenvoranschläge", "Status-Portal für Kunden"],
     },
     "handy-it": {
-      name: "Handy- & IT-Service",
-      tagline: "Reparaturen, Geräteannahme und Zubehörverkauf",
-      description: "Geräteannahme mit Seriennummer und Fehlerbild, Reparaturstatus per SMS oder E-Mail, Zubehörverkauf und Ankauf.",
-      features: ["Geräteannahme", "Reparaturstatus für Kunden", "Zubehör & Lager", "An- und Verkauf", "Garantie-Verwaltung"],
+      name: "IT- & Smartgeräte-Service",
+      tagline: "Reparaturen für Handy, Tablet, Laptop und Smartwatch",
+      description: "Geräteannahme mit IMEI und Fehlerbild, Kostenvoranschlag mit Freigabe durch den Kunden, Ersatzteile aus dem Lager, Abholung mit Rechnung und Garantie und eine Statusseite für deine Kunden.",
+      features: ["Geräteannahme mit Annahmeschein", "Statusseite & E-Mail für Kunden", "Kostenvoranschlag mit Online-Freigabe", "Ersatzteile & Zubehör im Lager", "Abholung mit Rechnung & Garantie"],
     },
     einzelhandel: {
       name: "Einzelhandel",

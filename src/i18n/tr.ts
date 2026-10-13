@@ -676,10 +676,10 @@ export const tr: Dict = {
       features: ["Tamir iş emirleri", "Araç dosyası", "Yedek parça deposu", "Fiyat teklifleri", "Müşteri durum portalı"],
     },
     "handy-it": {
-      name: "Telefon ve bilişim servisi",
-      tagline: "Tamir, cihaz kabulü ve aksesuar satışı",
-      description: "Seri numarası ve arıza kaydıyla cihaz kabulü, SMS veya e-posta ile tamir durumu, aksesuar satışı ve alım.",
-      features: ["Cihaz kabulü", "Müşteriye tamir durumu", "Aksesuar ve stok", "Alım ve satım", "Garanti takibi"],
+      name: "BT ve akıllı cihaz servisi",
+      tagline: "Telefon, tablet, dizüstü ve akıllı saat tamiri",
+      description: "IMEI ve arıza kaydıyla cihaz kabulü, müşterinin çevrimiçi onayladığı fiyat teklifi, stoktan yedek parça, fatura ve garantiyle teslim ve müşterileriniz için durum sayfası.",
+      features: ["Kabul fişiyle cihaz kabulü", "Müşteriye durum sayfası ve e-posta", "Çevrimiçi onaylı fiyat teklifi", "Stokta yedek parça ve aksesuar", "Fatura ve garantiyle teslim"],
     },
     einzelhandel: {
       name: "Perakende",

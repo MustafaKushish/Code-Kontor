@@ -2,6 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import type { CompanyProfile } from "../shared/company";
 import { emptyEmployee, type Advisor, type Employee, type MonthEntry } from "../shared/accounting";
 import { localDay, type Absence, type RequestStatus, type TimeEntry, type TimeRequest, type TimeRequestData, type TimeSettings } from "../shared/time";
+import { REPAIR_MIGRATIONS, RepairError, RepairStore } from "./repairs/store";
 
 // Die eigene Datenbank eines Kunden. Jede Firma bekommt bei der Anmeldung
 // ein eigenes Durable Object mit eigener SQLite-Datenbank, getrennt von allen anderen.
@@ -39,6 +40,14 @@ const MIGRATIONS: string[] = [
    CREATE INDEX time_requests_employee ON time_requests(employee_id, created_at);`,
 ];
 
+// Tabellen der Branchen-Systeme, je System eigens gezählt, damit sie unabhängig vom Kern wachsen.
+const MODULE_MIGRATIONS: Record<string, string[]> = {
+  repairs: REPAIR_MIGRATIONS,
+};
+
+/** Antwort eines Modul-Aufrufs: Fehler kommen als Code zurück, weil eigene Fehlerklassen den Weg aus dem Durable Object nicht überstehen. */
+export type ModuleResult<T> = { ok: true; value: T } | { ok: false; code: string };
+
 export interface AuditEntry {
   id: number;
   at: string;
@@ -65,6 +74,32 @@ export class TenantDatabase extends DurableObject<Record<string, never>> {
         this.sql.exec(MIGRATIONS[version - 1]);
         this.sql.exec("INSERT INTO _migrations (version) VALUES (?)", version);
       });
+    }
+    this.sql.exec("CREATE TABLE IF NOT EXISTS _module_migrations (module TEXT NOT NULL, version INTEGER NOT NULL, PRIMARY KEY (module, version))");
+    for (const [module, steps] of Object.entries(MODULE_MIGRATIONS)) {
+      const done = this.sql.exec<{ v: number | null }>("SELECT MAX(version) AS v FROM _module_migrations WHERE module = ?", module).one().v ?? 0;
+      for (let version = done + 1; version <= steps.length; version++) {
+        this.ctx.storage.transactionSync(() => {
+          this.sql.exec(steps[version - 1]!);
+          this.sql.exec("INSERT INTO _module_migrations (module, version) VALUES (?, ?)", module, version);
+        });
+      }
+    }
+  }
+
+  // ---------- Handy- & IT-Service (worker/repairs) ----------
+
+  private repairStore?: RepairStore;
+
+  async repairs(action: string, args: unknown[]): Promise<ModuleResult<unknown>> {
+    this.repairStore ??= new RepairStore(this.sql, (fn) => this.ctx.storage.transactionSync(fn));
+    const method = (this.repairStore as unknown as Record<string, unknown>)[action];
+    if (action === "constructor" || typeof method !== "function") return { ok: false, code: "notFound" };
+    try {
+      return { ok: true, value: (method as (...a: unknown[]) => unknown).apply(this.repairStore, args) };
+    } catch (error) {
+      if (error instanceof RepairError) return { ok: false, code: error.code };
+      throw error;
     }
   }
 

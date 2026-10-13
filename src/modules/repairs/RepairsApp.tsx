@@ -1,0 +1,163 @@
+import { useEffect, useState } from "react";
+import { CalendarClock, ClipboardList, Hourglass, PackageCheck, PackageSearch, Plus, Receipt, Search, Settings2, TriangleAlert, Wrench } from "lucide-react";
+import { api, type Me } from "../../api";
+import { AppIcon, Link } from "../../components";
+import { navigate } from "../../router";
+import { findApp } from "../../../shared/apps";
+import type { RepairOrderRow, StatusGroup } from "../../../shared/repairs";
+import { useRepairI18n } from "./i18n";
+import { IntakeForm } from "./IntakeForm";
+import { OrderDetail } from "./OrderDetail";
+import { StockTab } from "./Stock";
+import { InvoicesTab } from "./Invoices";
+import { SettingsTab } from "./Settings";
+import { StatusPill, deviceLabel } from "./parts";
+import "./repairs.css";
+
+export const BASE = "/app/handy-it";
+
+/** System „Handy- & IT-Service“: Aufträge, Lager, Rechnungen, Einstellungen. */
+export default function RepairsApp({ me, path }: { me: Me; path: string }) {
+  const { r, appText, ready } = useRepairI18n();
+  const app = findApp("handy-it")!;
+  const isManager = me.user.role !== "staff";
+  const [, , , section, id, sub] = path.split("/");
+
+  if (!ready) return null;
+
+  if (section === "neu") return <IntakeForm />;
+  if (section === "auftrag" && id) return sub === "bearbeiten" ? <IntakeForm editId={id} /> : <OrderDetail id={id} me={me} />;
+
+  const tab = section === "lager" ? "stock" : section === "rechnungen" ? "invoices" : section === "einstellungen" && isManager ? "settings" : "orders";
+  const tabs = [
+    { id: "orders", to: BASE, label: r("tabs.orders"), icon: ClipboardList },
+    { id: "stock", to: `${BASE}/lager`, label: r("tabs.stock"), icon: PackageSearch },
+    { id: "invoices", to: `${BASE}/rechnungen`, label: r("tabs.invoices"), icon: Receipt },
+    ...(isManager ? [{ id: "settings", to: `${BASE}/einstellungen`, label: r("tabs.settings"), icon: Settings2 }] : []),
+  ];
+
+  return (
+    <div className="stack-lg repairs">
+      <header className="page-head with-icon repairs-head">
+        <AppIcon app={app} size="lg" />
+        <div>
+          <h1 className="display">{appText(app.id).name}</h1>
+          <p className="muted">{appText(app.id).tagline}</p>
+        </div>
+        <Link to={`${BASE}/neu`} className="button primary repairs-new"><Plus size={18} /> {r("newOrder")}</Link>
+      </header>
+
+      <div className="page-tabs" role="tablist">
+        {tabs.map(({ id: tabId, to, label, icon: Icon }) => (
+          <button key={tabId} role="tab" aria-selected={tab === tabId} className={tab === tabId ? "active" : ""} onClick={() => navigate(to)}>
+            <Icon size={17} aria-hidden /> {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "orders" && <OrdersTab />}
+      {tab === "stock" && <StockTab isManager={isManager} />}
+      {tab === "invoices" && <InvoicesTab />}
+      {tab === "settings" && <SettingsTab />}
+    </div>
+  );
+}
+
+const GROUP_KEY = "ck-repairs-group";
+
+function OrdersTab() {
+  const { r, repairError, euro, day } = useRepairI18n();
+  const [group, setGroup] = useState<StatusGroup>(() => {
+    try {
+      return (sessionStorage.getItem(GROUP_KEY) as StatusGroup) || "open";
+    } catch {
+      return "open";
+    }
+  });
+  const [query, setQuery] = useState("");
+  const [data, setData] = useState<{ orders: RepairOrderRow[]; counts: Record<StatusGroup, number>; lowStock: number } | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(GROUP_KEY, group);
+    } catch {
+      // egal
+    }
+    const timer = setTimeout(() => {
+      api<typeof data>(`/repairs/orders?group=${query ? "all" : group}&q=${encodeURIComponent(query)}`)
+        .then((d) => (setData(d), setError("")))
+        .catch((e) => setError(repairError(e)));
+    }, query ? 250 : 0);
+    return () => clearTimeout(timer);
+  }, [group, query]);
+
+  const todayDay = new Date().toLocaleDateString("en-CA");
+  const groups: StatusGroup[] = ["open", "waiting", "pickup", "done", "all"];
+
+  return (
+    <div className="stack">
+      {data && (
+        <div className="repairs-stats">
+          <button className={`tile stat-tile ${group === "open" ? "active" : ""}`} onClick={() => setGroup("open")}>
+            <span className="stat-icon"><Wrench size={18} /></span>
+            <strong>{data.counts.open}</strong><small>{r("list.statOpen")}</small>
+          </button>
+          <button className={`tile stat-tile ${group === "waiting" ? "active" : ""}`} onClick={() => setGroup("waiting")}>
+            <span className="stat-icon"><Hourglass size={18} /></span>
+            <strong>{data.counts.waiting}</strong><small>{r("list.statWaiting")}</small>
+          </button>
+          <button className={`tile stat-tile ${group === "pickup" ? "active" : ""}`} onClick={() => setGroup("pickup")}>
+            <span className="stat-icon"><PackageCheck size={18} /></span>
+            <strong>{data.counts.pickup}</strong><small>{r("list.statPickup")}</small>
+          </button>
+        </div>
+      )}
+      {!!data?.lowStock && (
+        <Link to={`${BASE}/lager`} className="notice repairs-low"><TriangleAlert size={17} /> {r("list.lowStock", { n: data.lowStock })}</Link>
+      )}
+
+      <div className="toolbar">
+        <label className="search">
+          <Search size={18} />
+          <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={r("list.search")} aria-label={r("list.search")} />
+        </label>
+        {!query && (
+          <div className="chips" role="tablist">
+            {groups.map((g) => (
+              <button key={g} role="tab" aria-selected={group === g} className={group === g ? "chip active" : "chip"} onClick={() => setGroup(g)}>
+                {r(`groups.${g}`)}{data && g !== "all" ? ` · ${data.counts[g]}` : ""}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {error && <p className="error" role="alert">{error}</p>}
+      {data && (
+        <section className="card list-card">
+          {data.orders.length === 0 && <p className="empty muted">{data.counts.all ? r("list.empty") : r("list.emptyFirst")}</p>}
+          {data.orders.map((o) => {
+            const overdue = o.dueDay && o.dueDay < todayDay && !["ready", "notRepaired", "pickedUp", "canceled"].includes(o.status);
+            return (
+              <Link key={o.id} to={`${BASE}/auftrag/${o.id}`} className="list-row repair-row">
+                <span className="repair-number">#{o.number}</span>
+                <span className="list-main">
+                  <strong>{deviceLabel(o.device)}</strong>
+                  <small className="muted">{o.customerName}{o.problem ? ` · ${o.problem}` : ""}</small>
+                </span>
+                <span className="repair-row-meta">
+                  <StatusPill status={o.status} />
+                  {o.dueDay && !["pickedUp", "canceled"].includes(o.status) && (
+                    <small className={overdue ? "error" : "muted"}><CalendarClock size={13} /> {overdue ? r("list.overdue") : r("list.due", { day: day(o.dueDay, { day: "2-digit", month: "2-digit" }) })}</small>
+                  )}
+                  {!!o.totalCents && <small className="muted">{euro(o.totalCents)}</small>}
+                </span>
+              </Link>
+            );
+          })}
+        </section>
+      )}
+    </div>
+  );
+}
