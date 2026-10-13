@@ -197,7 +197,7 @@ export function PrintView({ kind, order, statusUrl, qr, settings, onClose }: {
           </section>
           {settings?.intakeTerms && <p className="print-terms">{settings.intakeTerms}</p>}
           <section className="print-sign">
-            <div><span />{r("print.signatureCustomer")}</div>
+            <div>{order.signature?.intake ? <img src={order.signature.intake} alt="" className="print-signature" /> : <span />}{r("print.signatureCustomer")}</div>
             <div><span />{r("print.signatureShop")}</div>
           </section>
           <section className="print-qr">

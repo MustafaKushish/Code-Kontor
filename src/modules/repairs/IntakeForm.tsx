@@ -1,15 +1,15 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { ArrowLeft, Check, ListChecks, ShieldCheck, Smartphone, Tags, User, UserCheck, Wallet } from "lucide-react";
+import { ArrowLeft, CalendarCheck, Camera, Check, ListChecks, PenLine, ShieldCheck, Smartphone, Tags, Trash2, User, UserCheck, Wallet } from "lucide-react";
 import { api, ApiError } from "../../api";
 import { Field, Link } from "../../components";
 import { navigate } from "../../router";
 import { LANGUAGES } from "../../i18n";
 import {
-  ACCESSORIES, DEVICE_TYPES, isValidImei, looksLikeImei, normalizeSerial, priceMatches,
-  type RepairCustomer, type RepairErrors, type RepairIntake, type RepairOrder, type RepairPrice,
+  ACCESSORIES, DEVICE_TYPES, MAX_PHOTOS, isValidImei, looksLikeImei, normalizeSerial, priceMatches,
+  type RepairCustomer, type RepairErrors, type RepairIntake, type RepairOrder, type RepairPrice, type RepairSettings,
 } from "../../../shared/repairs";
 import { useRepairI18n } from "./i18n";
-import { ChecksEditor, MoneyInput } from "./parts";
+import { ChecksEditor, MoneyInput, SignaturePad, resizeImage } from "./parts";
 
 const BASE = "/app/handy-it";
 const CLAIM_KEY = "ck-repairs-warranty-claim";
@@ -19,7 +19,11 @@ interface IntakePrefill {
   ref?: string;
   customer: Pick<RepairCustomer, "name" | "phone" | "email">;
   customerId?: string;
-  device?: RepairIntake["device"];
+  device?: Partial<RepairIntake["device"]>;
+  /** Aus einem Online-Termin */
+  bookingId?: string;
+  problem?: string;
+  lang?: string;
 }
 
 /** Annahme mit vorausgefüllten Daten öffnen (Garantiefall oder Kunde aus der Kartei). */
@@ -63,6 +67,9 @@ export function IntakeForm({ editId }: { editId?: string }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(!editId);
+  const [bookingId, setBookingId] = useState<string | null>(null);
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [signature, setSignature] = useState<string | null>(null);
 
   useEffect(() => {
     if (!editId) return;
@@ -86,11 +93,17 @@ export function IntakeForm({ editId }: { editId?: string }) {
     if (!claim) return;
     setCustomer({ name: claim.customer.name, phone: claim.customer.phone, email: claim.customer.email });
     if (claim.customerId) setCustomerId(claim.customerId);
-    setIntake((i) => ({ ...i, device: { ...i.device, ...claim.device }, warrantyRef: claim.ref ?? "" }));
+    if (claim.bookingId) setBookingId(claim.bookingId);
+    setIntake((i) => ({
+      ...i, device: { ...i.device, ...claim.device }, warrantyRef: claim.ref ?? "",
+      problem: claim.problem ?? i.problem, customerLang: claim.lang ?? i.customerLang,
+    }));
   }, [editId]);
 
+  const [terms, setTerms] = useState("");
   useEffect(() => {
     api<{ prices: RepairPrice[] }>("/repairs/prices").then((d) => setPrices(d.prices)).catch(() => {});
+    if (!editId) api<{ settings: RepairSettings }>("/repairs/settings").then((d) => setTerms(d.settings.intakeTerms)).catch(() => {});
   }, []);
 
   // Bekannte Kunden vorschlagen, während Name oder Telefon getippt wird
@@ -135,8 +148,10 @@ export function IntakeForm({ editId }: { editId?: string }) {
     setError("");
     setErrors({});
     try {
-      const body = { customer, customerId, intake, ...(unlockCode || !editId ? { unlockCode } : {}) };
+      const body = { customer, customerId, intake, ...(unlockCode || !editId ? { unlockCode } : {}), ...(editId ? {} : { bookingId, signature }) };
       const { order } = await api<{ order: RepairOrder }>(editId ? `/repairs/orders/${editId}` : "/repairs/orders", { method: editId ? "PUT" : "POST", body });
+      // Fotos nacheinander hochladen; ein fehlgeschlagenes Foto hält die Annahme nicht auf
+      for (const data of photos) await api(`/repairs/orders/${order.id}/photos`, { method: "POST", body: { stage: "intake", data } }).catch(() => {});
       navigate(`${BASE}/auftrag/${order.id}${editId ? "" : "?neu=1"}`);
     } catch (err) {
       if (err instanceof ApiError && err.errors) setErrors(err.errors as RepairErrors);
@@ -144,6 +159,18 @@ export function IntakeForm({ editId }: { editId?: string }) {
       window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
       setBusy(false);
+    }
+  };
+
+  const addPhotos = async (files: FileList | null) => {
+    if (!files) return;
+    for (const file of [...files].slice(0, MAX_PHOTOS - photos.length)) {
+      try {
+        const url = await resizeImage(file);
+        setPhotos((p) => [...p, url].slice(0, MAX_PHOTOS));
+      } catch {
+        setError(r("photos.failed"));
+      }
     }
   };
 
@@ -156,6 +183,7 @@ export function IntakeForm({ editId }: { editId?: string }) {
       <Link to={editId ? `${BASE}/auftrag/${editId}` : BASE} className="text-link back"><ArrowLeft size={16} className="flip-rtl" /> {r("order.back")}</Link>
       <h1 className="display">{editId ? r("intake.editTitle", { number: number ?? "" }) : r("intake.title")}</h1>
       {error && <p className="error" role="alert">{error}</p>}
+      {bookingId && <p className="notice success"><CalendarCheck size={17} /> {r("bookings.fromBooking")}</p>}
       {intake.warrantyRef && (
         <p className="notice success"><ShieldCheck size={17} /> {r("order.warrantyClaim", { ref: intake.warrantyRef })}
           <button type="button" className="text-button" onClick={() => set({ warrantyRef: "" })}>{r("warranty.notAClaim")}</button>
@@ -271,6 +299,28 @@ export function IntakeForm({ editId }: { editId?: string }) {
         <ChecksEditor type={intake.device.type} value={intake.checks} onChange={(checks) => set({ checks })} />
       </section>
 
+      {!editId && (
+        <section className="card stack">
+          <h2 className="card-title"><Camera size={20} /> {r("photos.title")}</h2>
+          <p className="muted small">{r("photos.intakeText")}</p>
+          <div className="photo-grid">
+            {photos.map((url, i) => (
+              <div key={i} className="photo-thumb">
+                <img src={url} alt={r("photos.photoN", { n: i + 1 })} />
+                <button type="button" className="icon-button" onClick={() => setPhotos((p) => p.filter((_, j) => j !== i))} aria-label={r("photos.remove")}><Trash2 size={15} /></button>
+              </div>
+            ))}
+            {photos.length < MAX_PHOTOS && (
+              <label className="photo-add">
+                <Camera size={22} />
+                <span>{r("photos.add")}</span>
+                <input type="file" accept="image/*" capture="environment" multiple onChange={(e) => (addPhotos(e.target.files), (e.target.value = ""))} />
+              </label>
+            )}
+          </div>
+        </section>
+      )}
+
       <section className="card stack">
         <h2 className="card-title"><Wallet size={20} /> {r("intake.money")}</h2>
         {errors.price && <p className="error">{r("intake.errors.price")}</p>}
@@ -292,6 +342,15 @@ export function IntakeForm({ editId }: { editId?: string }) {
           <textarea rows={2} value={intake.internalNote} onChange={(e) => set({ internalNote: e.target.value })} />
         </Field>
       </section>
+
+      {!editId && (
+        <section className="card stack">
+          <h2 className="card-title"><PenLine size={20} /> {r("signature.intakeTitle")}</h2>
+          <p className="muted small">{r("signature.intakeText")}</p>
+          {terms && <details className="terms"><summary>{r("signature.showTerms")}</summary><p className="small pre-line">{terms}</p></details>}
+          <SignaturePad onChange={setSignature} />
+        </section>
+      )}
 
       <div className="repair-form-actions">
         <button className="button primary" disabled={busy}><Check size={18} /> {editId ? r("intake.saveChanges") : r("intake.save")}</button>

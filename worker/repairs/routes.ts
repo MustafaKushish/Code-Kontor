@@ -7,11 +7,14 @@ import { decryptField, encryptField } from "../crypto";
 import { mailEnabled, sendMail } from "../mail";
 import { billingEnabled, getSubscription } from "../billing";
 import { hasAccess } from "../../shared/billing";
-import { renderRepairMail, type RepairMailKind } from "./mail";
+import { renderBookingMail, renderRepairMail, type RepairMailKind } from "./mail";
+import { isLocked, recordFailure } from "../throttle";
 import {
   PAYMENT_METHODS, REPAIR_APP_ID, REPAIR_STATUSES, STATUS_GROUPS, computeTotals, sanitizeCustomer, sanitizeIntake, sanitizeItem, sanitizePart,
   sanitizeChecks, sanitizeCustomerCard, sanitizePrice, sanitizeRepairSettings, sanitizeSaleLine, sanitizeUsed, validateCustomer, validateIntake, validateUsed,
   type InvoiceSnapshot, type PaymentMethod, type SaleLine, type RepairOrder, type RepairStatus, type StatusGroup,
+  PHOTO_STAGES, freeSlots, isPhotoDataUrl, isSignatureDataUrl, sanitizeBooking, sanitizePurchaseLines, sanitizeSupplier, validateBooking,
+  type BookingStatus, type PhotoStage, type RepairBooking,
 } from "../../shared/repairs";
 
 // Schnittstellen des Systems „Handy- & IT-Service“ unter /api/repairs (angemeldet)
@@ -49,6 +52,8 @@ async function readBody(c: Ctx): Promise<Record<string, unknown>> {
 const param = (c: Ctx, name: string) => c.req.param(name) ?? "";
 const actor = (c: Ctx) => ({ id: c.get("user").id, name: c.get("user").name });
 const today = () => new Date().toISOString().slice(0, 10);
+const berlinToday = () => berlinDay(new Date().toISOString());
+const berlinTime = () => new Date().toLocaleTimeString("en-GB", { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit", hour12: false });
 const deviceName = (o: RepairOrder) => [o.intake.device.brand, o.intake.device.model].filter(Boolean).join(" ") || "Gerät";
 const statusLink = (c: Ctx, tenantId: string, token: string) => new URL(`/status/${tenantId}/${token}`, c.req.url).toString();
 
@@ -111,9 +116,9 @@ repairRoutes.get("/orders", async (c) => {
   const group = (c.req.query("group") ?? "open") as StatusGroup;
   const valid = group === "all" || group in STATUS_GROUPS;
   const db = store(c.env, c.get("user").tenantId);
-  const [list, lowStock] = await Promise.all([db.list(valid ? group : "open", c.req.query("q") ?? ""), db.lowStockCount()]);
+  const [list, lowStock, bookings] = await Promise.all([db.list(valid ? group : "open", c.req.query("q") ?? ""), db.lowStockCount(), db.bookingCounts(berlinToday())]);
   if (!list.ok) return moduleError(c, list.code);
-  return c.json({ ...list.value, lowStock: lowStock.ok ? lowStock.value : 0 });
+  return c.json({ ...list.value, lowStock: lowStock.ok ? lowStock.value : 0, bookings: bookings.ok ? bookings.value : { new: 0, today: 0 } });
 });
 
 repairRoutes.post("/orders", async (c) => {
@@ -129,6 +134,12 @@ repairRoutes.post("/orders", async (c) => {
   );
   if (!result.ok) return moduleError(c, result.code);
   audit(c, "repairCreated", { number: result.value.number });
+  const db = store(c.env, c.get("user").tenantId);
+  if (typeof body.bookingId === "string") await db.linkBooking(body.bookingId, result.value.id);
+  if (isSignatureDataUrl(body.signature)) {
+    const signed = await db.sign(result.value.id, "intake", body.signature, actor(c));
+    if (signed.ok) return orderResponse(c, signed.value);
+  }
   return orderResponse(c, result.value);
 });
 
@@ -202,6 +213,10 @@ repairRoutes.post("/orders/:id/pickup", async (c) => {
   const result = await store(c.env, tenantId).pickUp(param(c, "id"), payment, await companyForInvoice(c.env, tenantId), actor(c), today(), body.loanerReturned === true);
   if (!result.ok) return moduleError(c, result.code);
   audit(c, "repairPickedUp", { number: result.value.number, invoice: result.value.invoice?.number ?? null });
+  if (isSignatureDataUrl(body.signature)) {
+    const signed = await store(c.env, tenantId).sign(result.value.id, "pickup", body.signature, actor(c));
+    if (signed.ok) return orderResponse(c, signed.value);
+  }
   return orderResponse(c, result.value);
 });
 
@@ -222,6 +237,51 @@ repairRoutes.post("/orders/:id/price", async (c) => {
 repairRoutes.put("/orders/:id/loaner", async (c) => {
   const body = await readBody(c);
   const result = await store(c.env, c.get("user").tenantId).lend(param(c, "id"), typeof body.loanerId === "string" ? body.loanerId : null, actor(c));
+  if (!result.ok) return moduleError(c, result.code);
+  return orderResponse(c, result.value);
+});
+
+// ---------- Fotos, Unterschrift, Nachrichten ----------
+
+repairRoutes.get("/orders/:id/photos/:photoId", async (c) => {
+  const result = await store(c.env, c.get("user").tenantId).photo(param(c, "id"), param(c, "photoId"));
+  if (!result.ok || !result.value) return moduleError(c, "notFound");
+  const [head, data] = result.value.split(",", 2);
+  const type = head!.slice(5, head!.indexOf(";"));
+  const bytes = Uint8Array.from(atob(data ?? ""), (ch) => ch.charCodeAt(0));
+  return new Response(bytes, { headers: { "Content-Type": type, "Cache-Control": "private, max-age=86400" } });
+});
+
+repairRoutes.post("/orders/:id/photos", async (c) => {
+  const body = await readBody(c);
+  if (!isPhotoDataUrl(body.data)) return fail(c, "checkFields", 400);
+  const stage = (PHOTO_STAGES.includes(body.stage as PhotoStage) ? body.stage : "intake") as PhotoStage;
+  const result = await store(c.env, c.get("user").tenantId).addPhoto(param(c, "id"), stage, body.data, actor(c));
+  if (!result.ok) return moduleError(c, result.code);
+  return c.json({ photos: result.value });
+});
+
+repairRoutes.delete("/orders/:id/photos/:photoId", async (c) => {
+  const result = await store(c.env, c.get("user").tenantId).removePhoto(param(c, "id"), param(c, "photoId"));
+  if (!result.ok) return moduleError(c, result.code);
+  return c.json({ photos: result.value });
+});
+
+/** Unterschrift des Kunden nachträglich ({ kind: "intake" | "pickup", data }). */
+repairRoutes.put("/orders/:id/signature", async (c) => {
+  const body = await readBody(c);
+  if (!isSignatureDataUrl(body.data)) return fail(c, "checkFields", 400);
+  const result = await store(c.env, c.get("user").tenantId).sign(param(c, "id"), body.kind === "pickup" ? "pickup" : "intake", body.data, actor(c));
+  if (!result.ok) return moduleError(c, result.code);
+  return orderResponse(c, result.value);
+});
+
+/** WhatsApp oder SMS wurde auf dem Gerät geöffnet: im Verlauf festhalten. */
+repairRoutes.post("/orders/:id/message", async (c) => {
+  const body = await readBody(c);
+  const channel = body.channel === "sms" ? "sms" : body.channel === "copy" ? "copy" : "whatsapp";
+  const name = typeof body.name === "string" ? body.name.trim().slice(0, 60) : "";
+  const result = await store(c.env, c.get("user").tenantId).logMessage(param(c, "id"), channel, name, actor(c));
   if (!result.ok) return moduleError(c, result.code);
   return orderResponse(c, result.value);
 });
@@ -454,6 +514,132 @@ repairRoutes.get("/warranties", async (c) => {
   return c.json({ warranties: result.ok ? result.value : [] });
 });
 
+// ---------- Termine ----------
+
+const bookingLink = (c: { req: { url: string } }, tenantId: string, token: string) => new URL(`/termin/${tenantId}/${token}`, c.req.url).toString();
+
+/** Kunde über Bestätigung oder Absage informieren, wenn eine E-Mail-Adresse da ist. */
+async function mailBooking(c: Ctx, booking: RepairBooking, kind: "confirmed" | "declined") {
+  if (!booking.email || !mailEnabled(c.env)) return false;
+  const user = c.get("user");
+  const token = await store(c.env, user.tenantId).bookingToken(booking.id);
+  if (!token.ok || !token.value) return false;
+  const company = await tenantStub(c.env, user.tenantId).getCompany();
+  const content = renderBookingMail(kind, booking.lang, bookingLink(c, user.tenantId, token.value), {
+    name: booking.name, company: user.tenantName, day: booking.day, time: booking.time, address: [company?.street, [company?.postalCode, company?.city].filter(Boolean).join(" ")].filter(Boolean).join(", "),
+  });
+  c.executionCtx.waitUntil(sendMail(c.env, booking.email, content, fetch, company?.email ? { replyTo: company.email } : {}).catch((err) => console.error("[mail]", err)));
+  return true;
+}
+
+repairRoutes.get("/bookings", async (c) => {
+  const result = await store(c.env, c.get("user").tenantId).bookings(c.req.query("scope") === "all" ? "all" : "open", berlinToday());
+  return c.json({ bookings: result.ok ? result.value : [] });
+});
+
+repairRoutes.post("/bookings", async (c) => {
+  const input = sanitizeBooking(await readBody(c));
+  const errors = validateBooking(input);
+  if (Object.keys(errors).length) return fail(c, "checkFields", 400, { errors });
+  const result = await store(c.env, c.get("user").tenantId).addBooking(input, "shop", 0);
+  if (!result.ok) return moduleError(c, result.code);
+  return c.json({ booking: result.value });
+});
+
+repairRoutes.put("/bookings/:id", async (c) => {
+  const input = sanitizeBooking(await readBody(c));
+  const errors = validateBooking(input);
+  if (Object.keys(errors).length) return fail(c, "checkFields", 400, { errors });
+  const result = await store(c.env, c.get("user").tenantId).updateBooking(param(c, "id"), input);
+  if (!result.ok) return moduleError(c, result.code);
+  return c.json({ booking: result.value });
+});
+
+repairRoutes.post("/bookings/:id/status", async (c) => {
+  const body = await readBody(c);
+  const allowed: BookingStatus[] = ["new", "confirmed", "declined", "canceled", "noShow"];
+  if (!allowed.includes(body.status as BookingStatus)) return fail(c, "checkFields", 400);
+  const status = body.status as BookingStatus;
+  const result = await store(c.env, c.get("user").tenantId).setBookingStatus(param(c, "id"), status);
+  if (!result.ok) return moduleError(c, result.code);
+  const mailed = (status === "confirmed" || status === "declined") && body.notify !== false ? await mailBooking(c, result.value, status) : false;
+  return c.json({ booking: result.value, mailed });
+});
+
+repairRoutes.delete("/bookings/:id", managers, async (c) => {
+  await store(c.env, c.get("user").tenantId).removeBooking(param(c, "id"));
+  return c.json({ ok: true });
+});
+
+// ---------- Lieferanten und Bestellungen ----------
+
+repairRoutes.get("/suppliers", async (c) => {
+  const result = await store(c.env, c.get("user").tenantId).suppliers();
+  return c.json({ suppliers: result.ok ? result.value : [] });
+});
+
+const saveSupplier = async (c: Ctx, id: string | null) => {
+  const data = sanitizeSupplier(await readBody(c));
+  if (!data) return fail(c, "checkFields", 400, { errors: { name: "required" } });
+  const result = await store(c.env, c.get("user").tenantId).saveSupplier(id, data);
+  if (!result.ok) return moduleError(c, result.code);
+  return c.json({ suppliers: result.value });
+};
+repairRoutes.post("/suppliers", managers, (c) => saveSupplier(c, null));
+repairRoutes.put("/suppliers/:id", managers, (c) => saveSupplier(c, param(c, "id")));
+repairRoutes.delete("/suppliers/:id", managers, async (c) => {
+  const result = await store(c.env, c.get("user").tenantId).removeSupplier(param(c, "id"));
+  if (!result.ok) return moduleError(c, result.code);
+  return c.json({ suppliers: result.value });
+});
+
+repairRoutes.get("/purchases", async (c) => {
+  const scope = c.req.query("scope");
+  const result = await store(c.env, c.get("user").tenantId).purchases(scope === "done" || scope === "all" ? scope : "open");
+  return c.json({ purchases: result.ok ? result.value : [] });
+});
+
+repairRoutes.get("/purchases/:id", async (c) => {
+  const result = await store(c.env, c.get("user").tenantId).purchase(param(c, "id"));
+  if (!result.ok || !result.value) return moduleError(c, "notFound");
+  return c.json({ purchase: result.value });
+});
+
+const savePurchase = async (c: Ctx, id: string | null) => {
+  const body = await readBody(c);
+  const supplierId = typeof body.supplierId === "string" ? body.supplierId : "";
+  const note = typeof body.note === "string" ? body.note.trim().slice(0, 1000) : "";
+  const result = await store(c.env, c.get("user").tenantId).savePurchase(id, supplierId, note, sanitizePurchaseLines(body.lines), actor(c));
+  if (!result.ok) return moduleError(c, result.code);
+  return c.json({ purchase: result.value });
+};
+repairRoutes.post("/purchases", (c) => savePurchase(c, null));
+repairRoutes.put("/purchases/:id", (c) => savePurchase(c, param(c, "id")));
+
+repairRoutes.post("/purchases/:id/status", async (c) => {
+  const status = (await readBody(c)).status;
+  if (status !== "draft" && status !== "ordered" && status !== "canceled") return fail(c, "checkFields", 400);
+  const result = await store(c.env, c.get("user").tenantId).setPurchaseStatus(param(c, "id"), status, actor(c));
+  if (!result.ok) return moduleError(c, result.code);
+  return c.json({ purchase: result.value });
+});
+
+/** Wareneingang: { quantities: { [Positions-ID]: Menge } } */
+repairRoutes.post("/purchases/:id/receive", async (c) => {
+  const raw = (await readBody(c)).quantities;
+  const quantities: Record<string, number> = {};
+  if (raw && typeof raw === "object") for (const [k, v] of Object.entries(raw)) if (typeof v === "number" && Number.isFinite(v)) quantities[k] = v;
+  const result = await store(c.env, c.get("user").tenantId).receivePurchase(param(c, "id"), quantities, actor(c));
+  if (!result.ok) return moduleError(c, result.code);
+  return c.json({ purchase: result.value });
+});
+
+repairRoutes.delete("/purchases/:id", managers, async (c) => {
+  const result = await store(c.env, c.get("user").tenantId).removePurchase(param(c, "id"));
+  if (!result.ok) return moduleError(c, result.code);
+  return c.json({ ok: true });
+});
+
 // ---------- Einstellungen ----------
 
 repairRoutes.get("/settings", async (c) => {
@@ -507,6 +693,106 @@ async function publicView(env: Env, tenantId: string, order: RepairOrder) {
     warrantyUntil: order.invoice?.warrantyUntil ?? "",
   };
 }
+
+// ---------- Online-Termine für Endkunden (ohne Anmeldung) ----------
+// Vor der Statusseite registriert, weil /booking/:tenantId sonst als /:tenantId/:token gelesen würde.
+
+async function bookingSetup(env: Env, tenantId: string) {
+  if (!UUID.test(tenantId)) return null;
+  if (!(await tenantStub(env, tenantId).installedApps()).includes(REPAIR_APP_ID)) return null;
+  const settings = await store(env, tenantId).settings();
+  if (!settings.ok || !settings.value.booking.enabled) return null;
+  return settings.value.booking;
+}
+
+async function publicCompany(env: Env, tenantId: string) {
+  const company = await tenantStub(env, tenantId).getCompany();
+  return {
+    name: company?.name ?? "", phone: company?.phone ?? "", email: company?.email ?? "", street: company?.street ?? "",
+    postalCode: company?.postalCode ?? "", city: company?.city ?? "", logoDataUrl: company?.logoDataUrl ?? "",
+  };
+}
+
+repairStatusRoutes.get("/booking/:tenantId", async (c) => {
+  const tenantId = c.req.param("tenantId");
+  const setup = await bookingSetup(c.env, tenantId);
+  if (!setup) return fail(c, "linkInvalid", 404);
+  const taken = await store(c.env, tenantId).bookingTaken(berlinToday());
+  c.header("Cache-Control", "no-store");
+  return c.json({ company: await publicCompany(c.env, tenantId), note: setup.note, slots: freeSlots(setup, berlinToday(), berlinTime(), taken.ok ? taken.value : {}) });
+});
+
+repairStatusRoutes.post("/booking/:tenantId", async (c) => {
+  const tenantId = c.req.param("tenantId");
+  const setup = await bookingSetup(c.env, tenantId);
+  if (!setup) return fail(c, "linkInvalid", 404);
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  // Unsichtbares Feld: nur Bots füllen es aus
+  if (typeof body.website === "string" && body.website) return c.json({ ok: true, token: "" });
+  const ip = c.req.header("CF-Connecting-IP");
+  const keys = [{ key: `booking:${tenantId}`, limit: 60 }, ...(ip ? [{ key: `booking-ip:${ip}`, limit: 5 }] : [])];
+  if (await isLocked(c.env.PLATFORM_DB, keys)) return fail(c, "tooManyAttempts", 429);
+  if (billingEnabled(c.env)) {
+    const sub = await getSubscription(c.env, tenantId);
+    if (!hasAccess(sub.status, sub.trialEndsAt)) return fail(c, "linkInvalid", 404);
+  }
+  const input = sanitizeBooking(body);
+  const errors = validateBooking(input);
+  if (Object.keys(errors).length) return fail(c, "checkFields", 400, { errors });
+  const db = store(c.env, tenantId);
+  const taken = await db.bookingTaken(berlinToday());
+  const free = freeSlots(setup, berlinToday(), berlinTime(), taken.ok ? taken.value : {});
+  if (!free.some((d) => d.day === input.day && d.times.includes(input.time))) return c.json({ code: "repairs.slotTaken", error: "slotTaken" }, 409);
+  const result = await db.addBooking(input, "online", setup.perSlot);
+  if (!result.ok) return c.json({ code: `repairs.${result.code}`, error: result.code }, 409);
+  await recordFailure(c.env.PLATFORM_DB, keys);
+  const token = await db.bookingToken(result.value.id);
+  const link = bookingLink(c, tenantId, token.ok && token.value ? token.value : "");
+  if (mailEnabled(c.env)) {
+    const company = await tenantStub(c.env, tenantId).getCompany();
+    const vars = {
+      name: input.name, company: company?.name ?? "", day: input.day, time: input.time,
+      address: [company?.street, [company?.postalCode, company?.city].filter(Boolean).join(" ")].filter(Boolean).join(", "),
+    };
+    if (input.email) c.executionCtx.waitUntil(sendMail(c.env, input.email, renderBookingMail("received", input.lang, link, vars), fetch, company?.email ? { replyTo: company.email } : {}).catch((err) => console.error("[mail]", err)));
+    // Laden informieren
+    if (company?.email) {
+      const device = [input.device.brand, input.device.model].filter(Boolean).join(" ");
+      c.executionCtx.waitUntil(
+        sendMail(c.env, company.email, renderBookingMail("shopNew", "de", new URL("/app/handy-it/termine", c.req.url).toString(), { ...vars, name: input.name, device, problem: input.problem }), fetch,
+          input.email ? { replyTo: input.email } : {}).catch((err) => console.error("[mail]", err)),
+      );
+    }
+  }
+  return c.json({ ok: true, token: token.ok ? token.value : "" });
+});
+
+async function publicBooking(env: Env, tenantId: string, token: string) {
+  if (!UUID.test(tenantId) || !/^[0-9a-f]{40}$/.test(token)) return null;
+  if (!(await tenantStub(env, tenantId).installedApps()).includes(REPAIR_APP_ID)) return null;
+  const result = await store(env, tenantId).bookingByToken(token);
+  return result.ok ? result.value : null;
+}
+
+const bookingView = (b: RepairBooking) => ({ status: b.status, day: b.day, time: b.time, name: b.name, device: b.device, problem: b.problem });
+
+repairStatusRoutes.get("/booking/:tenantId/:token", async (c) => {
+  const tenantId = c.req.param("tenantId");
+  const booking = await publicBooking(c.env, tenantId, c.req.param("token"));
+  if (!booking) return fail(c, "linkInvalid", 404);
+  c.header("Cache-Control", "no-store");
+  return c.json({ company: await publicCompany(c.env, tenantId), booking: bookingView(booking) });
+});
+
+repairStatusRoutes.post("/booking/:tenantId/:token/cancel", async (c) => {
+  const tenantId = c.req.param("tenantId");
+  const booking = await publicBooking(c.env, tenantId, c.req.param("token"));
+  if (!booking) return fail(c, "linkInvalid", 404);
+  if (booking.status !== "new" && booking.status !== "confirmed") return c.json({ code: "repairs.statusNotAllowed", error: "statusNotAllowed" }, 409);
+  const result = await store(c.env, tenantId).setBookingStatus(booking.id, "canceled");
+  if (!result.ok) return c.json({ code: `repairs.${result.code}`, error: result.code }, 409);
+  return c.json({ company: await publicCompany(c.env, tenantId), booking: bookingView(result.value) });
+});
 
 repairStatusRoutes.get("/:tenantId/:token", async (c) => {
   const order = await publicOrder(c.env, c.req.param("tenantId") ?? "", c.req.param("token") ?? "");

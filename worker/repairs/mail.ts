@@ -136,3 +136,155 @@ export function renderRepairMail(kind: RepairMailKind, lang: string, link: strin
 </div></div></body></html>`;
   return { subject, text, html };
 }
+
+// ---------- Online-Termine ----------
+
+export type BookingMailKind = "received" | "confirmed" | "declined";
+
+interface BookingTexts {
+  hello: string;
+  subject: Record<BookingMailKind, string>;
+  body: Record<BookingMailKind, string>;
+  button: string;
+}
+
+const BOOKING_TEXTS: Record<string, BookingTexts> = {
+  de: {
+    hello: "Guten Tag {name},",
+    subject: { received: "Ihre Terminanfrage für {when}", confirmed: "Ihr Termin am {when} ist bestätigt", declined: "Ihr Termin am {when} ist leider nicht möglich" },
+    body: {
+      received: "vielen Dank für Ihre Terminanfrage für {when}. Wir melden uns, sobald wir den Termin bestätigt haben.",
+      confirmed: "Ihr Termin am {when} ist bestätigt. Wir freuen uns auf Ihren Besuch{at}.",
+      declined: "leider können wir den Termin am {when} nicht anbieten. Bitte wählen Sie über den Link einen anderen Termin.",
+    },
+    button: "Termin ansehen",
+  },
+  en: {
+    hello: "Hello {name},",
+    subject: { received: "Your appointment request for {when}", confirmed: "Your appointment on {when} is confirmed", declined: "Your appointment on {when} is not possible" },
+    body: {
+      received: "thank you for your appointment request for {when}. We will get back to you as soon as we have confirmed it.",
+      confirmed: "your appointment on {when} is confirmed. We look forward to your visit{at}.",
+      declined: "unfortunately we cannot offer the appointment on {when}. Please choose another time using the link.",
+    },
+    button: "View appointment",
+  },
+  tr: {
+    hello: "Merhaba {name},",
+    subject: { received: "{when} için randevu talebiniz", confirmed: "{when} tarihli randevunuz onaylandı", declined: "{when} tarihli randevu maalesef mümkün değil" },
+    body: {
+      received: "{when} için randevu talebiniz için teşekkür ederiz. Randevuyu onayladığımızda size haber vereceğiz.",
+      confirmed: "{when} tarihli randevunuz onaylandı. Ziyaretinizi bekliyoruz{at}.",
+      declined: "maalesef {when} tarihli randevuyu sunamıyoruz. Lütfen bağlantı üzerinden başka bir zaman seçin.",
+    },
+    button: "Randevuyu görüntüle",
+  },
+  ar: {
+    hello: "مرحبًا {name}،",
+    subject: { received: "طلب موعدك في {when}", confirmed: "تم تأكيد موعدك في {when}", declined: "للأسف الموعد في {when} غير ممكن" },
+    body: {
+      received: "شكرًا لطلب موعدك في {when}. سنتواصل معك فور تأكيد الموعد.",
+      confirmed: "تم تأكيد موعدك في {when}. نتطلع إلى زيارتك{at}.",
+      declined: "للأسف لا يمكننا تقديم الموعد في {when}. يرجى اختيار موعد آخر عبر الرابط.",
+    },
+    button: "عرض الموعد",
+  },
+  fr: {
+    hello: "Bonjour {name},",
+    subject: { received: "Votre demande de rendez-vous pour {when}", confirmed: "Votre rendez-vous du {when} est confirmé", declined: "Votre rendez-vous du {when} n'est pas possible" },
+    body: {
+      received: "merci pour votre demande de rendez-vous pour {when}. Nous vous recontacterons dès que nous l'aurons confirmé.",
+      confirmed: "votre rendez-vous du {when} est confirmé. Nous nous réjouissons de votre visite{at}.",
+      declined: "nous ne pouvons malheureusement pas proposer le rendez-vous du {when}. Veuillez choisir un autre créneau via le lien.",
+    },
+    button: "Voir le rendez-vous",
+  },
+  es: {
+    hello: "Hola {name}:",
+    subject: { received: "Su solicitud de cita para el {when}", confirmed: "Su cita del {when} está confirmada", declined: "Su cita del {when} no es posible" },
+    body: {
+      received: "gracias por su solicitud de cita para el {when}. Le avisaremos en cuanto la hayamos confirmado.",
+      confirmed: "su cita del {when} está confirmada. Le esperamos{at}.",
+      declined: "lamentablemente no podemos ofrecer la cita del {when}. Elija otra hora a través del enlace.",
+    },
+    button: "Ver la cita",
+  },
+  it: {
+    hello: "Buongiorno {name},",
+    subject: { received: "La sua richiesta di appuntamento per il {when}", confirmed: "Il suo appuntamento del {when} è confermato", declined: "Il suo appuntamento del {when} non è possibile" },
+    body: {
+      received: "grazie per la sua richiesta di appuntamento per il {when}. La ricontatteremo appena lo avremo confermato.",
+      confirmed: "il suo appuntamento del {when} è confermato. La aspettiamo{at}.",
+      declined: "purtroppo non possiamo offrire l'appuntamento del {when}. Scelga un altro orario tramite il link.",
+    },
+    button: "Vedi appuntamento",
+  },
+  pl: {
+    hello: "Dzień dobry {name},",
+    subject: { received: "Twoja prośba o wizytę: {when}", confirmed: "Twoja wizyta {when} jest potwierdzona", declined: "Wizyta {when} niestety nie jest możliwa" },
+    body: {
+      received: "dziękujemy za prośbę o wizytę: {when}. Odezwiemy się, gdy tylko ją potwierdzimy.",
+      confirmed: "Twoja wizyta {when} jest potwierdzona. Czekamy na Ciebie{at}.",
+      declined: "niestety nie możemy zaproponować wizyty {when}. Wybierz inny termin przez link.",
+    },
+    button: "Zobacz wizytę",
+  },
+  ru: {
+    hello: "Здравствуйте, {name}!",
+    subject: { received: "Ваша заявка на запись: {when}", confirmed: "Ваша запись на {when} подтверждена", declined: "Запись на {when}, к сожалению, невозможна" },
+    body: {
+      received: "Спасибо за заявку на запись: {when}. Мы сообщим, как только подтвердим время.",
+      confirmed: "Ваша запись на {when} подтверждена. Ждём вас{at}.",
+      declined: "К сожалению, мы не можем принять вас {when}. Пожалуйста, выберите другое время по ссылке.",
+    },
+    button: "Посмотреть запись",
+  },
+  uk: {
+    hello: "Добрий день, {name}!",
+    subject: { received: "Ваша заявка на запис: {when}", confirmed: "Ваш запис на {when} підтверджено", declined: "Запис на {when}, на жаль, неможливий" },
+    body: {
+      received: "Дякуємо за заявку на запис: {when}. Ми повідомимо, щойно підтвердимо час.",
+      confirmed: "Ваш запис на {when} підтверджено. Чекаємо на вас{at}.",
+      declined: "На жаль, ми не можемо прийняти вас {when}. Будь ласка, оберіть інший час за посиланням.",
+    },
+    button: "Переглянути запис",
+  },
+};
+
+const AT: Record<string, string> = { de: " in {address}", en: " at {address}", tr: " ({address})", ar: " في {address}", fr: " à l'adresse {address}", es: " en {address}", it: " in {address}", pl: " pod adresem {address}", ru: " по адресу {address}", uk: " за адресою {address}" };
+
+type BookingVars = { name: string; company: string; day: string; time: string; address: string; device?: string; problem?: string };
+
+const when = (lang: string, day: string, time: string) => {
+  const date = new Intl.DateTimeFormat(lang, { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(`${day}T00:00:00Z`));
+  return `${date}, ${time}`;
+};
+
+/** Termin-E-Mails an Kunden; „shopNew“ geht auf Deutsch an den Laden. */
+export function renderBookingMail(kind: BookingMailKind | "shopNew", lang: string, link: string, vars: BookingVars): MailContent {
+  if (kind === "shopNew") {
+    const at = when("de", vars.day, vars.time);
+    const lines = [`Neue Terminanfrage für ${at}`, "", `Name: ${vars.name}`, vars.device ? `Gerät: ${vars.device}` : "", vars.problem ? `Anliegen: ${vars.problem}` : ""].filter((l, i) => i < 2 || l);
+    const text = `${lines.join("\n")}\n\nBitte bestätigen oder absagen: ${link}`;
+    return { subject: `Neue Terminanfrage: ${at} – ${vars.name}`, text, html: mailHtml("de", vars.company || "Code Kontor", lines.join("\n"), "Termine öffnen", link) };
+  }
+  const t = BOOKING_TEXTS[lang] ?? BOOKING_TEXTS.de!;
+  const w = when(BOOKING_TEXTS[lang] ? lang : "de", vars.day, vars.time);
+  const at = vars.address ? fill(AT[lang] ?? AT.de!, { address: vars.address }) : "";
+  const all = { ...vars, when: w, at };
+  const subject = `${fill(t.subject[kind], all)} – ${vars.company}`;
+  const body = `${fill(t.hello, all)}\n\n${fill(t.body[kind], all)}`;
+  return { subject, text: `${body}\n\n${t.button}: ${link}\n\n${vars.company}`, html: mailHtml(lang, vars.company, body, t.button, link) };
+}
+
+function mailHtml(lang: string, company: string, body: string, button: string, link: string) {
+  const paragraphs = body.split(/\n\n/).map((p) => `<p style="margin:0 0 12px;line-height:1.55">${escapeHtml(p).replace(/\n/g, "<br>")}</p>`).join("");
+  return `<!doctype html><html lang="${lang}" dir="${lang === "ar" ? "rtl" : "ltr"}"><body style="margin:0;background:#f4f2ed;font-family:Inter,Segoe UI,Arial,sans-serif;color:#12141c">
+<div style="max-width:520px;margin:0 auto;padding:32px 20px">
+<p style="font-size:20px;font-weight:700;margin:0 0 24px">${escapeHtml(company)}</p>
+<div style="background:#fffefb;border:1px solid #e4e0d6;border-radius:18px;padding:28px">
+${paragraphs}
+<a href="${escapeHtml(link)}" style="display:inline-block;margin-top:12px;background:#0d9488;color:#fff;text-decoration:none;font-weight:600;padding:12px 22px;border-radius:12px">${escapeHtml(button)}</a>
+<p style="margin:24px 0 0;font-size:13px;color:#6c6f7a;word-break:break-all">${escapeHtml(link)}</p>
+</div></div></body></html>`;
+}

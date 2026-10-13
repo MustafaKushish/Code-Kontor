@@ -5,6 +5,8 @@ import {
   type RepairItem, type RepairOrder, type RepairOrderRow, type RepairPart, type RepairSettings, type RepairStatus, type StatusGroup,
   type InvoiceKind, type SaleLine, type UsedDevice, type UsedDeviceInput, type WarrantyRow,
   type CashDay, type CheckList, type Loaner, type RepairOrderRow as OrderRow, type RepairPrice, type RepairStats,
+  MAX_PHOTOS, type BookingInput, type BookingStatus, type OrderPartOrder, type PhotoStage, type PurchaseLineInput, type PurchaseOrder,
+  type PurchaseStatus, type RepairBooking, type RepairPhoto, type Supplier,
 } from "../../shared/repairs";
 
 // Daten des Systems „Handy- & IT-Service“ in der Datenbank der Firma.
@@ -83,11 +85,43 @@ export const REPAIR_MIGRATIONS: string[] = [
      id TEXT PRIMARY KEY, name TEXT NOT NULL, serial TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '',
      order_id TEXT, lent_at TEXT, active INTEGER NOT NULL DEFAULT 1
    );`,
+  // Laden-Extras: Fotos, Unterschriften, Lieferanten und Bestellungen, Online-Termine
+  `ALTER TABLE repair_orders ADD COLUMN signature TEXT;
+   ALTER TABLE repair_orders ADD COLUMN pickup_signature TEXT;
+   CREATE TABLE repair_photos (
+     id TEXT PRIMARY KEY, order_id TEXT NOT NULL, stage TEXT NOT NULL, data TEXT NOT NULL, user_name TEXT,
+     at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+   );
+   CREATE INDEX repair_photos_order ON repair_photos(order_id, at);
+   CREATE TABLE repair_suppliers (
+     id TEXT PRIMARY KEY, name TEXT NOT NULL, contact TEXT NOT NULL DEFAULT '', phone TEXT NOT NULL DEFAULT '',
+     email TEXT NOT NULL DEFAULT '', website TEXT NOT NULL DEFAULT '', customer_no TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT ''
+   );
+   CREATE TABLE repair_purchases (
+     id TEXT PRIMARY KEY, number INTEGER NOT NULL UNIQUE, supplier_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'draft',
+     note TEXT NOT NULL DEFAULT '', created_by TEXT, ordered_at TEXT, received_at TEXT,
+     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+   );
+   CREATE INDEX repair_purchases_status ON repair_purchases(status, number);
+   CREATE TABLE repair_purchase_lines (
+     id TEXT PRIMARY KEY, purchase_id TEXT NOT NULL, part_id TEXT, name TEXT NOT NULL, qty INTEGER NOT NULL,
+     received INTEGER NOT NULL DEFAULT 0, unit_cents INTEGER NOT NULL DEFAULT 0, order_id TEXT, position INTEGER NOT NULL
+   );
+   CREATE INDEX repair_purchase_lines_purchase ON repair_purchase_lines(purchase_id, position);
+   CREATE INDEX repair_purchase_lines_order ON repair_purchase_lines(order_id);
+   CREATE TABLE repair_bookings (
+     id TEXT PRIMARY KEY, token TEXT NOT NULL UNIQUE, status TEXT NOT NULL DEFAULT 'new', source TEXT NOT NULL DEFAULT 'online',
+     day TEXT NOT NULL, time TEXT NOT NULL, name TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '', email TEXT NOT NULL DEFAULT '',
+     device TEXT NOT NULL, problem TEXT NOT NULL DEFAULT '', lang TEXT NOT NULL DEFAULT 'de', order_id TEXT,
+     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+   );
+   CREATE INDEX repair_bookings_day ON repair_bookings(day, time);
+   CREATE INDEX repair_bookings_status ON repair_bookings(status, day);`,
 ];
 
 type Row = Record<string, string | number | null>;
 export class RepairError extends Error {
-  constructor(public code: "notFound" | "statusNotAllowed" | "orderClosed" | "hasInvoice" | "alreadySold" | "emptySale" | "loanerOut" | "loanerBusy") {
+  constructor(public code: "notFound" | "statusNotAllowed" | "orderClosed" | "hasInvoice" | "alreadySold" | "emptySale" | "loanerOut" | "loanerBusy" | "tooManyPhotos" | "slotTaken" | "supplierUsed" | "purchaseLocked" | "emptyPurchase") {
     super(code);
   }
 }
@@ -224,6 +258,9 @@ export class RepairStore {
       createdAt: S(r.created_at), updatedAt: S(r.updated_at), createdBy: r.created_by === null ? null : S(r.created_by),
       outChecks: r.out_checks ? (JSON.parse(S(r.out_checks)) as CheckList) : null,
       loaner: this.loanerOf(id),
+      photos: this.photos(id),
+      signature: { intake: r.signature ? S(r.signature) : null, pickup: r.pickup_signature ? S(r.pickup_signature) : null },
+      partOrders: this.partOrders(id),
     };
   }
 
@@ -381,6 +418,9 @@ export class RepairStore {
       this.sql.exec("UPDATE repair_loaners SET order_id = NULL, lent_at = NULL WHERE order_id = ?", id);
       this.sql.exec("DELETE FROM repair_items WHERE order_id = ?", id);
       this.sql.exec("DELETE FROM repair_events WHERE order_id = ?", id);
+      this.sql.exec("DELETE FROM repair_photos WHERE order_id = ?", id);
+      this.sql.exec("UPDATE repair_purchase_lines SET order_id = NULL WHERE order_id = ?", id);
+      this.sql.exec("UPDATE repair_bookings SET order_id = NULL WHERE order_id = ?", id);
       this.sql.exec("DELETE FROM repair_orders WHERE id = ?", id);
       // Kunden ohne weitere Aufträge nicht aufheben (Datensparsamkeit)
       this.sql.exec("DELETE FROM repair_customers WHERE id = ? AND NOT EXISTS (SELECT 1 FROM repair_orders WHERE customer_id = ?)", order.customer.id, order.customer.id);
@@ -938,6 +978,317 @@ export class RepairStore {
 
   // ---------- intern ----------
 
+  // ---------- Fotos und Unterschriften ----------
+
+  photos(orderId: string): RepairPhoto[] {
+    return this.sql
+      .exec<Row>("SELECT id, stage, at, user_name FROM repair_photos WHERE order_id = ? ORDER BY at", orderId)
+      .toArray()
+      .map((r) => ({ id: S(r.id), stage: S(r.stage) as PhotoStage, at: S(r.at), userName: r.user_name === null ? null : S(r.user_name) }));
+  }
+
+  photo(orderId: string, photoId: string): string | null {
+    const r = this.sql.exec<{ data: string }>("SELECT data FROM repair_photos WHERE id = ? AND order_id = ?", photoId, orderId).toArray()[0];
+    return r ? r.data : null;
+  }
+
+  addPhoto(orderId: string, stage: PhotoStage, data: string, actor: Actor): RepairPhoto[] {
+    this.existing(orderId);
+    const n = this.sql.exec<{ n: number }>("SELECT COUNT(*) AS n FROM repair_photos WHERE order_id = ?", orderId).one().n;
+    if (n >= MAX_PHOTOS) throw new RepairError("tooManyPhotos");
+    this.sql.exec("INSERT INTO repair_photos (id, order_id, stage, data, user_name) VALUES (?, ?, ?, ?, ?)", crypto.randomUUID(), orderId, stage, data, actor.name);
+    this.touch(orderId);
+    return this.photos(orderId);
+  }
+
+  removePhoto(orderId: string, photoId: string): RepairPhoto[] {
+    this.sql.exec("DELETE FROM repair_photos WHERE id = ? AND order_id = ?", photoId, orderId);
+    return this.photos(orderId);
+  }
+
+  /** Unterschrift des Kunden bei Annahme oder Abholung speichern (null = entfernen). */
+  sign(orderId: string, kind: "intake" | "pickup", data: string | null, actor: Actor): RepairOrder {
+    this.existing(orderId);
+    this.transaction(() => {
+      this.sql.exec(`UPDATE repair_orders SET ${kind === "intake" ? "signature" : "pickup_signature"} = ? WHERE id = ?`, data, orderId);
+      if (data) this.event(orderId, null, kind === "intake" ? "signed" : "signedPickup", "", actor);
+      this.touch(orderId);
+    });
+    return this.get(orderId)!;
+  }
+
+  /** Nachricht per WhatsApp oder SMS im Verlauf vermerken (gesendet wird auf dem Gerät des Mitarbeiters). */
+  logMessage(orderId: string, channel: "whatsapp" | "sms" | "copy", name: string, actor: Actor): RepairOrder {
+    this.existing(orderId);
+    this.event(orderId, null, "message", `${channel}:${name}`, actor);
+    return this.get(orderId)!;
+  }
+
+  // ---------- Online-Termine ----------
+
+  bookings(scope: "open" | "all", today: string): RepairBooking[] {
+    const rows = scope === "open"
+      ? this.sql.exec<Row>(
+          `SELECT b.*, o.number AS order_number FROM repair_bookings b LEFT JOIN repair_orders o ON o.id = b.order_id
+            WHERE b.status = 'new' OR (b.status = 'confirmed' AND b.day >= ?) ORDER BY b.day, b.time LIMIT 300`, today,
+        ).toArray()
+      : this.sql.exec<Row>(
+          `SELECT b.*, o.number AS order_number FROM repair_bookings b LEFT JOIN repair_orders o ON o.id = b.order_id
+            ORDER BY b.day DESC, b.time DESC LIMIT 300`,
+        ).toArray();
+    return rows.map(bookingFromRow);
+  }
+
+  booking(id: string): RepairBooking | null {
+    const r = this.sql.exec<Row>("SELECT b.*, o.number AS order_number FROM repair_bookings b LEFT JOIN repair_orders o ON o.id = b.order_id WHERE b.id = ?", id).toArray()[0];
+    return r ? bookingFromRow(r) : null;
+  }
+
+  bookingByToken(token: string): RepairBooking | null {
+    const r = this.sql.exec<{ id: string }>("SELECT id FROM repair_bookings WHERE token = ?", token).toArray()[0];
+    return r ? this.booking(r.id) : null;
+  }
+
+  bookingToken(id: string): string | null {
+    const r = this.sql.exec<{ token: string }>("SELECT token FROM repair_bookings WHERE id = ?", id).toArray()[0];
+    return r ? r.token : null;
+  }
+
+  /** Belegte Termine ab einem Tag: „Tag Uhrzeit“ → Anzahl. */
+  bookingTaken(fromDay: string): Record<string, number> {
+    const out: Record<string, number> = {};
+    for (const r of this.sql.exec<{ day: string; time: string; n: number }>(
+      "SELECT day, time, COUNT(*) AS n FROM repair_bookings WHERE day >= ? AND status IN ('new', 'confirmed') GROUP BY day, time", fromDay,
+    ).toArray()) out[`${r.day} ${r.time}`] = r.n;
+    return out;
+  }
+
+  /** Neuer Termin. perSlot = 0: der Laden darf auch einen vollen Termin doppelt vergeben. */
+  addBooking(input: BookingInput, source: "online" | "shop", perSlot: number): RepairBooking {
+    const id = crypto.randomUUID();
+    this.transaction(() => {
+      if (perSlot > 0) {
+        const n = this.sql.exec<{ n: number }>("SELECT COUNT(*) AS n FROM repair_bookings WHERE day = ? AND time = ? AND status IN ('new', 'confirmed')", input.day, input.time).one().n;
+        if (n >= perSlot) throw new RepairError("slotTaken");
+      }
+      this.sql.exec(
+        `INSERT INTO repair_bookings (id, token, status, source, day, time, name, phone, email, device, problem, lang)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        id, randomToken() + randomToken().slice(0, 4), source === "shop" ? "confirmed" : "new", source, input.day, input.time,
+        input.name, input.phone, input.email, JSON.stringify(input.device), input.problem, input.lang,
+      );
+    });
+    return this.booking(id)!;
+  }
+
+  updateBooking(id: string, input: BookingInput): RepairBooking {
+    if (!this.booking(id)) throw new RepairError("notFound");
+    this.sql.exec(
+      "UPDATE repair_bookings SET day = ?, time = ?, name = ?, phone = ?, email = ?, device = ?, problem = ?, lang = ? WHERE id = ?",
+      input.day, input.time, input.name, input.phone, input.email, JSON.stringify(input.device), input.problem, input.lang, id,
+    );
+    return this.booking(id)!;
+  }
+
+  setBookingStatus(id: string, status: BookingStatus): RepairBooking {
+    const booking = this.booking(id);
+    if (!booking) throw new RepairError("notFound");
+    if (booking.status === "done" && status !== "done") throw new RepairError("statusNotAllowed");
+    this.sql.exec("UPDATE repair_bookings SET status = ? WHERE id = ?", status, id);
+    return this.booking(id)!;
+  }
+
+  /** Aus dem Termin wurde ein Auftrag. */
+  linkBooking(id: string, orderId: string): void {
+    this.sql.exec("UPDATE repair_bookings SET status = 'done', order_id = ? WHERE id = ?", orderId, id);
+  }
+
+  removeBooking(id: string): void {
+    this.sql.exec("DELETE FROM repair_bookings WHERE id = ?", id);
+  }
+
+  bookingCounts(today: string): { new: number; today: number } {
+    const r = this.sql.exec<{ fresh: number; today: number }>(
+      `SELECT SUM(CASE WHEN status = 'new' THEN 1 ELSE 0 END) AS fresh,
+              SUM(CASE WHEN status IN ('new', 'confirmed') AND day = ? THEN 1 ELSE 0 END) AS today FROM repair_bookings`, today,
+    ).one();
+    return { new: r.fresh ?? 0, today: r.today ?? 0 };
+  }
+
+  // ---------- Lieferanten und Bestellungen ----------
+
+  suppliers(): (Supplier & { open: number })[] {
+    return this.sql
+      .exec<Row>(
+        `SELECT s.*, (SELECT COUNT(*) FROM repair_purchases p WHERE p.supplier_id = s.id AND p.status IN ('draft', 'ordered')) AS open
+           FROM repair_suppliers s ORDER BY lower(s.name)`,
+      )
+      .toArray()
+      .map((r) => ({ ...supplierFromRow(r), open: Number(r.open) }));
+  }
+
+  saveSupplier(id: string | null, data: Omit<Supplier, "id">): (Supplier & { open: number })[] {
+    if (id) {
+      this.sql.exec(
+        "UPDATE repair_suppliers SET name = ?, contact = ?, phone = ?, email = ?, website = ?, customer_no = ?, note = ? WHERE id = ?",
+        data.name, data.contact, data.phone, data.email, data.website, data.customerNo, data.note, id,
+      );
+    } else {
+      this.sql.exec(
+        "INSERT INTO repair_suppliers (id, name, contact, phone, email, website, customer_no, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        crypto.randomUUID(), data.name, data.contact, data.phone, data.email, data.website, data.customerNo, data.note,
+      );
+    }
+    return this.suppliers();
+  }
+
+  removeSupplier(id: string): (Supplier & { open: number })[] {
+    const used = this.sql.exec<{ n: number }>("SELECT COUNT(*) AS n FROM repair_purchases WHERE supplier_id = ?", id).one().n;
+    if (used) throw new RepairError("supplierUsed");
+    this.sql.exec("DELETE FROM repair_suppliers WHERE id = ?", id);
+    return this.suppliers();
+  }
+
+  purchases(scope: "open" | "done" | "all"): PurchaseOrder[] {
+    const where = scope === "open" ? "WHERE p.status IN ('draft', 'ordered')" : scope === "done" ? "WHERE p.status IN ('received', 'canceled')" : "";
+    return this.sql
+      .exec<Row>(
+        `SELECT p.*, COALESCE(s.name, '') AS supplier_name FROM repair_purchases p LEFT JOIN repair_suppliers s ON s.id = p.supplier_id
+          ${where} ORDER BY p.number DESC LIMIT 200`,
+      )
+      .toArray()
+      .map((r) => this.purchaseFromRow(r));
+  }
+
+  purchase(id: string): PurchaseOrder | null {
+    const r = this.sql.exec<Row>(
+      "SELECT p.*, COALESCE(s.name, '') AS supplier_name FROM repair_purchases p LEFT JOIN repair_suppliers s ON s.id = p.supplier_id WHERE p.id = ?", id,
+    ).toArray()[0];
+    return r ? this.purchaseFromRow(r) : null;
+  }
+
+  /** Neue Bestellung oder Änderung, solange noch nichts geliefert wurde. */
+  savePurchase(id: string | null, supplierId: string, note: string, lines: PurchaseLineInput[], actor: Actor): PurchaseOrder {
+    if (!this.sql.exec("SELECT 1 FROM repair_suppliers WHERE id = ?", supplierId).toArray().length) throw new RepairError("notFound");
+    if (id) {
+      const existing = this.purchase(id);
+      if (!existing) throw new RepairError("notFound");
+      if (!["draft", "ordered"].includes(existing.status) || existing.lines.some((l) => l.received > 0)) throw new RepairError("purchaseLocked");
+    }
+    const purchaseId = id ?? crypto.randomUUID();
+    this.transaction(() => {
+      if (id) {
+        this.sql.exec("UPDATE repair_purchases SET supplier_id = ?, note = ? WHERE id = ?", supplierId, note, id);
+        this.sql.exec("DELETE FROM repair_purchase_lines WHERE purchase_id = ?", id);
+      } else {
+        const number = (this.sql.exec<{ n: number | null }>("SELECT MAX(number) AS n FROM repair_purchases").one().n ?? 0) + 1;
+        this.sql.exec("INSERT INTO repair_purchases (id, number, supplier_id, note, created_by) VALUES (?, ?, ?, ?, ?)", purchaseId, number, supplierId, note, actor.name);
+      }
+      lines.forEach((l, position) => {
+        const orderId = l.orderNumber
+          ? this.sql.exec<{ id: string }>("SELECT id FROM repair_orders WHERE number = ?", l.orderNumber).toArray()[0]?.id ?? null
+          : null;
+        const partId = l.partId && this.part(l.partId) ? l.partId : null;
+        this.sql.exec(
+          "INSERT INTO repair_purchase_lines (id, purchase_id, part_id, name, qty, unit_cents, order_id, position) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+          crypto.randomUUID(), purchaseId, partId, l.name, l.qty, l.unitCents, orderId, position,
+        );
+      });
+    });
+    return this.purchase(purchaseId)!;
+  }
+
+  setPurchaseStatus(id: string, status: "draft" | "ordered" | "canceled", actor: Actor): PurchaseOrder {
+    const p = this.purchase(id);
+    if (!p) throw new RepairError("notFound");
+    if (p.status === "received" || (status !== "ordered" && p.lines.some((l) => l.received > 0))) throw new RepairError("purchaseLocked");
+    if (status === "ordered" && !p.lines.length) throw new RepairError("emptyPurchase");
+    this.transaction(() => {
+      this.sql.exec(
+        `UPDATE repair_purchases SET status = ?, ordered_at = CASE WHEN ? = 'ordered' THEN COALESCE(ordered_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) ELSE ordered_at END WHERE id = ?`,
+        status, status, id,
+      );
+      if (status === "ordered" && p.status !== "ordered") {
+        for (const l of p.lines) if (l.orderId) (this.event(l.orderId, null, "partOrdered", `${l.name} · ${p.supplierName}`, actor), this.touch(l.orderId));
+      }
+    });
+    return this.purchase(id)!;
+  }
+
+  /** Wareneingang: Menge je Position, bucht ins Lager und meldet wartende Aufträge. */
+  receivePurchase(id: string, quantities: Record<string, number>, actor: Actor): PurchaseOrder {
+    const p = this.purchase(id);
+    if (!p) throw new RepairError("notFound");
+    if (p.status !== "ordered" && p.status !== "draft") throw new RepairError("purchaseLocked");
+    this.transaction(() => {
+      for (const l of p.lines) {
+        const n = Math.min(Math.max(Math.round(quantities[l.id] ?? 0), 0), l.qty - l.received);
+        if (!n) continue;
+        this.sql.exec("UPDATE repair_purchase_lines SET received = received + ? WHERE id = ?", n, l.id);
+        if (l.partId && this.part(l.partId)) {
+          this.moveStock(l.partId, n, "received", null, actor);
+          if (l.unitCents) this.sql.exec("UPDATE repair_parts SET purchase_cents = ? WHERE id = ?", l.unitCents, l.partId);
+        }
+        if (l.orderId) (this.event(l.orderId, null, "partArrived", `${n} × ${l.name}`, actor), this.touch(l.orderId));
+      }
+      const open = this.sql.exec<{ n: number }>("SELECT COUNT(*) AS n FROM repair_purchase_lines WHERE purchase_id = ? AND received < qty", id).one().n;
+      this.sql.exec(
+        `UPDATE repair_purchases SET status = ?, ordered_at = COALESCE(ordered_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                received_at = CASE WHEN ? = 'received' THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now') ELSE NULL END WHERE id = ?`,
+        open ? "ordered" : "received", open ? "ordered" : "received", id,
+      );
+    });
+    return this.purchase(id)!;
+  }
+
+  removePurchase(id: string): void {
+    const p = this.purchase(id);
+    if (!p) return;
+    if (p.status === "received" || p.lines.some((l) => l.received > 0)) throw new RepairError("purchaseLocked");
+    this.transaction(() => {
+      this.sql.exec("DELETE FROM repair_purchase_lines WHERE purchase_id = ?", id);
+      this.sql.exec("DELETE FROM repair_purchases WHERE id = ?", id);
+    });
+  }
+
+  private purchaseFromRow(r: Row): PurchaseOrder {
+    const lines = this.sql
+      .exec<Row>(
+        `SELECT l.*, o.number AS order_number FROM repair_purchase_lines l LEFT JOIN repair_orders o ON o.id = l.order_id
+          WHERE l.purchase_id = ? ORDER BY l.position`, S(r.id),
+      )
+      .toArray()
+      .map((l) => ({
+        id: S(l.id), partId: l.part_id === null ? null : S(l.part_id), name: S(l.name), qty: Number(l.qty), received: Number(l.received),
+        unitCents: Number(l.unit_cents), orderId: l.order_id === null ? null : S(l.order_id), orderNumber: l.order_number === null ? null : Number(l.order_number),
+      }));
+    return {
+      id: S(r.id), number: Number(r.number), supplierId: S(r.supplier_id), supplierName: S(r.supplier_name), status: S(r.status) as PurchaseStatus,
+      note: S(r.note), lines, totalCents: lines.reduce((s, l) => s + l.qty * l.unitCents, 0), createdAt: S(r.created_at),
+      createdBy: r.created_by === null ? null : S(r.created_by), orderedAt: r.ordered_at === null ? null : S(r.ordered_at),
+      receivedAt: r.received_at === null ? null : S(r.received_at),
+    };
+  }
+
+  private partOrders(orderId: string): OrderPartOrder[] {
+    return this.sql
+      .exec<Row>(
+        `SELECT p.id, p.number, p.status, COALESCE(s.name, '') AS supplier_name, l.name, l.qty, l.received
+           FROM repair_purchase_lines l JOIN repair_purchases p ON p.id = l.purchase_id LEFT JOIN repair_suppliers s ON s.id = p.supplier_id
+          WHERE l.order_id = ? AND p.status != 'canceled' ORDER BY p.number`, orderId,
+      )
+      .toArray()
+      .map((r) => ({
+        purchaseId: S(r.id), purchaseNumber: Number(r.number), supplierName: S(r.supplier_name), status: S(r.status) as PurchaseStatus,
+        name: S(r.name), qty: Number(r.qty), received: Number(r.received),
+      }));
+  }
+
+  /** Auftrag muss existieren (auch abgeschlossene). */
+  private existing(id: string) {
+    if (!this.sql.exec("SELECT 1 FROM repair_orders WHERE id = ?", id).toArray().length) throw new RepairError("notFound");
+  }
+
   private nextInvoice(today: string) {
     const year = Number(today.slice(0, 4));
     const seq = (this.sql.exec<{ n: number | null }>("SELECT MAX(seq) AS n FROM repair_invoices WHERE year = ?", year).one().n ?? 0) + 1;
@@ -996,6 +1347,22 @@ function parseIntake(json: string): RepairIntake {
 
 function customerFromRow(r: Row): RepairCustomer {
   return { id: S(r.id), name: S(r.name), phone: S(r.phone), email: S(r.email), address: S(r.address ?? ""), note: S(r.note ?? "") };
+}
+
+function bookingFromRow(r: Row): RepairBooking {
+  return {
+    id: S(r.id), status: S(r.status) as BookingStatus, source: S(r.source) as RepairBooking["source"], day: S(r.day), time: S(r.time),
+    name: S(r.name), phone: S(r.phone), email: S(r.email), device: JSON.parse(S(r.device)) as RepairBooking["device"], problem: S(r.problem),
+    lang: S(r.lang), orderId: r.order_id === null ? null : S(r.order_id), orderNumber: r.order_number === null || r.order_number === undefined ? null : Number(r.order_number),
+    createdAt: S(r.created_at),
+  };
+}
+
+function supplierFromRow(r: Row): Supplier {
+  return {
+    id: S(r.id), name: S(r.name), contact: S(r.contact), phone: S(r.phone), email: S(r.email), website: S(r.website),
+    customerNo: S(r.customer_no), note: S(r.note),
+  };
 }
 
 function priceFromRow(r: Row): RepairPrice {

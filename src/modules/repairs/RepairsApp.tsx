@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CalendarClock, ClipboardList, Hourglass, PackageCheck, PackageSearch, Plus, Repeat, Search, Settings2, ShieldCheck, ShoppingCart, TriangleAlert, Users, Wallet, Wrench } from "lucide-react";
+import { CalendarClock, CalendarDays, ClipboardList, Hourglass, PackageCheck, PackageSearch, Plus, Repeat, Search, Settings2, ShieldCheck, ShoppingCart, TriangleAlert, Users, Wallet, Wrench } from "lucide-react";
 import { api, type Me } from "../../api";
 import { AppIcon, Link } from "../../components";
 import { navigate } from "../../router";
@@ -18,6 +18,8 @@ import { PricesPanel } from "./Prices";
 import { LoanersPanel } from "./Loaners";
 import { CustomersTab, CustomerCard } from "./Customers";
 import { CashDayPanel, StatsPanel } from "./Cash";
+import { BookingsTab } from "./Bookings";
+import { PurchasesPanel, SuppliersPanel } from "./Purchases";
 import { StatusPill, deviceLabel } from "./parts";
 import "./repairs.css";
 
@@ -35,10 +37,11 @@ export default function RepairsApp({ me, path }: { me: Me; path: string }) {
   if (section === "neu") return <IntakeForm />;
   if (section === "auftrag" && id) return sub === "bearbeiten" ? <IntakeForm editId={id} /> : <OrderDetail id={id} me={me} />;
 
-  const SECTIONS: Record<string, string> = { verkauf: "sales", ankauf: "used", kunden: "customers", lager: "stock", garantie: "warranty", kasse: "cash", rechnungen: "cash" };
+  const SECTIONS: Record<string, string> = { termine: "bookings", verkauf: "sales", ankauf: "used", kunden: "customers", lager: "stock", garantie: "warranty", kasse: "cash", rechnungen: "cash" };
   const tab = SECTIONS[section ?? ""] ?? (section === "einstellungen" && isManager ? "settings" : "orders");
   const tabs = [
     { id: "orders", to: BASE, label: r("tabs.orders"), icon: ClipboardList },
+    { id: "bookings", to: `${BASE}/termine`, label: r("tabs.bookings"), icon: CalendarDays },
     { id: "sales", to: `${BASE}/verkauf`, label: r("tabs.sales"), icon: ShoppingCart },
     { id: "used", to: `${BASE}/ankauf`, label: r("tabs.used"), icon: Repeat },
     { id: "customers", to: `${BASE}/kunden`, label: r("tabs.customers"), icon: Users },
@@ -47,7 +50,8 @@ export default function RepairsApp({ me, path }: { me: Me; path: string }) {
     { id: "cash", to: `${BASE}/kasse`, label: r("tabs.cash"), icon: Wallet },
     ...(isManager ? [{ id: "settings", to: `${BASE}/einstellungen`, label: r("tabs.settings"), icon: Settings2 }] : []),
   ];
-  const stockSub = id === "preise" ? "prices" : id === "leihgeraete" ? "loaners" : "parts";
+  const STOCK_SUBS: Record<string, string> = { preise: "prices", leihgeraete: "loaners", bestellungen: "purchases", lieferanten: "suppliers" };
+  const stockSub = STOCK_SUBS[id ?? ""] ?? "parts";
   const cashSub = section === "rechnungen" ? "invoices" : id === "auswertung" && isManager ? "stats" : "day";
 
   return (
@@ -70,6 +74,7 @@ export default function RepairsApp({ me, path }: { me: Me; path: string }) {
       </div>
 
       {tab === "orders" && <OrdersTab />}
+      {tab === "bookings" && <BookingsTab tenantId={me.user.tenantId} isManager={isManager} />}
       {tab === "sales" && <SalesTab />}
       {tab === "used" && <UsedTab isManager={isManager} />}
       {tab === "customers" && (id ? <CustomerCard id={id} isManager={isManager} /> : <CustomersTab />)}
@@ -79,10 +84,14 @@ export default function RepairsApp({ me, path }: { me: Me; path: string }) {
             { id: "parts", to: `${BASE}/lager`, label: r("tabs.parts") },
             { id: "prices", to: `${BASE}/lager/preise`, label: r("tabs.prices") },
             { id: "loaners", to: `${BASE}/lager/leihgeraete`, label: r("tabs.loaners") },
+            { id: "purchases", to: `${BASE}/lager/bestellungen`, label: r("tabs.purchases") },
+            { id: "suppliers", to: `${BASE}/lager/lieferanten`, label: r("tabs.suppliers") },
           ]} />
           {stockSub === "parts" && <StockTab isManager={isManager} />}
           {stockSub === "prices" && <PricesPanel isManager={isManager} />}
           {stockSub === "loaners" && <LoanersPanel isManager={isManager} />}
+          {stockSub === "purchases" && <PurchasesPanel isManager={isManager} sub={sub} />}
+          {stockSub === "suppliers" && <SuppliersPanel isManager={isManager} />}
         </>
       )}
       {tab === "cash" && (
@@ -125,7 +134,7 @@ function OrdersTab() {
     }
   });
   const [query, setQuery] = useState("");
-  const [data, setData] = useState<{ orders: RepairOrderRow[]; counts: Record<StatusGroup, number>; lowStock: number } | null>(null);
+  const [data, setData] = useState<{ orders: RepairOrderRow[]; counts: Record<StatusGroup, number>; lowStock: number; bookings: { new: number; today: number } } | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -162,6 +171,11 @@ function OrdersTab() {
             <strong>{data.counts.pickup}</strong><small>{r("list.statPickup")}</small>
           </button>
         </div>
+      )}
+      {!!data && (data.bookings.new > 0 || data.bookings.today > 0) && (
+        <Link to={`${BASE}/termine`} className="notice repairs-low"><CalendarDays size={17} /> {[
+          data.bookings.new ? r("list.newBookings", { n: data.bookings.new }) : "", data.bookings.today ? r("list.todayBookings", { n: data.bookings.today }) : "",
+        ].filter(Boolean).join(" · ")}</Link>
       )}
       {!!data?.lowStock && (
         <Link to={`${BASE}/lager`} className="notice repairs-low"><TriangleAlert size={17} /> {r("list.lowStock", { n: data.lowStock })}</Link>

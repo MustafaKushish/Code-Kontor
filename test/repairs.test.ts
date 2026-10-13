@@ -3,6 +3,8 @@ import {
   canChangeStatus, computeTotals, invoiceNumber, isValidImei, parseEuro, sanitizeIntake, sanitizeItem, sanitizeRepairSettings,
   sanitizeSaleLine, sanitizeUsed, validateCustomer, validateIntake, validateUsed, warrantyEnd,
   CHECKS_FOR, priceMatches, sanitizeChecks, sanitizeCustomerCard, sanitizePrice,
+  fillTemplate, freeSlots, internationalPhone, isPhotoDataUrl, isSignatureDataUrl, sanitizeBooking, sanitizeBookingSettings, sanitizePurchaseLines,
+  sanitizeSupplier, sanitizeTemplates, slotTimes, validateBooking, DEFAULT_BOOKING,
 } from "../shared/repairs";
 import { de } from "../src/modules/repairs/lang/de";
 import { en } from "../src/modules/repairs/lang/en";
@@ -145,6 +147,71 @@ function paths(node: unknown, prefix = ""): string[] {
   return Object.entries(node as Record<string, unknown>).flatMap(([k, v]) => paths(v, prefix ? `${prefix}.${k}` : k));
 }
 const get = (d: unknown, p: string) => p.split(".").reduce<unknown>((n, k) => (n as Record<string, unknown>)?.[k], d);
+
+describe("Reparaturen: Laden-Extras", () => {
+  it("füllt Platzhalter in Nachrichten und lässt unbekannte stehen", () => {
+    expect(fillTemplate("Hallo {name}, {device} ist fertig ({x})", { name: "Ali", device: "iPhone 13" })).toBe("Hallo Ali, iPhone 13 ist fertig ({x})");
+  });
+
+  it("macht aus Telefonnummern internationale WhatsApp-Nummern", () => {
+    expect(internationalPhone("0176 123 456 78")).toBe("4917612345678");
+    expect(internationalPhone("+49 (176) 1234-5678")).toBe("4917612345678");
+    expect(internationalPhone("0043 660 1234567")).toBe("436601234567");
+    expect(internationalPhone("0660 1234567", "43")).toBe("436601234567");
+    expect(internationalPhone("123")).toBeNull();
+  });
+
+  it("behält nur vollständige Vorlagen", () => {
+    expect(sanitizeTemplates([{ name: "A", text: "x" }, { name: "", text: "y" }, "kaputt"]).map((t) => t.name)).toEqual(["A"]);
+  });
+
+  it("berechnet Terminzeiten und freie Termine", () => {
+    expect(slotTimes({ from: "10:00", to: "11:00", slotMinutes: 30 })).toEqual(["10:00", "10:30", "11:00"]);
+    // 2026-10-12 ist ein Montag, 2026-10-18 ein Sonntag
+    const s = { ...DEFAULT_BOOKING, enabled: true, from: "10:00", to: "11:00", slotMinutes: 30, perSlot: 1, daysAhead: 7, weekdays: [1, 2, 3, 4, 5, 6] };
+    const free = freeSlots(s, "2026-10-12", "09:45", { "2026-10-13 10:30": 1 });
+    expect(free[0]).toEqual({ day: "2026-10-12", times: ["11:00"] }); // heute erst ab einer Stunde Vorlauf
+    expect(free[1]).toEqual({ day: "2026-10-13", times: ["10:00", "11:00"] });
+    expect(free.map((d) => d.day)).not.toContain("2026-10-18");
+    expect(free).toHaveLength(6);
+  });
+
+  it("prüft Termin-Einstellungen", () => {
+    const s = sanitizeBookingSettings({ enabled: true, from: "18:00", to: "09:00", slotMinutes: 1, perSlot: 99, weekdays: [1, 1, 9, 6] });
+    expect(s.to).toBe("19:00");
+    expect(s.slotMinutes).toBe(10);
+    expect(s.perSlot).toBe(20);
+    expect(s.weekdays).toEqual([1, 6]);
+    expect(sanitizeRepairSettings({}).booking.enabled).toBe(false);
+  });
+
+  it("prüft Buchungen von der Buchungsseite", () => {
+    const b = sanitizeBooking({ day: "2026-10-13", time: "10:30", name: " Ali ", phone: "0176", device: { type: "laptop", brand: "HP" }, lang: "xx-evil" });
+    expect(b).toMatchObject({ name: "Ali", device: { type: "laptop", brand: "HP", model: "" }, lang: "de" });
+    expect(validateBooking(b)).toEqual({});
+    expect(validateBooking({ ...b, time: "" }).slot).toBe("required");
+    expect(validateBooking({ ...b, phone: "", email: "" }).contact).toBe("required");
+    expect(sanitizeBooking({ time: "25:00" }).time).toBe("");
+  });
+
+  it("prüft Lieferanten und Bestellpositionen", () => {
+    expect(sanitizeSupplier({ name: "" })).toBeNull();
+    expect(sanitizeSupplier({ name: " Teile AG ", email: "A@B.DE" })).toMatchObject({ name: "Teile AG", email: "a@b.de" });
+    const lines = sanitizePurchaseLines([{ name: "Display", qty: 0, unitCents: 4500, orderNumber: 1001 }, { name: "" }, { name: "Akku", qty: 3.4, orderNumber: -1 }]);
+    expect(lines).toEqual([
+      { partId: null, name: "Display", qty: 1, unitCents: 4500, orderNumber: 1001 },
+      { partId: null, name: "Akku", qty: 3, unitCents: 0, orderNumber: null },
+    ]);
+  });
+
+  it("nimmt nur echte Bilder als Foto oder Unterschrift an", () => {
+    expect(isPhotoDataUrl("data:image/jpeg;base64,/9j/4AAQ==")).toBe(true);
+    expect(isPhotoDataUrl("data:text/html;base64,PGh0bWw+")).toBe(false);
+    expect(isPhotoDataUrl("data:image/jpeg;base64," + "A".repeat(1_000_000))).toBe(false);
+    expect(isSignatureDataUrl("data:image/png;base64,iVBORw0KGgo=")).toBe(true);
+    expect(isSignatureDataUrl("data:image/jpeg;base64,/9j/")).toBe(false);
+  });
+});
 
 describe("Reparaturen: Übersetzungen", () => {
   for (const [code, dict] of Object.entries(DICTS)) {

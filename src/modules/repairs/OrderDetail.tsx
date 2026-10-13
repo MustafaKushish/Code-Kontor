@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft, BadgeCheck, Check, ClipboardCheck, Copy, Eye, FileText, History, KeyRound, Link2, ListChecks, Mail, Package, Pencil, Phone, Plus, Printer,
-  Receipt, Repeat, ShieldCheck, Smartphone, Tags, Trash2, TriangleAlert, Undo2, UserRound, Wrench, X,
+  MessageCircle, Receipt, Repeat, ShieldCheck, Smartphone, Tags, Trash2, TriangleAlert, Truck, Undo2, UserRound, Wrench, X,
 } from "lucide-react";
 import qrcode from "qrcode-generator";
 import { api, type Me } from "../../api";
@@ -12,7 +12,9 @@ import {
   type CheckList, type Loaner, type PaymentMethod, type RepairItemKind, type RepairOrder, type RepairPart, type RepairPrice, type RepairSettings, type RepairStatus,
 } from "../../../shared/repairs";
 import { useRepairI18n } from "./i18n";
-import { ChecksEditor, ChecksSummary, Dialog, MoneyInput, StatusPill, deviceLabel } from "./parts";
+import { ChecksEditor, ChecksSummary, Dialog, MoneyInput, SignaturePad, StatusPill, deviceLabel } from "./parts";
+import { MessageDialog, PhotosCard, SignatureCard } from "./Media";
+import { startPurchase } from "./Purchases";
 import { PrintView, type PrintKind } from "./Print";
 
 const BASE = "/app/handy-it";
@@ -27,6 +29,7 @@ const PRIMARY: Partial<Record<RepairStatus, RepairStatus>> = {
   repairing: "ready",
   canceled: "received",
 };
+const EVENTS = ["quoteApproved", "quoteRejected", "edited", "loanerOut", "loanerBack", "outChecked", "signed", "signedPickup", "message", "partOrdered", "partArrived"];
 const ALL: RepairStatus[] = ["received", "diagnosis", "quote", "waitingParts", "repairing", "ready", "notRepaired", "canceled"];
 
 export function OrderDetail({ id, me }: { id: string; me: Me }) {
@@ -47,6 +50,7 @@ export function OrderDetail({ id, me }: { id: string; me: Me }) {
   const [lending, setLending] = useState(false);
   const [print, setPrint] = useState<PrintKind | null>(null);
   const [copied, setCopied] = useState(false);
+  const [messaging, setMessaging] = useState(false);
   const isManager = me.user.role !== "staff";
 
   const apply = (d: { order: RepairOrder; related: Related[]; mailed?: boolean }) => {
@@ -118,6 +122,11 @@ export function OrderDetail({ id, me }: { id: string; me: Me }) {
     } catch {
       prompt(r("order.statusLink"), statusUrl);
     }
+  };
+
+  const messageNote = (note: string) => {
+    const [channel, ...name] = note.split(":");
+    return `${channel === "whatsapp" ? "WhatsApp" : channel === "sms" ? r("messages.sms") : r("messages.copied")}${name.join(":") ? ` · ${name.join(":")}` : ""}`;
   };
 
   const remove = async () => {
@@ -281,10 +290,10 @@ export function OrderDetail({ id, me }: { id: string; me: Me }) {
                   <span className="dot" aria-hidden />
                   <div>
                     <strong>
-                      {["quoteApproved", "quoteRejected", "edited", "loanerOut", "loanerBack", "outChecked"].includes(e.event) ? r(`order.events.${e.event}`) : e.status ? r(`status.${e.status}`) : ""}
+                      {EVENTS.includes(e.event) ? r(`order.events.${e.event}`) : e.status ? r(`status.${e.status}`) : ""}
                     </strong>
                     <small className="muted"> · {dateTime(e.at)} · {e.userName ?? r("order.byCustomer")}</small>
-                    {e.note && !e.note.startsWith("deposit:") && <p>{e.note}</p>}
+                    {e.event === "message" ? <p>{messageNote(e.note)}</p> : e.note && !e.note.startsWith("deposit:") && <p>{e.note}</p>}
                   </div>
                 </li>
               ))}
@@ -299,6 +308,7 @@ export function OrderDetail({ id, me }: { id: string; me: Me }) {
             <div className="row wrap gap">
               {order.customer.phone && <a className="button" href={`tel:${order.customer.phone.replace(/[^\d+]/g, "")}`}><Phone size={16} /> {order.customer.phone}</a>}
               {order.customer.email && <a className="button" href={`mailto:${order.customer.email}`}><Mail size={16} /> {r("order.mail")}</a>}
+              {order.customer.phone && <button className="button" onClick={() => setMessaging(true)}><MessageCircle size={16} /> {r("messages.button")}</button>}
             </div>
             <div className="status-link">
               {qr && <img src={qr} alt="" width={96} height={96} />}
@@ -347,6 +357,26 @@ export function OrderDetail({ id, me }: { id: string; me: Me }) {
               <Link to={`${BASE}/auftrag/${order.id}/bearbeiten`} className="button"><Pencil size={16} /> {r("order.edit")}</Link>
             )}
           </section>
+
+          <PhotosCard order={order} isManager={isManager} onChange={(photos) => setOrder({ ...order, photos })} />
+          <SignatureCard order={order} onSigned={setOrder} />
+
+          {/* ---------- Bestellte Teile ---------- */}
+          {(order.partOrders.length > 0 || (!closed && ["diagnosis", "quote", "waitingParts", "repairing"].includes(order.status))) && (
+            <section className="card stack-sm">
+              <h2 className="card-title"><Truck size={20} /> {r("purchases.forOrder")}</h2>
+              {order.partOrders.map((p, i) => (
+                <Link key={i} to={`${BASE}/lager/bestellungen/${p.purchaseId}`} className="list-row">
+                  <span className="list-main">
+                    <strong>{p.qty} × {p.name}</strong>
+                    <small className="muted">{r("purchases.numberShort", { n: p.purchaseNumber })} · {p.supplierName}</small>
+                  </span>
+                  <span className={`pill ${p.received >= p.qty ? "pos" : p.status === "ordered" ? "warn" : ""}`}>{p.received >= p.qty ? r("purchases.arrived") : r(`purchases.status.${p.status}`)}</span>
+                </Link>
+              ))}
+              {!closed && <button className="button" onClick={() => startPurchase({ orderNumber: order.number, name: order.intake.planned[0]?.name ? `${order.intake.planned[0].name} ${deviceLabel(order.intake.device)}` : deviceLabel(order.intake.device) })}><Plus size={16} /> {r("purchases.orderPart")}</button>}
+            </section>
+          )}
 
           {/* ---------- Leihgerät ---------- */}
           {(order.loaner || !closed) && (
@@ -427,12 +457,22 @@ export function OrderDetail({ id, me }: { id: string; me: Me }) {
           order={order}
           total={Math.max(0, totals.grossCents - order.intake.depositCents)}
           onClose={() => setPickup(false)}
-          onConfirm={async (paymentMethod, loanerReturned) => {
-            if (await run(() => api(`/repairs/orders/${id}/pickup`, { method: "POST", body: { paymentMethod, loanerReturned } }))) {
+          onConfirm={async (paymentMethod, loanerReturned, signature) => {
+            if (await run(() => api(`/repairs/orders/${id}/pickup`, { method: "POST", body: { paymentMethod, loanerReturned, signature } }))) {
               setPickup(false);
               setPrint("invoice");
             }
           }}
+        />
+      )}
+      {messaging && (
+        <MessageDialog
+          order={order}
+          statusUrl={statusUrl}
+          toPayCents={Math.max(0, totals.grossCents - order.intake.depositCents)}
+          company={me.user.tenantName}
+          onClose={() => setMessaging(false)}
+          onLogged={setOrder}
         />
       )}
       {print && <PrintView kind={print} order={order} statusUrl={statusUrl} qr={qr} settings={settings?.settings ?? null} onClose={() => setPrint(null)} />}
@@ -534,9 +574,12 @@ function AddItemDialog({ kind: initialKind, defaultLabor, onClose, onAdd }: {
   );
 }
 
-function PickupDialog({ order, total, onClose, onConfirm }: { order: RepairOrder; total: number; onClose: () => void; onConfirm: (m: PaymentMethod, loanerReturned: boolean) => void }) {
+function PickupDialog({ order, total, onClose, onConfirm }: {
+  order: RepairOrder; total: number; onClose: () => void; onConfirm: (m: PaymentMethod, loanerReturned: boolean, signature: string | null) => void;
+}) {
   const { r, euro } = useRepairI18n();
   const [method, setMethod] = useState<PaymentMethod>("cash");
+  const [signature, setSignature] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [loanerBack, setLoanerBack] = useState(false);
   return (
@@ -562,7 +605,11 @@ function PickupDialog({ order, total, onClose, onConfirm }: { order: RepairOrder
             <span>{r("loaner.backConfirm", { name: order.loaner.name })}</span>
           </label>
         )}
-        <button className="button primary" disabled={busy || (!!order.loaner && !loanerBack)} onClick={() => (setBusy(true), onConfirm(method, loanerBack))}><ClipboardCheck size={18} /> {r("order.pickupConfirm")}</button>
+        <div className="field">
+          <span className="field-label">{r("signature.pickupTitle")}</span>
+          <SignaturePad onChange={setSignature} />
+        </div>
+        <button className="button primary" disabled={busy || (!!order.loaner && !loanerBack)} onClick={() => (setBusy(true), onConfirm(method, loanerBack, signature))}><ClipboardCheck size={18} /> {r("order.pickupConfirm")}</button>
       </div>
     </Dialog>
   );

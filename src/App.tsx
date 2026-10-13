@@ -20,6 +20,7 @@ import { findApp } from "../shared/apps";
 // Branchen-Systeme werden erst geladen, wenn sie gebraucht werden
 const RepairsApp = lazy(() => import("./modules/repairs/RepairsApp"));
 const RepairStatusPage = lazy(() => import("./modules/repairs/StatusPage"));
+const RepairBookingPage = lazy(() => import("./modules/repairs/BookingPage"));
 
 export function App() {
   const [me, setMe] = useState<Me | null>(null);
@@ -57,6 +58,7 @@ export function App() {
   // Reparaturstatus für Endkunden: ebenfalls ohne Anmeldung
   const statusToken = path.split("/")[3];
   if (firstPart === "status" && terminalToken && statusToken) return <Suspense fallback={null}><RepairStatusPage tenantId={terminalToken} token={statusToken} /></Suspense>;
+  if (firstPart === "termin" && terminalToken) return <Suspense fallback={null}><RepairBookingPage tenantId={terminalToken} token={statusToken || undefined} /></Suspense>;
 
   if (loading) return <div className="splash"><img src="/icon.svg" alt="" width={56} height={56} /></div>;
 

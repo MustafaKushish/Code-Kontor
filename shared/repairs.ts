@@ -173,6 +173,11 @@ export interface RepairOrder {
   outChecks: CheckList | null;
   /** Ausgeliehenes Leihgerät, solange es nicht zurück ist */
   loaner: { id: string; name: string; serial: string; lentAt: string } | null;
+  photos: RepairPhoto[];
+  /** Unterschriften als PNG (Data-URL): bei Annahme und bei Abholung */
+  signature: { intake: string | null; pickup: string | null };
+  /** Teile, die für diesen Auftrag beim Lieferanten bestellt sind */
+  partOrders: OrderPartOrder[];
 }
 
 /** Kurzfassung für Listen */
@@ -217,6 +222,12 @@ export interface RepairSettings {
   notifyByMail: boolean;
   /** Gewährleistung auf verkaufte Gebrauchtgeräte in Monaten (an Verbraucher mindestens 12) */
   usedWarrantyMonths: number;
+  /** Eigene Vorlagen für WhatsApp und SMS (leer = mitgelieferte Vorlagen in der Sprache der App) */
+  messages: MessageTemplate[];
+  /** Landesvorwahl für Telefonnummern ohne Vorwahl, z. B. „49“ */
+  countryCode: string;
+  /** Online-Terminbuchung */
+  booking: BookingSettings;
 }
 
 export const DEFAULT_INTAKE_TERMS =
@@ -231,6 +242,9 @@ export const DEFAULT_REPAIR_SETTINGS: RepairSettings = {
   intakeTerms: DEFAULT_INTAKE_TERMS,
   notifyByMail: true,
   usedWarrantyMonths: 12,
+  messages: [],
+  countryCode: "49",
+  booking: { enabled: false, weekdays: [1, 2, 3, 4, 5, 6], from: "10:00", to: "18:00", slotMinutes: 30, perSlot: 1, daysAhead: 14, note: "" },
 };
 
 export const VAT_RATES = [19, 7, 0] as const;
@@ -312,7 +326,7 @@ const cents = (value: unknown, max = 10_000_000) => {
 const isDay = (value: unknown): value is string => typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
 const LANG = /^[a-z]{2}$/;
 
-export type RepairErrors = Partial<Record<"customerName" | "contact" | "email" | "model" | "problem" | "serial" | "name" | "price", string>>;
+export type RepairErrors = Partial<Record<"customerName" | "contact" | "email" | "model" | "problem" | "serial" | "name" | "price" | "slot", string>>;
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -418,6 +432,9 @@ export function sanitizeRepairSettings(input: unknown): RepairSettings {
     intakeTerms: typeof s.intakeTerms === "string" ? s.intakeTerms.trim().slice(0, 3000) : DEFAULT_INTAKE_TERMS,
     notifyByMail: s.notifyByMail !== false,
     usedWarrantyMonths: typeof s.usedWarrantyMonths === "number" ? Math.min(Math.max(Math.round(s.usedWarrantyMonths), 0), 60) : DEFAULT_REPAIR_SETTINGS.usedWarrantyMonths,
+    messages: sanitizeTemplates(s.messages),
+    countryCode: typeof s.countryCode === "string" && /^\d{1,4}$/.test(s.countryCode) ? s.countryCode : "49",
+    booking: sanitizeBookingSettings(s.booking),
   };
 }
 
@@ -649,4 +666,263 @@ export interface RepairStats {
   topModels: { label: string; n: number }[];
   topServices: { label: string; n: number; cents: number }[];
   daily: { day: string; cents: number }[];
+}
+
+// ---------- Fotos und Unterschrift ----------
+
+export const PHOTO_STAGES = ["intake", "repair", "output"] as const;
+export type PhotoStage = (typeof PHOTO_STAGES)[number];
+
+export interface RepairPhoto {
+  id: string;
+  stage: PhotoStage;
+  at: string;
+  userName: string | null;
+}
+
+export const MAX_PHOTOS = 12;
+/** Fotos werden im Browser verkleinert; mehr als ~700 KB als Text nehmen wir nicht an. */
+export const MAX_PHOTO_CHARS = 950_000;
+export const MAX_SIGNATURE_CHARS = 200_000;
+
+export const isPhotoDataUrl = (v: unknown): v is string =>
+  typeof v === "string" && v.length <= MAX_PHOTO_CHARS && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(v);
+export const isSignatureDataUrl = (v: unknown): v is string =>
+  typeof v === "string" && v.length <= MAX_SIGNATURE_CHARS && /^data:image\/png;base64,[A-Za-z0-9+/]+=*$/.test(v);
+
+// ---------- Nachrichten an Kunden (WhatsApp, SMS) ----------
+
+export interface MessageTemplate {
+  id: string;
+  name: string;
+  text: string;
+}
+
+/** Platzhalter, die in Vorlagen ersetzt werden. */
+export const MESSAGE_FIELDS = ["name", "device", "number", "status", "link", "total", "company"] as const;
+
+export function fillTemplate(text: string, vars: Partial<Record<(typeof MESSAGE_FIELDS)[number], string>>): string {
+  return text.replace(/\{(\w+)\}/g, (all, key: string) => (key in vars ? (vars as Record<string, string>)[key] ?? "" : all));
+}
+
+/**
+ * Telefonnummer für WhatsApp in internationaler Form ohne Plus, z. B. „0176 123“ → „49176123“.
+ * null, wenn das keine Handynummer sein kann.
+ */
+export function internationalPhone(phone: string, countryCode = "49"): string | null {
+  const raw = phone.trim();
+  let digits = raw.replace(/\D/g, "");
+  if (raw.startsWith("+")) {
+    // schon international
+  } else if (digits.startsWith("00")) digits = digits.slice(2);
+  else if (digits.startsWith("0")) digits = countryCode + digits.slice(1);
+  else digits = countryCode + digits;
+  return digits.length >= 8 && digits.length <= 15 ? digits : null;
+}
+
+export function sanitizeTemplates(input: unknown): MessageTemplate[] {
+  if (!Array.isArray(input)) return [];
+  return input
+    .map((t) => (t && typeof t === "object" ? (t as Record<string, unknown>) : {}))
+    .map((t) => ({ id: str(t.id, 40) || crypto.randomUUID(), name: str(t.name, 60), text: str(t.text, 1000) }))
+    .filter((t) => t.name && t.text)
+    .slice(0, 20);
+}
+
+// ---------- Online-Termine ----------
+
+export interface BookingSettings {
+  enabled: boolean;
+  /** Geöffnete Wochentage, 0 = Sonntag … 6 = Samstag */
+  weekdays: number[];
+  /** Erster und letzter möglicher Termin am Tag, „HH:MM“ */
+  from: string;
+  to: string;
+  slotMinutes: number;
+  /** Wie viele Kunden gleichzeitig kommen können */
+  perSlot: number;
+  /** Wie viele Tage im Voraus gebucht werden kann */
+  daysAhead: number;
+  /** Hinweis auf der Buchungsseite */
+  note: string;
+}
+
+export const DEFAULT_BOOKING: BookingSettings = DEFAULT_REPAIR_SETTINGS.booking;
+
+const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+const minutesOf = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+const timeOf = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+
+export function sanitizeBookingSettings(input: unknown): BookingSettings {
+  const s = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const num = (v: unknown, min: number, max: number, fallback: number) => (typeof v === "number" && Number.isFinite(v) ? Math.min(Math.max(Math.round(v), min), max) : fallback);
+  const from = typeof s.from === "string" && TIME.test(s.from) ? s.from : DEFAULT_BOOKING.from;
+  const to = typeof s.to === "string" && TIME.test(s.to) && minutesOf(s.to) > minutesOf(from) ? s.to : timeOf(Math.min(minutesOf(from) + 60, 23 * 60 + 59));
+  const weekdays = Array.isArray(s.weekdays) ? [...new Set(s.weekdays.filter((d): d is number => Number.isInteger(d) && d >= 0 && d <= 6))].sort() : DEFAULT_BOOKING.weekdays;
+  return {
+    enabled: s.enabled === true,
+    weekdays,
+    from,
+    to,
+    slotMinutes: num(s.slotMinutes, 10, 240, DEFAULT_BOOKING.slotMinutes),
+    perSlot: num(s.perSlot, 1, 20, DEFAULT_BOOKING.perSlot),
+    daysAhead: num(s.daysAhead, 1, 60, DEFAULT_BOOKING.daysAhead),
+    note: str(s.note, 500),
+  };
+}
+
+/** Startzeiten eines Tages, z. B. 10:00, 10:30 … (der letzte Termin beginnt spätestens um „to“). */
+export function slotTimes(s: Pick<BookingSettings, "from" | "to" | "slotMinutes">): string[] {
+  const out: string[] = [];
+  for (let m = minutesOf(s.from); m <= minutesOf(s.to) && out.length < 200; m += s.slotMinutes) out.push(timeOf(m));
+  return out;
+}
+
+const addDays = (day: string, n: number) => new Date(Date.parse(`${day}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+const weekdayOf = (day: string) => new Date(`${day}T00:00:00Z`).getUTCDay();
+
+/**
+ * Freie Termine ab heute. today/now in Ortszeit der Firma; taken zählt Buchungen je „Tag Uhrzeit“.
+ * Heute nur Zeiten, die mindestens eine Stunde in der Zukunft liegen.
+ */
+export function freeSlots(s: BookingSettings, today: string, now: string, taken: Record<string, number>): { day: string; times: string[] }[] {
+  const times = slotTimes(s);
+  const out: { day: string; times: string[] }[] = [];
+  for (let i = 0; i < s.daysAhead; i++) {
+    const day = addDays(today, i);
+    if (!s.weekdays.includes(weekdayOf(day))) continue;
+    const free = times.filter((t) => (i > 0 || minutesOf(t) >= minutesOf(now) + 60) && (taken[`${day} ${t}`] ?? 0) < s.perSlot);
+    if (free.length) out.push({ day, times: free });
+  }
+  return out;
+}
+
+export const BOOKING_STATUSES = ["new", "confirmed", "declined", "canceled", "done", "noShow"] as const;
+export type BookingStatus = (typeof BOOKING_STATUSES)[number];
+/** Diese Buchungen belegen einen Termin. */
+export const ACTIVE_BOOKING: BookingStatus[] = ["new", "confirmed"];
+
+export interface BookingInput {
+  day: string;
+  time: string;
+  name: string;
+  phone: string;
+  email: string;
+  device: { type: DeviceType; brand: string; model: string };
+  problem: string;
+  lang: string;
+}
+
+export interface RepairBooking extends BookingInput {
+  id: string;
+  status: BookingStatus;
+  source: "online" | "shop";
+  orderId: string | null;
+  orderNumber: number | null;
+  createdAt: string;
+}
+
+export function sanitizeBooking(input: unknown): BookingInput {
+  const b = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const d = (b.device && typeof b.device === "object" ? b.device : {}) as Record<string, unknown>;
+  return {
+    day: isDay(b.day) ? b.day : "",
+    time: typeof b.time === "string" && TIME.test(b.time) ? b.time : "",
+    name: str(b.name, 120),
+    phone: str(b.phone, 40),
+    email: str(b.email, 200).toLowerCase(),
+    device: { type: DEVICE_TYPES.includes(d.type as DeviceType) ? (d.type as DeviceType) : "phone", brand: str(d.brand, 60), model: str(d.model, 100) },
+    problem: str(b.problem, 1000),
+    lang: typeof b.lang === "string" && LANG.test(b.lang) ? b.lang : "de",
+  };
+}
+
+export function validateBooking(b: BookingInput): RepairErrors {
+  const errors: RepairErrors = validateCustomer({ name: b.name, phone: b.phone, email: b.email });
+  if (!b.day || !b.time) errors.slot = "required";
+  return errors;
+}
+
+// ---------- Lieferanten und Bestellungen ----------
+
+export interface Supplier {
+  id: string;
+  name: string;
+  contact: string;
+  phone: string;
+  email: string;
+  website: string;
+  /** Unsere Kundennummer beim Lieferanten */
+  customerNo: string;
+  note: string;
+}
+
+export function sanitizeSupplier(input: unknown): Omit<Supplier, "id"> | null {
+  const s = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const name = str(s.name, 120);
+  if (!name) return null;
+  return {
+    name, contact: str(s.contact, 120), phone: str(s.phone, 40), email: str(s.email, 200).toLowerCase(),
+    website: str(s.website, 200), customerNo: str(s.customerNo, 60), note: str(s.note, 1000),
+  };
+}
+
+export const PURCHASE_STATUSES = ["draft", "ordered", "received", "canceled"] as const;
+export type PurchaseStatus = (typeof PURCHASE_STATUSES)[number];
+
+export interface PurchaseLine {
+  id: string;
+  partId: string | null;
+  name: string;
+  qty: number;
+  /** Schon eingetroffen */
+  received: number;
+  /** Einkaufspreis je Stück */
+  unitCents: number;
+  /** Reparaturauftrag, der auf dieses Teil wartet */
+  orderId: string | null;
+  orderNumber: number | null;
+}
+
+export interface PurchaseOrder {
+  id: string;
+  number: number;
+  supplierId: string;
+  supplierName: string;
+  status: PurchaseStatus;
+  note: string;
+  lines: PurchaseLine[];
+  totalCents: number;
+  createdAt: string;
+  createdBy: string | null;
+  orderedAt: string | null;
+  receivedAt: string | null;
+}
+
+export type PurchaseLineInput = { partId: string | null; name: string; qty: number; unitCents: number; orderNumber: number | null };
+
+export function sanitizePurchaseLines(input: unknown): PurchaseLineInput[] {
+  if (!Array.isArray(input)) return [];
+  return input
+    .map((l) => (l && typeof l === "object" ? (l as Record<string, unknown>) : {}))
+    .map((l) => ({
+      partId: typeof l.partId === "string" && l.partId ? l.partId.slice(0, 64) : null,
+      name: str(l.name, 160),
+      qty: typeof l.qty === "number" && Number.isFinite(l.qty) ? Math.min(Math.max(Math.round(l.qty), 1), 9999) : 1,
+      unitCents: cents(l.unitCents),
+      orderNumber: typeof l.orderNumber === "number" && Number.isInteger(l.orderNumber) && l.orderNumber > 0 ? l.orderNumber : null,
+    }))
+    .filter((l) => l.name)
+    .slice(0, 100);
+}
+
+/** Bestellte Teile, die ein Reparaturauftrag erwartet (für die Auftragsansicht). */
+export interface OrderPartOrder {
+  purchaseId: string;
+  purchaseNumber: number;
+  supplierName: string;
+  status: PurchaseStatus;
+  name: string;
+  qty: number;
+  received: number;
 }

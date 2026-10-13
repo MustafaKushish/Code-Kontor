@@ -1,7 +1,7 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Check, Minus, X } from "lucide-react";
-import { CHECKS_FOR, parseEuro, type CheckItem, type CheckList, type CheckResult, type DeviceType, type RepairDevice, type RepairStatus } from "../../../shared/repairs";
+import { Check, Eraser, Minus, X } from "lucide-react";
+import { CHECKS_FOR, MAX_PHOTO_CHARS, parseEuro, type CheckItem, type CheckList, type CheckResult, type DeviceType, type RepairDevice, type RepairStatus } from "../../../shared/repairs";
 import { centsToInput, useRepairI18n } from "./i18n";
 
 const STATUS_TONE: Record<RepairStatus, string> = {
@@ -112,5 +112,87 @@ export function ChecksSummary({ value, compare }: { value: CheckList; compare?: 
       {ok > 0 && <span className="pill pos"><Check size={12} /> {r("checks.okCount", { n: ok })}</span>}
       {untested > 0 && <span className="pill">{r("checks.untestedCount", { n: untested })}</span>}
     </span>
+  );
+}
+
+/** Foto im Browser verkleinern, damit es schnell hochlädt und wenig Platz braucht. */
+export async function resizeImage(file: File): Promise<string> {
+  const bitmap = await createImageBitmap(file);
+  for (const [max, quality] of [[1600, 0.8], [1280, 0.7], [960, 0.6]] as const) {
+    const scale = Math.min(1, max / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const url = canvas.toDataURL("image/jpeg", quality);
+    if (url.length <= MAX_PHOTO_CHARS) return url;
+  }
+  throw new Error("tooLarge");
+}
+
+/**
+ * Unterschriftenfeld zum Unterschreiben mit Finger oder Stift.
+ * Gibt nach jedem Strich ein PNG als Data-URL zurück, null wenn leer.
+ */
+export function SignaturePad({ onChange, label }: { onChange: (dataUrl: string | null) => void; label?: string }) {
+  const { r } = useRepairI18n();
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const drawing = useRef(false);
+  const [empty, setEmpty] = useState(true);
+
+  useEffect(() => {
+    const c = canvas.current!;
+    c.width = 900;
+    c.height = 300;
+    const ctx = c.getContext("2d")!;
+    ctx.lineWidth = 4;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "#111827";
+  }, []);
+
+  const point = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+    const rect = canvas.current!.getBoundingClientRect();
+    return { x: ((e.clientX - rect.left) / rect.width) * canvas.current!.width, y: ((e.clientY - rect.top) / rect.height) * canvas.current!.height };
+  };
+  const start = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    canvas.current!.setPointerCapture(e.pointerId);
+    drawing.current = true;
+    const ctx = canvas.current!.getContext("2d")!;
+    const { x, y } = point(e);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + 0.1, y + 0.1);
+    ctx.stroke();
+  };
+  const move = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+    if (!drawing.current) return;
+    const ctx = canvas.current!.getContext("2d")!;
+    const { x, y } = point(e);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+  };
+  const end = () => {
+    if (!drawing.current) return;
+    drawing.current = false;
+    setEmpty(false);
+    onChange(canvas.current!.toDataURL("image/png"));
+  };
+  const clear = () => {
+    const c = canvas.current!;
+    c.getContext("2d")!.clearRect(0, 0, c.width, c.height);
+    setEmpty(true);
+    onChange(null);
+  };
+
+  return (
+    <div className="signature-pad">
+      <canvas ref={canvas} aria-label={label ?? r("signature.pad")} onPointerDown={start} onPointerMove={move} onPointerUp={end} onPointerCancel={end} onPointerLeave={end} />
+      <div className="signature-foot">
+        <span className="muted small">{empty ? r("signature.hint") : "✓"}</span>
+        {!empty && <button type="button" className="text-button" onClick={clear}><Eraser size={15} /> {r("signature.clear")}</button>}
+      </div>
+    </div>
   );
 }
