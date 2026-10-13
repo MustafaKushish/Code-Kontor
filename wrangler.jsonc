@@ -11,16 +11,16 @@
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/api/*"]
   },
-  // Plattform-Datenbank: Firmen-Verzeichnis, Benutzer, Sitzungen
+  // Plattform-Datenbank: Firmen-Verzeichnis, Benutzer, Sitzungen (nur EU-Rechenzentren)
   "d1_databases": [
     {
       "binding": "PLATFORM_DB",
-      "database_name": "code-kontor-platform",
+      "database_name": "code-kontor-platform-eu",
       "database_id": "ee9b3df8-be53-4e01-99ef-1dc933b4832e",
       "migrations_dir": "migrations"
     }
   ],
-  // Eine eigene SQLite-Datenbank je Kunde (Durable Object je Firma)
+  // Eine eigene SQLite-Datenbank je Kunde (Durable Object je Firma), Ablage nur in der EU (siehe tenantStub)
   "durable_objects": {
     "bindings": [{ "name": "TENANT_DB", "class_name": "TenantDatabase" }]
   },

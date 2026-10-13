@@ -1,9 +1,10 @@
 // Legt die Plattform-Datenbank (Cloudflare D1) beim ersten Veröffentlichen an
 // und trägt ihre ID in wrangler.jsonc ein. Läuft in GitHub Actions.
+// Die Datenbank liegt nur in EU-Rechenzentren (Jurisdiktion „eu“).
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 
-const NAME = "code-kontor-platform";
+const NAME = "code-kontor-platform-eu";
 const wrangler = (...args) => execFileSync("npx", ["wrangler", ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
 // Wrangler schreibt manchmal Hinweise vor die JSON-Liste, deshalb nur den Teil von [ bis ] lesen.
 const list = () => {
@@ -15,7 +16,7 @@ const find = () => list().find((db) => db.name === NAME);
 let db = find();
 if (!db) {
   console.log(`Lege Datenbank ${NAME} an …`);
-  wrangler("d1", "create", NAME);
+  wrangler("d1", "create", NAME, "--jurisdiction", "eu");
   db = find();
 }
 if (!db?.uuid) throw new Error(`Datenbank ${NAME} nicht gefunden`);

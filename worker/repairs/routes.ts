@@ -1,6 +1,6 @@
 import { Hono, type Context } from "hono";
 import type { Env } from "../index";
-import type { ModuleResult } from "../tenant";
+import { tenantStub, type ModuleResult } from "../tenant";
 import type { RepairStore } from "./store";
 import { fail } from "../errors";
 import { decryptField, encryptField } from "../crypto";
@@ -25,7 +25,7 @@ type Ctx = Context<RepairEnv>;
 type Remote = { [K in keyof RepairStore]: RepairStore[K] extends (...args: infer A) => infer R ? (...args: A) => Promise<ModuleResult<R>> : never };
 
 function store(env: Env, tenantId: string): Remote {
-  const stub = env.TENANT_DB.get(env.TENANT_DB.idFromName(tenantId));
+  const stub = tenantStub(env, tenantId);
   return new Proxy({} as Remote, {
     get: (_, action: string) => (...args: unknown[]) => stub.repairs(action, args),
   });
@@ -54,7 +54,7 @@ const statusLink = (c: Ctx, tenantId: string, token: string) => new URL(`/status
 
 function audit(c: Ctx, action: string, detail: Record<string, unknown>) {
   const user = c.get("user");
-  const done = c.env.TENANT_DB.get(c.env.TENANT_DB.idFromName(user.tenantId))
+  const done = tenantStub(c.env, user.tenantId)
     .logEvent({ userId: user.id, userName: user.name, action, detail })
     .catch((err) => console.error("[audit]", err));
   c.executionCtx.waitUntil(done);
@@ -62,7 +62,7 @@ function audit(c: Ctx, action: string, detail: Record<string, unknown>) {
 
 /** Firmendaten für die Rechnung, IBAN und BIC entschlüsselt. */
 async function companyForInvoice(env: Env, tenantId: string): Promise<InvoiceSnapshot["company"]> {
-  const company = await env.TENANT_DB.get(env.TENANT_DB.idFromName(tenantId)).getCompany();
+  const company = await tenantStub(env, tenantId).getCompany();
   return {
     name: company?.name ?? "", street: company?.street ?? "", postalCode: company?.postalCode ?? "", city: company?.city ?? "",
     phone: company?.phone ?? "", email: company?.email ?? "", taxNumber: company?.taxNumber ?? "", vatId: company?.vatId ?? "",
@@ -78,7 +78,7 @@ async function notifyCustomer(c: Ctx, order: RepairOrder, kind: RepairMailKind):
   const content = renderRepairMail(kind, order.intake.customerLang, statusLink(c, user.tenantId, order.publicToken), {
     name: order.customer.name, device: deviceName(order), number: `#${order.number}`, company: user.tenantName,
   });
-  const company = await c.env.TENANT_DB.get(c.env.TENANT_DB.idFromName(user.tenantId)).getCompany();
+  const company = await tenantStub(c.env, user.tenantId).getCompany();
   c.executionCtx.waitUntil(
     sendMail(c.env, order.customer.email, content, fetch, company?.email ? { replyTo: company.email } : {}).catch((err) => console.error("[mail]", err)),
   );
@@ -102,7 +102,7 @@ export const repairRoutes = new Hono<RepairEnv>();
 
 // Nur nutzbar, wenn die Firma das System installiert hat
 repairRoutes.use("*", async (c, next) => {
-  const installed = await c.env.TENANT_DB.get(c.env.TENANT_DB.idFromName(c.get("user").tenantId)).installedApps();
+  const installed = await tenantStub(c.env, c.get("user").tenantId).installedApps();
   if (!installed.includes(REPAIR_APP_ID)) return fail(c, "unknownApp", 404);
   await next();
 });
@@ -283,7 +283,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 async function publicOrder(env: Env, tenantId: string, token: string) {
   if (!UUID.test(tenantId) || !/^[0-9a-f]{36}$/.test(token)) return null;
-  const db = env.TENANT_DB.get(env.TENANT_DB.idFromName(tenantId));
+  const db = tenantStub(env, tenantId);
   if (!(await db.installedApps()).includes(REPAIR_APP_ID)) return null;
   const result = await store(env, tenantId).byToken(token);
   return result.ok ? result.value : null;
@@ -291,7 +291,7 @@ async function publicOrder(env: Env, tenantId: string, token: string) {
 
 /** Nur was der Kunde sehen soll: kein Name, keine Telefonnummer, keine internen Notizen. */
 async function publicView(env: Env, tenantId: string, order: RepairOrder) {
-  const company = await env.TENANT_DB.get(env.TENANT_DB.idFromName(tenantId)).getCompany();
+  const company = await tenantStub(env, tenantId).getCompany();
   const settings = await store(env, tenantId).settings();
   const smallBusiness = settings.ok ? settings.value.smallBusiness : false;
   const showPrices = ["quote", "waitingParts", "repairing", "ready", "notRepaired", "pickedUp"].includes(order.status);
