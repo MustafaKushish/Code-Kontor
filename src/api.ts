@@ -32,4 +32,6 @@ export interface Me {
   billing: { status: "trialing" | "active" | "past_due" | "canceled" | "expired"; daysLeft: number; access: boolean } | null;
   /** Offene Zeit-Anträge (nur für Inhaber und Admins) */
   timeRequests?: number;
+  /** Land, Währung und Steuersätze der Firma */
+  tax?: { country: string; custom: boolean; currency: string; vatRates: number[] };
 }

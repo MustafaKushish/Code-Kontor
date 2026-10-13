@@ -54,3 +54,17 @@ describe("sanitizeCompany", () => {
     expect(result.iban).toBe("DE89370400440532013000");
   });
 });
+
+describe("validateCompany weltweit", () => {
+  const base = { ...emptyCompanyProfile, name: "Firma", street: "Weg 1", postalCode: "8001", city: "Zürich" };
+  it("prüft Steuernummer und IBAN je nach Land", () => {
+    // Schweiz: IBAN Pflicht, MWST-Nummer frei
+    expect(validateCompany({ ...base, country: "CH", vatId: "CHE-123.456.789 MWST", iban: "" })).toEqual({ iban: "ibanRequired" });
+    // Katar: keine Umsatzsteuer, also keine Steuernummer nötig
+    expect(validateCompany({ ...base, country: "QA", iban: "QA58DOHB00001234567890ABCDEFG" })).toEqual({});
+    // USA: keine IBAN, Kontonummer frei
+    expect(validateCompany({ ...base, country: "US", iban: "" })).toEqual({});
+    // Österreich: Steuernummer nicht im deutschen Format geprüft
+    expect(validateCompany({ ...base, country: "AT", taxNumber: "12-345/6789", iban: "AT611904300234573201" })).toEqual({});
+  });
+});

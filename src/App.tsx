@@ -13,6 +13,7 @@ import { Settings } from "./pages/Settings";
 import { AccountPage } from "./pages/Account";
 import { AccountingPage } from "./pages/Accounting";
 import { TimePage } from "./pages/Time";
+import { setTaxSettings } from "./money";
 import { TerminalPage } from "./pages/Terminal";
 import { ImprintPage, PrivacyPage } from "./pages/Legal";
 import { findApp } from "../shared/apps";
@@ -29,7 +30,9 @@ export function App() {
 
   const refresh = useCallback(async () => {
     try {
-      setMe(await api<Me>("/me"));
+      const next = await api<Me>("/me");
+      setTaxSettings(next.tax);
+      setMe(next);
     } catch (error) {
       if (!(error instanceof ApiError && error.status === 401)) console.error(error);
       setMe(null);
@@ -103,7 +106,7 @@ export function App() {
   } else if (section === "konto") {
     page = <AccountPage me={me} onChanged={refresh} />;
   } else if (section === "einstellungen") {
-    page = <Settings me={me} onEdit={() => setEditingCompany(true)} />;
+    page = <Settings me={me} onEdit={() => setEditingCompany(true)} onTaxChanged={refresh} />;
   } else {
     page = <Overview me={me} />;
   }

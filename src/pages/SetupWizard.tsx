@@ -4,6 +4,7 @@ import { useI18n } from "../i18n";
 import { LanguageSwitch } from "../layout/LanguageSwitch";
 import { AddressInput } from "./AddressInput";
 import { Field, Logo } from "../components";
+import { COUNTRY_CODES, countryTax, sortedCountries } from "../../shared/countries";
 import { emptyCompanyProfile, validateCompany, type CompanyErrors, type CompanyProfile } from "../../shared/company";
 
 const STEPS: { key: "step1" | "step2" | "step3"; fields: (keyof CompanyProfile)[] }[] = [
@@ -12,7 +13,6 @@ const STEPS: { key: "step1" | "step2" | "step3"; fields: (keyof CompanyProfile)[
   { key: "step3", fields: ["iban", "bic", "bankName", "logoDataUrl"] },
 ];
 
-const COUNTRIES = ["DE", "AT", "CH", "NL", "BE", "FR", "LU", "DK", "PL", "IT", "ES", "TR"];
 
 export function SetupWizard(props: {
   firstRun: boolean;
@@ -137,8 +137,9 @@ export function SetupWizard(props: {
               </Field>
               <Field label={t("wizard.country")} error={err("country")}>
                 <select value={company.country} onChange={set("country")}>
-                  {COUNTRIES.map((code) => (
-                    <option key={code} value={code}>{countryName(code)}</option>
+                  {!COUNTRY_CODES.includes(company.country) && <option value={company.country}>{countryName(company.country)}</option>}
+                  {sortedCountries(lang).map(([code, name]) => (
+                    <option key={code} value={code}>{name}</option>
                   ))}
                 </select>
               </Field>
@@ -154,7 +155,7 @@ export function SetupWizard(props: {
                       street: a.street,
                       postalCode: a.postalCode || c.postalCode,
                       city: a.city || c.city,
-                      country: COUNTRIES.includes(a.country) ? a.country : c.country,
+                      country: COUNTRY_CODES.includes(a.country) ? a.country : c.country,
                     }))
                   }
                 />
@@ -187,8 +188,8 @@ export function SetupWizard(props: {
 
           {step === 2 && (
             <>
-              <Field label={t("wizard.iban")} error={err("iban")} wide>
-                <input value={company.iban} onChange={set("iban")} placeholder="DE00 0000 0000 0000 0000 00" />
+              <Field label={countryTax(company.country).iban ? t("wizard.iban") : t("wizard.accountNumber")} error={err("iban")} wide>
+                <input value={company.iban} onChange={set("iban")} placeholder={countryTax(company.country).iban ? `${company.country}00 0000 0000 0000 0000 00` : ""} />
               </Field>
               <Field label={t("wizard.bic")} error={err("bic")}>
                 <input value={company.bic} onChange={set("bic")} />
