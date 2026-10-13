@@ -77,6 +77,8 @@ export interface RepairIntake {
   internalNote: string;
   /** Sprache für E-Mails und die Statusseite des Kunden */
   customerLang: string;
+  /** Garantiefall: Bezug auf die frühere Rechnung oder den früheren Auftrag (leer = normaler Auftrag) */
+  warrantyRef: string;
 }
 
 export interface RepairCustomer {
@@ -112,6 +114,8 @@ export interface RepairEvent {
   userName: string | null;
 }
 
+export type InvoiceKind = "repair" | "sale";
+
 export interface RepairInvoice {
   number: string;
   issuedAt: string;
@@ -127,10 +131,11 @@ export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
 export interface InvoiceSnapshot {
   company: { name: string; street: string; postalCode: string; city: string; phone: string; email: string; taxNumber: string; vatId: string; iban: string; bic: string; bankName: string; logoDataUrl: string };
-  customer: { name: string; phone: string; email: string };
-  orderNumber: number;
-  device: RepairDevice;
-  items: RepairItem[];
+  customer: { name: string; phone: string; email: string; address?: string };
+  /** Auftragsnummer; null bei einem Verkauf */
+  orderNumber: number | null;
+  device: RepairDevice | null;
+  items: (RepairItem & { margin?: boolean; warrantyUntil?: string })[];
   totals: Totals;
   depositCents: number;
   smallBusiness: boolean;
@@ -193,6 +198,8 @@ export interface RepairSettings {
   intakeTerms: string;
   /** Kunden bei Kostenvoranschlag und Abholbereit automatisch per E-Mail informieren */
   notifyByMail: boolean;
+  /** Gewährleistung auf verkaufte Gebrauchtgeräte in Monaten (an Verbraucher mindestens 12) */
+  usedWarrantyMonths: number;
 }
 
 export const DEFAULT_INTAKE_TERMS =
@@ -206,6 +213,7 @@ export const DEFAULT_REPAIR_SETTINGS: RepairSettings = {
   laborCents: 0,
   intakeTerms: DEFAULT_INTAKE_TERMS,
   notifyByMail: true,
+  usedWarrantyMonths: 12,
 };
 
 export const VAT_RATES = [19, 7, 0] as const;
@@ -223,13 +231,14 @@ export interface Totals {
  * Summen aus Endpreisen. Die Steuer wird je Satz aus der Bruttosumme herausgerechnet,
  * damit die Rechnung auf den Cent mit dem Kassenbetrag übereinstimmt.
  */
-export function computeTotals(items: Pick<RepairItem, "qty" | "unitCents" | "vatRate">[], smallBusiness = false): Totals {
+export function computeTotals(items: (Pick<RepairItem, "qty" | "unitCents" | "vatRate"> & { margin?: boolean })[], smallBusiness = false): Totals {
   const byRate = new Map<number, number>();
   let grossCents = 0;
   for (const item of items) {
     const line = Math.round(item.qty * item.unitCents);
     grossCents += line;
-    const rate = smallBusiness ? 0 : item.vatRate;
+    // Gebrauchtgeräte nach § 25a UStG: keine Steuer auf der Rechnung ausweisen
+    const rate = smallBusiness || item.margin ? 0 : item.vatRate;
     byRate.set(rate, (byRate.get(rate) ?? 0) + line);
   }
   const vat = [...byRate.entries()]
@@ -326,6 +335,7 @@ export function sanitizeIntake(input: unknown): RepairIntake {
     dueDay: isDay(i.dueDay) ? i.dueDay : "",
     internalNote: str(i.internalNote, 2000),
     customerLang: typeof i.customerLang === "string" && LANG.test(i.customerLang) ? i.customerLang : "de",
+    warrantyRef: str(i.warrantyRef, 40),
   };
 }
 
@@ -378,6 +388,7 @@ export function sanitizeRepairSettings(input: unknown): RepairSettings {
     laborCents: cents(s.laborCents),
     intakeTerms: typeof s.intakeTerms === "string" ? s.intakeTerms.trim().slice(0, 3000) : DEFAULT_INTAKE_TERMS,
     notifyByMail: s.notifyByMail !== false,
+    usedWarrantyMonths: typeof s.usedWarrantyMonths === "number" ? Math.min(Math.max(Math.round(s.usedWarrantyMonths), 0), 60) : DEFAULT_REPAIR_SETTINGS.usedWarrantyMonths,
   };
 }
 
@@ -389,4 +400,109 @@ export function parseEuro(value: string): number | null {
   else v = v.replace(/,/g, "");
   if (!/^\d+(\.\d{1,2})?$/.test(v)) return null;
   return Math.round(Number(v) * 100);
+}
+
+// ---------- An- und Verkauf gebrauchter Geräte ----------
+
+export const GRADES = ["likeNew", "good", "used", "defective"] as const;
+export type Grade = (typeof GRADES)[number];
+
+export const ID_TYPES = ["idCard", "passport", "residence", "driving"] as const;
+export type IdType = (typeof ID_TYPES)[number];
+
+export interface UsedDevice {
+  id: string;
+  /** Laufende Ankaufsnummer, z. B. 1001 → „A-1001“ */
+  number: number;
+  status: "inStock" | "sold";
+  device: RepairDevice & { storage: string };
+  grade: Grade;
+  note: string;
+  purchaseCents: number;
+  priceCents: number;
+  seller: { name: string; address: string; phone: string; idType: IdType | ""; hasIdNumber: boolean };
+  payout: PaymentMethod;
+  purchasedAt: string;
+  purchasedBy: string | null;
+  soldAt: string | null;
+  saleInvoice: string | null;
+  buyerName: string | null;
+  warrantyUntil: string;
+}
+
+export interface UsedDeviceInput {
+  device: UsedDevice["device"];
+  grade: Grade;
+  note: string;
+  purchaseCents: number;
+  priceCents: number;
+  seller: { name: string; address: string; phone: string; idType: IdType | "" };
+  idNumber: string;
+  payout: PaymentMethod;
+  ownership: boolean;
+}
+
+export function sanitizeUsed(input: unknown): UsedDeviceInput {
+  const i = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const intake = sanitizeIntake({ device: i.device });
+  const d = (i.device && typeof i.device === "object" ? i.device : {}) as Record<string, unknown>;
+  const s = (i.seller && typeof i.seller === "object" ? i.seller : {}) as Record<string, unknown>;
+  return {
+    device: { ...intake.device, storage: str(d.storage, 30) },
+    grade: GRADES.includes(i.grade as Grade) ? (i.grade as Grade) : "good",
+    note: str(i.note, 1000),
+    purchaseCents: cents(i.purchaseCents),
+    priceCents: cents(i.priceCents),
+    seller: { name: str(s.name, 120), address: str(s.address, 300), phone: str(s.phone, 40), idType: ID_TYPES.includes(s.idType as IdType) ? (s.idType as IdType) : "" },
+    idNumber: str(i.idNumber, 60),
+    payout: PAYMENT_METHODS.includes(i.payout as PaymentMethod) ? (i.payout as PaymentMethod) : "cash",
+    ownership: i.ownership === true,
+  };
+}
+
+export type UsedErrors = Partial<Record<"model" | "serial" | "sellerName" | "sellerAddress" | "ownership", string>>;
+
+/** Beim Ankauf braucht es Verkäufer mit Anschrift und die Eigentumsbestätigung, damit keine gestohlenen Geräte angekauft werden. */
+export function validateUsed(u: UsedDeviceInput, isNew: boolean): UsedErrors {
+  const errors: UsedErrors = {};
+  if (!u.device.brand && !u.device.model) errors.model = "required";
+  if (looksLikeImei(u.device.serial) && normalizeSerial(u.device.serial).length === 15 && !isValidImei(u.device.serial)) errors.serial = "imei";
+  if (isNew) {
+    if (!u.seller.name) errors.sellerName = "required";
+    if (!u.seller.address) errors.sellerAddress = "required";
+    if (!u.ownership) errors.ownership = "required";
+  }
+  return errors;
+}
+
+/** Eine Position im Verkauf: Zubehör/Teil aus dem Lager, Gebrauchtgerät oder freie Position. */
+export interface SaleLine {
+  kind: "part" | "used" | "other";
+  refId: string | null;
+  name: string;
+  qty: number;
+  unitCents: number;
+  vatRate: number;
+}
+
+export function sanitizeSaleLine(input: unknown): SaleLine | null {
+  const i = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const kind = i.kind === "part" || i.kind === "used" ? i.kind : "other";
+  const item = sanitizeItem({ ...i, kind: "other" });
+  if (!item) return null;
+  const refId = typeof i.refId === "string" ? i.refId.slice(0, 64) : null;
+  if (kind !== "other" && !refId) return null;
+  return { kind, refId: kind === "other" ? null : refId, name: item.name, qty: kind === "used" ? 1 : item.qty, unitCents: item.unitCents, vatRate: item.vatRate };
+}
+
+export interface WarrantyRow {
+  source: "repair" | "sale";
+  /** Auftrags-ID bzw. Ankauf-ID, zum Öffnen */
+  refId: string;
+  invoice: string;
+  label: string;
+  device: RepairDevice;
+  customer: { name: string; phone: string; email: string };
+  from: string;
+  until: string;
 }

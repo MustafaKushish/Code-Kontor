@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { ArrowLeft, Check, Smartphone, User, UserCheck, Wallet } from "lucide-react";
+import { ArrowLeft, Check, ShieldCheck, Smartphone, User, UserCheck, Wallet } from "lucide-react";
 import { api, ApiError } from "../../api";
 import { Field, Link } from "../../components";
 import { navigate } from "../../router";
@@ -12,6 +12,29 @@ import { useRepairI18n } from "./i18n";
 import { MoneyInput } from "./parts";
 
 const BASE = "/app/handy-it";
+const CLAIM_KEY = "ck-repairs-warranty-claim";
+
+interface WarrantyClaim { ref: string; customer: Omit<RepairCustomer, "id" | "orders">; device: RepairIntake["device"] }
+
+/** Garantiefall vormerken und die Annahme öffnen. */
+export function startWarrantyClaim(claim: WarrantyClaim) {
+  try {
+    sessionStorage.setItem(CLAIM_KEY, JSON.stringify(claim));
+  } catch {
+    // ohne Speicher eben leer
+  }
+  navigate(`${BASE}/neu`);
+}
+
+function takeWarrantyClaim(): WarrantyClaim | null {
+  try {
+    const raw = sessionStorage.getItem(CLAIM_KEY);
+    sessionStorage.removeItem(CLAIM_KEY);
+    return raw ? (JSON.parse(raw) as WarrantyClaim) : null;
+  } catch {
+    return null;
+  }
+}
 
 const BRANDS = ["Apple", "Samsung", "Xiaomi", "Google", "Huawei", "OnePlus", "Oppo", "Motorola", "Nokia", "Sony", "Lenovo", "HP", "Dell", "Asus", "Acer", "Microsoft", "Nintendo"];
 
@@ -24,7 +47,7 @@ export function IntakeForm({ editId }: { editId?: string }) {
   const [intake, setIntake] = useState<RepairIntake>({
     device: { type: "phone", brand: "", model: "", serial: "", color: "" },
     problem: "", accessories: [], accessoriesOther: "", condition: "", approvedUpToCents: 0, estimateCents: 0, depositCents: 0,
-    dataNotice: false, dueDay: "", internalNote: "", customerLang: lang,
+    dataNotice: false, dueDay: "", internalNote: "", customerLang: lang, warrantyRef: "",
   });
   const [unlockCode, setUnlockCode] = useState("");
   const [hasUnlock, setHasUnlock] = useState(false);
@@ -47,6 +70,15 @@ export function IntakeForm({ editId }: { editId?: string }) {
         setLoaded(true);
       })
       .catch((e) => setError(repairError(e)));
+  }, [editId]);
+
+  // Garantiefall aus der Garantie-Übersicht: Kunde und Gerät sind schon ausgefüllt
+  useEffect(() => {
+    if (editId) return;
+    const claim = takeWarrantyClaim();
+    if (!claim) return;
+    setCustomer(claim.customer);
+    setIntake((i) => ({ ...i, device: { ...i.device, ...claim.device }, warrantyRef: claim.ref }));
   }, [editId]);
 
   // Bekannte Kunden vorschlagen, während Name oder Telefon getippt wird
@@ -104,6 +136,11 @@ export function IntakeForm({ editId }: { editId?: string }) {
       <Link to={editId ? `${BASE}/auftrag/${editId}` : BASE} className="text-link back"><ArrowLeft size={16} className="flip-rtl" /> {r("order.back")}</Link>
       <h1 className="display">{editId ? r("intake.editTitle", { number: number ?? "" }) : r("intake.title")}</h1>
       {error && <p className="error" role="alert">{error}</p>}
+      {intake.warrantyRef && (
+        <p className="notice success"><ShieldCheck size={17} /> {r("order.warrantyClaim", { ref: intake.warrantyRef })}
+          <button type="button" className="text-button" onClick={() => set({ warrantyRef: "" })}>{r("warranty.notAClaim")}</button>
+        </p>
+      )}
 
       <section className="card stack">
         <h2 className="card-title"><User size={20} /> {r("intake.customer")}</h2>

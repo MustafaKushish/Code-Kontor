@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   canChangeStatus, computeTotals, invoiceNumber, isValidImei, parseEuro, sanitizeIntake, sanitizeItem, sanitizeRepairSettings,
-  validateCustomer, validateIntake, warrantyEnd,
+  sanitizeSaleLine, sanitizeUsed, validateCustomer, validateIntake, validateUsed, warrantyEnd,
 } from "../shared/repairs";
 import { de } from "../src/modules/repairs/lang/de";
 import { en } from "../src/modules/repairs/lang/en";
@@ -73,6 +73,40 @@ describe("Reparaturen: Prüfungen", () => {
     expect(canChangeStatus("pickedUp", "repairing")).toBe(false);
     expect(canChangeStatus("ready", "canceled")).toBe(false);
     expect(canChangeStatus("canceled", "received")).toBe(true);
+  });
+});
+
+describe("Reparaturen: An- und Verkauf", () => {
+  it("weist bei Gebrauchtgeräten (§ 25a) keine Steuer aus, bei Zubehör schon", () => {
+    const t = computeTotals([{ qty: 1, unitCents: 29900, vatRate: 19, margin: true }, { qty: 1, unitCents: 1190, vatRate: 19 }]);
+    expect(t.grossCents).toBe(31090);
+    expect(t.vat).toEqual([
+      { rate: 19, netCents: 1000, vatCents: 190 },
+      { rate: 0, netCents: 29900, vatCents: 0 },
+    ]);
+  });
+  it("verlangt beim Ankauf Verkäufer, Anschrift und Eigentumsbestätigung", () => {
+    const empty = sanitizeUsed({ device: { brand: "Apple", model: "iPhone 12" } });
+    expect(Object.keys(validateUsed(empty, true)).sort()).toEqual(["ownership", "sellerAddress", "sellerName"]);
+    expect(validateUsed(empty, false)).toEqual({});
+    const ok = sanitizeUsed({
+      device: { brand: "Apple", model: "iPhone 12", serial: "490154203237518" }, seller: { name: "Max", address: "Hauptstr. 1", idType: "passport" },
+      ownership: true, purchaseCents: 15000, priceCents: 24900, grade: "nope", payout: "bitcoin",
+    });
+    expect(validateUsed(ok, true)).toEqual({});
+    expect(ok.grade).toBe("good");
+    expect(ok.payout).toBe("cash");
+    expect(validateUsed(sanitizeUsed({ device: { model: "X", serial: "490154203237519" } }), false).serial).toBe("imei");
+  });
+  it("prüft Verkaufspositionen", () => {
+    expect(sanitizeSaleLine({ kind: "used", refId: "a", name: "iPhone", qty: 3, unitCents: 100, vatRate: 19 })?.qty).toBe(1);
+    expect(sanitizeSaleLine({ kind: "part", name: "Hülle", qty: 1, unitCents: 100, vatRate: 19 })).toBeNull();
+    expect(sanitizeSaleLine({ kind: "other", refId: "x", name: "Einrichtung", qty: 1, unitCents: 1000, vatRate: 19 })?.refId).toBeNull();
+    expect(sanitizeSaleLine({ kind: "other", name: "", qty: 1, unitCents: 1000, vatRate: 19 })).toBeNull();
+  });
+  it("begrenzt die Gewährleistung auf Gebrauchtgeräte", () => {
+    expect(sanitizeRepairSettings({}).usedWarrantyMonths).toBe(12);
+    expect(sanitizeRepairSettings({ usedWarrantyMonths: -3 }).usedWarrantyMonths).toBe(0);
   });
 });
 

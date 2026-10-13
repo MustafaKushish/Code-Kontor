@@ -189,3 +189,37 @@
 .status-page .button { white-space: normal; text-align: center; }
 .status-page .card > a.button { justify-self: stretch; }
 @media (max-width: 640px) { .status-page .row.wrap .button { flex: 1 1 100%; } }
+
+/* ---------- Verkauf, Ankauf, Garantie ---------- */
+.repairs .row.gap-sm { display: inline-flex; align-items: center; gap: 4px; }
+.sale-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.sale-layout .search { max-width: none; }
+.sale-products { max-height: 520px; overflow: auto; }
+.sale-products .list-row:disabled { opacity: 0.45; cursor: default; }
+.sale-icon { width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; flex: none; background: var(--panel-2); color: var(--muted); }
+.sale-icon.used { background: hsl(var(--hue) 80% 60% / 0.14); color: hsl(var(--hue) 65% 55%); }
+.sale-cart { position: sticky; top: 16px; }
+.sale-line { display: grid; gap: 8px; padding: 10px 0; }
+.sale-line + .sale-line { border-top: 1px solid var(--line); }
+.sale-line-controls { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+.sale-qty { min-width: 24px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; }
+.sale-price { width: 120px; }
+.sale-customer { display: inline-flex; align-items: center; gap: 6px; justify-self: start; }
+.sale-recent { grid-column: 1 / -1; }
+.used-seller { padding: 12px 14px; border-radius: 16px; background: var(--panel-2); }
+.repairs fieldset { border: none; padding: 0; margin: 0; min-width: 0; }
+.warranty-row { align-items: center; }
+.warranty-icon { width: 36px; height: 36px; border-radius: 12px; display: grid; place-items: center; flex: none; background: var(--success-soft); color: var(--success); }
+.warranty-icon.warn { background: var(--warn-soft); color: inherit; }
+.warranty-icon.off { background: var(--panel-2); color: var(--muted); }
+.small-button { min-height: 34px; padding: 4px 12px; font-size: 0.88rem; }
+
+@media (max-width: 860px) {
+  .sale-layout { grid-template-columns: minmax(0, 1fr); }
+  .sale-cart { position: static; }
+  .sale-products { max-height: 360px; }
+}
+@media (max-width: 720px) {
+  .repairs-tabs { overflow-x: auto; scrollbar-width: none; justify-content: flex-start; }
+  .repairs-tabs button { flex: none; padding-inline: 12px; }
+}

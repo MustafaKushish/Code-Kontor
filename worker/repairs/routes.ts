@@ -10,8 +10,8 @@ import { hasAccess } from "../../shared/billing";
 import { renderRepairMail, type RepairMailKind } from "./mail";
 import {
   PAYMENT_METHODS, REPAIR_APP_ID, REPAIR_STATUSES, STATUS_GROUPS, computeTotals, sanitizeCustomer, sanitizeIntake, sanitizeItem, sanitizePart,
-  sanitizeRepairSettings, validateCustomer, validateIntake,
-  type InvoiceSnapshot, type PaymentMethod, type RepairOrder, type RepairStatus, type StatusGroup,
+  sanitizeRepairSettings, sanitizeSaleLine, sanitizeUsed, validateCustomer, validateIntake, validateUsed,
+  type InvoiceSnapshot, type PaymentMethod, type SaleLine, type RepairOrder, type RepairStatus, type StatusGroup,
 } from "../../shared/repairs";
 
 // Schnittstellen des Systems „Handy- & IT-Service“ unter /api/repairs (angemeldet)
@@ -217,6 +217,12 @@ repairRoutes.get("/customers", async (c) => {
   return c.json({ customers: result.ok ? result.value : [] });
 });
 
+repairRoutes.get("/invoices/:number", async (c) => {
+  const result = await store(c.env, c.get("user").tenantId).invoice(param(c, "number"));
+  if (!result.ok || !result.value) return moduleError(c, "notFound");
+  return c.json({ invoice: result.value });
+});
+
 repairRoutes.get("/invoices", async (c) => {
   const year = Number(c.req.query("year")) || new Date().getUTCFullYear();
   const result = await store(c.env, c.get("user").tenantId).invoices(year);
@@ -259,6 +265,71 @@ repairRoutes.post("/parts/:id/stock", async (c) => {
 repairRoutes.delete("/parts/:id", managers, async (c) => {
   await store(c.env, c.get("user").tenantId).removePart(param(c, "id"));
   return c.json({ ok: true });
+});
+
+// ---------- An- und Verkauf ----------
+
+repairRoutes.get("/used", async (c) => {
+  const status = c.req.query("status");
+  const result = await store(c.env, c.get("user").tenantId).usedDevices(status === "sold" || status === "all" ? status : "inStock", c.req.query("q") ?? "");
+  return c.json({ devices: result.ok ? result.value : [] });
+});
+
+repairRoutes.post("/used", async (c) => {
+  const input = sanitizeUsed(await readBody(c));
+  const errors = validateUsed(input, true);
+  if (Object.keys(errors).length) return fail(c, "checkFields", 400, { errors });
+  const idNumber = input.idNumber ? await encryptField(c.env.DATA_KEY, input.idNumber) : null;
+  const result = await store(c.env, c.get("user").tenantId).buyDevice(input, idNumber, actor(c));
+  if (!result.ok) return moduleError(c, result.code);
+  audit(c, "usedDeviceBought", { number: result.value.number, cents: result.value.purchaseCents });
+  return c.json({ device: result.value });
+});
+
+repairRoutes.put("/used/:id", async (c) => {
+  const input = sanitizeUsed(await readBody(c));
+  const errors = validateUsed(input, false);
+  if (Object.keys(errors).length) return fail(c, "checkFields", 400, { errors });
+  const result = await store(c.env, c.get("user").tenantId).updateUsed(param(c, "id"), input);
+  if (!result.ok) return moduleError(c, result.code);
+  return c.json({ device: result.value });
+});
+
+repairRoutes.delete("/used/:id", managers, async (c) => {
+  const result = await store(c.env, c.get("user").tenantId).removeUsed(param(c, "id"));
+  if (!result.ok) return moduleError(c, result.code);
+  audit(c, "usedDeviceDeleted", { id: param(c, "id") });
+  return c.json({ ok: true });
+});
+
+/** Ausweisnummer des Verkäufers anzeigen; jedes Ansehen steht im Protokoll. */
+repairRoutes.get("/used/:id/id-number", async (c) => {
+  const result = await store(c.env, c.get("user").tenantId).usedIdNumber(param(c, "id"));
+  if (!result.ok) return moduleError(c, result.code);
+  audit(c, "usedIdNumberViewed", { id: param(c, "id") });
+  return c.json({ idNumber: result.value ? await decryptField(c.env.DATA_KEY, result.value) : "" });
+});
+
+repairRoutes.post("/sales", async (c) => {
+  const body = await readBody(c);
+  const lines = (Array.isArray(body.lines) ? body.lines : []).slice(0, 100).map(sanitizeSaleLine);
+  if (!lines.length || lines.some((l) => !l)) return fail(c, "checkFields", 400);
+  const raw = (body.customer && typeof body.customer === "object" ? body.customer : {}) as Record<string, unknown>;
+  const text = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+  const customer = { name: text(raw.name, 120), phone: text(raw.phone, 40), email: text(raw.email, 200), address: text(raw.address, 300) };
+  const payment = (PAYMENT_METHODS.includes(body.paymentMethod as PaymentMethod) ? body.paymentMethod : "cash") as PaymentMethod;
+  const tenantId = c.get("user").tenantId;
+  const result = await store(c.env, tenantId).sell(lines as SaleLine[], customer, payment, await companyForInvoice(c.env, tenantId), actor(c), today());
+  if (!result.ok) return moduleError(c, result.code);
+  audit(c, "repairSale", { invoice: result.value.number, cents: result.value.totalCents });
+  return c.json({ invoice: result.value });
+});
+
+// ---------- Garantie ----------
+
+repairRoutes.get("/warranties", async (c) => {
+  const result = await store(c.env, c.get("user").tenantId).warranties(c.req.query("q") ?? "");
+  return c.json({ warranties: result.ok ? result.value : [] });
 });
 
 // ---------- Einstellungen ----------

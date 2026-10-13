@@ -49,6 +49,9 @@ export function SettingsTab() {
         <Field label={r("settings.warranty")}>
           <input type="number" min={0} max={60} value={settings.warrantyMonths} onChange={(e) => set({ warrantyMonths: Math.max(0, Math.min(60, Number(e.target.value) || 0)) })} />
         </Field>
+        <Field label={r("settings.usedWarranty")} hint={r("settings.usedWarrantyHint")}>
+          <input type="number" min={0} max={60} value={settings.usedWarrantyMonths} onChange={(e) => set({ usedWarrantyMonths: Math.max(0, Math.min(60, Number(e.target.value) || 0)) })} />
+        </Field>
         <Field label={r("settings.labor")}>
           <MoneyInput cents={settings.laborCents} onChange={(c) => c !== null && set({ laborCents: c })} />
         </Field>

@@ -136,6 +136,7 @@ export function OrderDetail({ id, me }: { id: string; me: Me }) {
           <div className="row wrap gap">
             <span className="repair-number big">#{order.number}</span>
             <StatusPill status={order.status} />
+            {order.intake.warrantyRef && <span className="pill pos"><ShieldCheck size={13} /> {r("order.warrantyClaim", { ref: order.intake.warrantyRef })}</span>}
           </div>
           <h1 className="display">{deviceLabel(order.intake.device)}</h1>
           <p className="muted">

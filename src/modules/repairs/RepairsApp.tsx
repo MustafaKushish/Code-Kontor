@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CalendarClock, ClipboardList, Hourglass, PackageCheck, PackageSearch, Plus, Receipt, Search, Settings2, TriangleAlert, Wrench } from "lucide-react";
+import { CalendarClock, ClipboardList, Hourglass, PackageCheck, PackageSearch, Plus, Receipt, Repeat, Search, Settings2, ShieldCheck, ShoppingCart, TriangleAlert, Wrench } from "lucide-react";
 import { api, type Me } from "../../api";
 import { AppIcon, Link } from "../../components";
 import { navigate } from "../../router";
@@ -11,12 +11,15 @@ import { OrderDetail } from "./OrderDetail";
 import { StockTab } from "./Stock";
 import { InvoicesTab } from "./Invoices";
 import { SettingsTab } from "./Settings";
+import { SalesTab } from "./Sales";
+import { UsedTab } from "./Used";
+import { WarrantyTab } from "./Warranty";
 import { StatusPill, deviceLabel } from "./parts";
 import "./repairs.css";
 
 export const BASE = "/app/handy-it";
 
-/** System „Handy- & IT-Service“: Aufträge, Lager, Rechnungen, Einstellungen. */
+/** System „Handy- & IT-Service“: Aufträge, Verkauf, Ankauf, Lager, Garantie, Rechnungen, Einstellungen. */
 export default function RepairsApp({ me, path }: { me: Me; path: string }) {
   const { r, appText, ready } = useRepairI18n();
   const app = findApp("handy-it")!;
@@ -28,10 +31,14 @@ export default function RepairsApp({ me, path }: { me: Me; path: string }) {
   if (section === "neu") return <IntakeForm />;
   if (section === "auftrag" && id) return sub === "bearbeiten" ? <IntakeForm editId={id} /> : <OrderDetail id={id} me={me} />;
 
-  const tab = section === "lager" ? "stock" : section === "rechnungen" ? "invoices" : section === "einstellungen" && isManager ? "settings" : "orders";
+  const SECTIONS: Record<string, string> = { verkauf: "sales", ankauf: "used", lager: "stock", garantie: "warranty", rechnungen: "invoices" };
+  const tab = SECTIONS[section ?? ""] ?? (section === "einstellungen" && isManager ? "settings" : "orders");
   const tabs = [
     { id: "orders", to: BASE, label: r("tabs.orders"), icon: ClipboardList },
+    { id: "sales", to: `${BASE}/verkauf`, label: r("tabs.sales"), icon: ShoppingCart },
+    { id: "used", to: `${BASE}/ankauf`, label: r("tabs.used"), icon: Repeat },
     { id: "stock", to: `${BASE}/lager`, label: r("tabs.stock"), icon: PackageSearch },
+    { id: "warranty", to: `${BASE}/garantie`, label: r("tabs.warranty"), icon: ShieldCheck },
     { id: "invoices", to: `${BASE}/rechnungen`, label: r("tabs.invoices"), icon: Receipt },
     ...(isManager ? [{ id: "settings", to: `${BASE}/einstellungen`, label: r("tabs.settings"), icon: Settings2 }] : []),
   ];
@@ -47,7 +54,7 @@ export default function RepairsApp({ me, path }: { me: Me; path: string }) {
         <Link to={`${BASE}/neu`} className="button primary repairs-new"><Plus size={18} /> {r("newOrder")}</Link>
       </header>
 
-      <div className="page-tabs" role="tablist">
+      <div className="page-tabs repairs-tabs" role="tablist">
         {tabs.map(({ id: tabId, to, label, icon: Icon }) => (
           <button key={tabId} role="tab" aria-selected={tab === tabId} className={tab === tabId ? "active" : ""} onClick={() => navigate(to)}>
             <Icon size={17} aria-hidden /> {label}
@@ -56,7 +63,10 @@ export default function RepairsApp({ me, path }: { me: Me; path: string }) {
       </div>
 
       {tab === "orders" && <OrdersTab />}
+      {tab === "sales" && <SalesTab />}
+      {tab === "used" && <UsedTab isManager={isManager} />}
       {tab === "stock" && <StockTab isManager={isManager} />}
+      {tab === "warranty" && <WarrantyTab />}
       {tab === "invoices" && <InvoicesTab />}
       {tab === "settings" && <SettingsTab />}
     </div>
