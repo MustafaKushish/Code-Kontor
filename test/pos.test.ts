@@ -282,8 +282,8 @@ describe("Kasse: Kassenplätze, Artikelstamm und Scanner", () => {
 
   it("findet Artikel per Barcode und führt den Bestand", () => {
     const { pos } = database();
-    const cola = pos.saveItem(null, { name: "Cola 0,5 l", barcode: "4006381333931", group: "Getränke", priceCents: 199, vatRate: 19, tile: false, stock: 24 });
-    expect(() => pos.saveItem(null, { name: "Doppelt", barcode: "4006381333931", group: "", priceCents: 1, vatRate: 19, tile: false, stock: null })).toThrow(PosError);
+    const cola = pos.saveItem(null, { name: "Cola 0,5 l", barcode: "4006381333931", code: "", group: "Getränke", priceCents: 199, vatRate: 19, tile: false, stock: 24 });
+    expect(() => pos.saveItem(null, { name: "Doppelt", barcode: "4006381333931", code: "", group: "", priceCents: 1, vatRate: 19, tile: false, stock: null })).toThrow(PosError);
     const [hit] = pos.scan("4006381333931", []);
     expect(hit).toMatchObject({ source: "pos", kind: "item", refId: cola.id, priceCents: 199, stock: 24 });
     expect(pos.articles("", [])).toEqual([]);
@@ -303,5 +303,30 @@ describe("Kasse: Kassenplätze, Artikelstamm und Scanner", () => {
     expect(pos.scan("pg-13", ["repairs"]).map((a) => a.name)).toEqual(["Panzerglas"]);
     expect(pos.scan("356938035643809", ["repairs"])[0]).toMatchObject({ kind: "used", single: true });
     expect(pos.scan("356938035643809", [])).toEqual([]);
+  });
+
+  it("liefert Warengruppen aller Module, Artikelnummern, Rücknahmen, Rabatt und Notiz", () => {
+    const { pos, repairs } = database();
+    const burger = pos.saveItem(null, { name: "Hamburger Chili Cheese", barcode: "", code: "101", group: "Burger", priceCents: 890, vatRate: 7, tile: true, stock: 10 });
+    expect(() => pos.saveItem(null, { name: "Doppelt", barcode: "", code: "101", group: "", priceCents: 1, vatRate: 7, tile: false, stock: null })).toThrow(PosError);
+    repairs.savePart(null, { ...sanitizePart({ name: "Ladekabel", sku: "LK-1", priceCents: 1500, category: "accessory" }), stock: 2 }, actor);
+    const catalog = pos.catalog(["repairs"]);
+    expect(catalog.map((a) => [a.name, a.group])).toEqual([["Hamburger Chili Cheese", "Burger"], ["Ladekabel", "@repairs.accessory"]]);
+    expect(pos.catalog([]).map((a) => a.name)).toEqual(["Hamburger Chili Cheese"]);
+    expect(pos.scan("101", [])[0]).toMatchObject({ refId: burger.id, code: "101" });
+    // Rabatt: Preis ist schon reduziert, der Beleg merkt sich den Listenpreis
+    const discounted = sanitizeLine({ source: "pos", kind: "item", refId: burger.id, name: "Hamburger Chili Cheese", qty: 2, unitCents: 801, vatRate: 7, discountPct: 10, listCents: 890 })!;
+    const sale = pos.checkout({ lines: [discounted], payments: [{ method: "cash", cents: 1602 }], customer: null, note: "Ohne Zwiebeln" }, ctx())!;
+    expect(sale.totals.grossCents).toBe(1602);
+    expect(sale.lines[0]).toMatchObject({ discountPct: 10, listCents: 890 });
+    expect(sale.note).toBe("Ohne Zwiebeln");
+    expect(pos.item(burger.id)!.stock).toBe(8);
+    // Rücknahme mit negativer Menge: Geld raus, Bestand zurück
+    const back = sanitizeLine({ source: "pos", kind: "item", refId: burger.id, name: "Hamburger Chili Cheese", qty: -1, unitCents: 890, vatRate: 7 })!;
+    const refund = pos.checkout({ lines: [back], payments: [{ method: "cash", cents: -890 }], customer: null }, ctx())!;
+    expect(refund.dueCents).toBe(-890);
+    expect(pos.item(burger.id)!.stock).toBe(9);
+    // Module rechnen ihre Posten selbst: keine negative Menge
+    expect(sanitizeLine({ source: "repairs", kind: "part", refId: "x", name: "Teil", qty: -2, unitCents: 100, vatRate: 19 })!.qty).toBe(0.001);
   });
 });

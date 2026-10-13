@@ -31,7 +31,7 @@ export function ItemsTab({ isManager }: { isManager: boolean }) {
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!items || !q) return items ?? [];
-    return items.filter((i) => i.name.toLowerCase().includes(q) || i.barcode.toLowerCase() === q || i.barcode.includes(q) || i.group.toLowerCase().includes(q));
+    return items.filter((i) => i.name.toLowerCase().includes(q) || i.barcode.toLowerCase() === q || i.barcode.includes(q) || i.code.toLowerCase() === q || i.group.toLowerCase().includes(q));
   }, [items, query]);
 
   return (
@@ -54,7 +54,7 @@ export function ItemsTab({ isManager }: { isManager: boolean }) {
               <span className="pos-icon">{i.tile ? <LayoutGrid size={16} /> : <Barcode size={16} />}</span>
               <span className="list-main">
                 <strong>{i.name}</strong>
-                <small className="muted">{[i.barcode, i.group, formatRate(i.vatRate, lang)].filter(Boolean).join(" · ")}</small>
+                <small className="muted">{[i.code ? `${p("sell.nr")} ${i.code}` : "", i.barcode, i.group, formatRate(i.vatRate, lang)].filter(Boolean).join(" · ")}</small>
               </span>
               <span className="pos-row-meta">
                 <strong className="pos-price">{money(i.priceCents)}</strong>
@@ -83,6 +83,7 @@ export function ItemDialog({ item, barcode, groups = [], onClose, onSaved }: { i
   const [form, setForm] = useState({
     name: item?.name ?? "",
     barcode: item?.barcode ?? barcode ?? "",
+    code: item?.code ?? "",
     group: item?.group ?? "",
     priceCents: item?.priceCents ?? 0 as number | null,
     vatRate: item?.vatRate ?? standardVat(),
@@ -125,6 +126,9 @@ export function ItemDialog({ item, barcode, groups = [], onClose, onSaved }: { i
         <Field label={p("items.barcode")} hint={badCheck ? undefined : p("items.barcodeHint")} error={badCheck ? p("items.barcodeCheck") : undefined}>
           <input value={form.barcode} inputMode="numeric" autoFocus={!barcode && !item} onChange={(e) => set({ barcode: e.target.value.trim() })}
             onKeyDown={(e) => e.key === "Enter" && e.preventDefault()} />
+        </Field>
+        <Field label={p("items.code")} hint={p("items.codeHint")}>
+          <input value={form.code} maxLength={12} onChange={(e) => set({ code: e.target.value.toUpperCase().replace(/[^0-9A-Z-]/g, "") })} />
         </Field>
         <Field label={p("items.group")}>
           <input value={form.group} list="pos-item-groups" placeholder={p("items.groupPlaceholder")} onChange={(e) => set({ group: e.target.value })} />

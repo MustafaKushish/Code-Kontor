@@ -67,11 +67,14 @@ export const POS_MODULE_MIGRATIONS: (string | ((sql: SqlStorage) => void))[] = [
     if (sql.exec("SELECT 1 FROM installed_apps WHERE app_id = 'handy-it'").toArray().length)
       sql.exec("INSERT OR IGNORE INTO installed_apps (app_id) VALUES (?)", POS_APP_ID);
   },
+  // Kurze Artikelnummer zum Eintippen an der Kasse
+  `ALTER TABLE pos_items ADD COLUMN code TEXT NOT NULL DEFAULT '';
+   CREATE UNIQUE INDEX pos_items_code ON pos_items(code) WHERE code <> '';`,
 ];
 
 export type PosErrorCode =
   | "notFound" | "emptyCart" | "unknownSource" | "alreadyCanceled" | "cannotCancel" | "paymentMissing" | "paymentTooLow"
-  | "changeWithoutCash" | "paymentMethod" | "bankTooHigh" | "nothingToClose" | "barcodeTaken" | "registerInUse" | "checkFields";
+  | "changeWithoutCash" | "paymentMethod" | "bankTooHigh" | "nothingToClose" | "barcodeTaken" | "codeTaken" | "registerInUse" | "checkFields";
 
 export class PosError extends Error {
   constructor(public code: PosErrorCode) {
@@ -115,6 +118,8 @@ export interface PosModule {
   canceled(original: Receipt, cancel: Receipt, actor: Actor): void;
   /** Artikel für die Suche in der Kasse. */
   articles(query: string): PosArticle[];
+  /** Alles, was das Modul an der Kasse anbietet, mit Warengruppe (für die Leiste und das Raster). */
+  catalog?(): PosArticle[];
   /** Artikel zu einem gescannten Code (Barcode, IMEI, Auftragsnummer), genau passend. */
   scan?(code: string): PosArticle[];
 }
@@ -123,13 +128,13 @@ type Row = Record<string, string | number | null>;
 const S = (v: string | number | null | undefined) => (v === null || v === undefined ? "" : String(v));
 
 const itemOf = (r: Row): PosItem => ({
-  id: S(r.id), name: S(r.name), barcode: S(r.barcode), group: S(r.item_group), priceCents: Number(r.price_cents),
+  id: S(r.id), name: S(r.name), barcode: S(r.barcode), code: S(r.code), group: S(r.item_group), priceCents: Number(r.price_cents),
   vatRate: Number(r.vat_rate), tile: Number(r.tile) === 1, stock: r.stock === null ? null : Number(r.stock),
 });
 
 const itemArticle = (i: PosItem): PosArticle => ({
-  source: "pos", kind: "item", refId: i.id, name: i.name, detail: [i.group, i.barcode].filter(Boolean).join(" · "),
-  priceCents: i.priceCents, vatRate: i.vatRate, tile: i.tile, ...(i.stock === null ? {} : { stock: i.stock }),
+  source: "pos", kind: "item", refId: i.id, name: i.name, detail: [i.code ? `Nr. ${i.code}` : "", i.group, i.barcode].filter(Boolean).join(" · "),
+  priceCents: i.priceCents, vatRate: i.vatRate, tile: i.tile, group: i.group, ...(i.code ? { code: i.code } : {}), ...(i.stock === null ? {} : { stock: i.stock }),
 });
 
 export interface BookInput {
@@ -140,6 +145,7 @@ export interface BookInput {
   payments: Payment[];
   customer: PosCustomer | null;
   cancels?: string | null;
+  note?: string;
 }
 
 export class PosStore {
@@ -180,9 +186,17 @@ export class PosStore {
     return [...own.map(itemArticle), ...fromModules];
   }
 
-  /** Gescannter Code: Barcode im Artikelstamm, sonst fragen die Module (z. B. IMEI eines Gebrauchtgeräts). */
+  /** Alles zum Antippen: der ganze Artikelstamm und was die installierten Module anbieten, mit Warengruppen. */
+  catalog(sources: PosSource[]): PosArticle[] {
+    const own = this.sql.exec<Row>("SELECT * FROM pos_items ORDER BY item_group, name LIMIT 2000").toArray().map(itemOf).map(itemArticle);
+    return [...own, ...sources.flatMap((s) => this.modules.get(s)?.catalog?.() ?? [])];
+  }
+
+  /** Gescannter oder eingetippter Code: Barcode oder Artikelnummer im Artikelstamm, sonst fragen die Module (z. B. IMEI). */
   scan(code: string, sources: PosSource[]): PosArticle[] {
-    const own = this.sql.exec<Row>("SELECT * FROM pos_items WHERE barcode = ?", code).toArray().map(itemOf).map(itemArticle);
+    const own = this.sql
+      .exec<Row>("SELECT * FROM pos_items WHERE barcode = ? OR (code <> '' AND code = upper(?))", code, code)
+      .toArray().map(itemOf).map(itemArticle);
     return [...own, ...sources.flatMap((s) => this.modules.get(s)?.scan?.(code) ?? [])];
   }
 
@@ -192,8 +206,8 @@ export class PosStore {
     const q = `%${query.trim().toLowerCase()}%`;
     return this.sql
       .exec<Row>(
-        "SELECT * FROM pos_items WHERE lower(name) LIKE ? OR barcode LIKE ? OR lower(item_group) LIKE ? ORDER BY item_group, name LIMIT ?",
-        q, q, q, Math.min(Math.max(limit, 1), 2000),
+        "SELECT * FROM pos_items WHERE lower(name) LIKE ? OR barcode LIKE ? OR lower(code) LIKE ? OR lower(item_group) LIKE ? ORDER BY item_group, name LIMIT ?",
+        q, q, q, q, Math.min(Math.max(limit, 1), 2000),
       )
       .toArray()
       .map(itemOf);
@@ -209,13 +223,17 @@ export class PosStore {
       const taken = this.sql.exec<Row>("SELECT id FROM pos_items WHERE barcode = ? AND id <> ?", data.barcode, id ?? "").toArray()[0];
       if (taken) throw new PosError("barcodeTaken");
     }
+    if (data.code) {
+      const taken = this.sql.exec<Row>("SELECT id FROM pos_items WHERE code = ? AND id <> ?", data.code, id ?? "").toArray()[0];
+      if (taken) throw new PosError("codeTaken");
+    }
     if (id && !this.item(id)) throw new PosError("notFound");
     const itemId = id ?? crypto.randomUUID();
     this.sql.exec(
-      `INSERT INTO pos_items (id, name, barcode, item_group, price_cents, vat_rate, tile, stock) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET name = excluded.name, barcode = excluded.barcode, item_group = excluded.item_group,
+      `INSERT INTO pos_items (id, name, barcode, code, item_group, price_cents, vat_rate, tile, stock) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET name = excluded.name, barcode = excluded.barcode, code = excluded.code, item_group = excluded.item_group,
          price_cents = excluded.price_cents, vat_rate = excluded.vat_rate, tile = excluded.tile, stock = excluded.stock`,
-      itemId, data.name, data.barcode, data.group, data.priceCents, data.vatRate, data.tile ? 1 : 0, data.stock,
+      itemId, data.name, data.barcode, data.code, data.group, data.priceCents, data.vatRate, data.tile ? 1 : 0, data.stock,
     );
     return this.item(itemId)!;
   }
@@ -272,7 +290,7 @@ export class PosStore {
    * Bezahlen: Posten prüfen (Module rechnen selbst), Beleg mit fortlaufender Nummer buchen,
    * Module abschließen lassen. Gibt null zurück, wenn nichts zu zahlen war (z. B. Abholung ohne Kosten).
    */
-  checkout(input: { lines: PosLine[]; payments: Payment[]; customer: PosCustomer | null }, ctx: PosContext): Receipt | null {
+  checkout(input: { lines: PosLine[]; payments: Payment[]; customer: PosCustomer | null; note?: string }, ctx: PosContext): Receipt | null {
     if (!input.lines.length) throw new PosError("emptyCart");
     return this.transaction(() => {
       const lines: PosLine[] = [];
@@ -294,7 +312,7 @@ export class PosStore {
         if (prepared.customer && !customer?.name) customer = { ...prepared.customer, ...(customer?.address ? { address: customer.address } : {}) };
       }
       const empty = lines.every((l) => Math.round(l.qty * l.unitCents) === 0) && depositCents === 0;
-      const receipt = empty ? null : this.book({ kind: "sale", lines, refs, depositCents, payments: input.payments, customer }, ctx);
+      const receipt = empty ? null : this.book({ kind: "sale", lines, refs, depositCents, payments: input.payments, customer, note: input.note }, ctx);
       this.moveStock(lines, -1);
       for (const source of new Set([...lines.map((l) => l.source), ...refs.map((r) => r.source)])) {
         if (source === "pos") continue;
@@ -321,6 +339,7 @@ export class PosStore {
       lines: input.lines, refs: input.refs, totals, depositCents: input.depositCents, dueCents,
       payments: settled.payments, givenCents: settled.givenCents, changeCents: settled.changeCents,
       smallBusiness: settings.smallBusiness, cancels: input.cancels ?? null, canceledBy: null, closing: null, register, tse: null,
+      ...(input.note ? { note: input.note } : {}),
     };
     const label = input.refs.map((r) => r.label).filter(Boolean).join(", ") || input.lines.slice(0, 3).map((l) => l.name).join(", ");
     this.sql.exec(

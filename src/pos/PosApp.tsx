@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Barcode, BookOpen, Maximize, Minimize, Monitor, Receipt, Settings2, ShoppingCart, X } from "lucide-react";
+import { Barcode, BookOpen, LayoutDashboard, Maximize, Menu, Minimize, Monitor, Receipt, Settings2, ShoppingCart, X } from "lucide-react";
 import type { Me } from "../api";
 import { navigate } from "../router";
 import { usePosI18n } from "./i18n";
@@ -9,22 +9,36 @@ import { CashBook } from "./CashBook";
 import { ItemsTab } from "./Items";
 import { PosSettingsTab } from "./Settings";
 import { setDeviceRegister, useRegisters } from "./registers";
+import { usePosSettings } from "./PayPanel";
 import "./pos.css";
 
 const BASE = "/kasse";
+const KIOSK = `${BASE}/modus`;
+
+/** Adresse ersetzen, ohne einen Schritt in der Zurück-Liste (sonst landet Zurück wieder hier). */
+function replacePath(path: string) {
+  history.replaceState(null, "", path);
+  window.dispatchEvent(new PopStateEvent("popstate"));
+}
 
 /** Die Kasse der Firma: für alle installierten Systeme gemeinsam. */
 export default function PosApp({ me, path }: { me: Me; path: string }) {
   const { p, ready } = usePosI18n();
   const isManager = me.user.role !== "staff";
   const section = path.split("/")[2] ?? "";
-  if (!ready) return null;
+  const [settings] = usePosSettings();
+  const direct = settings?.directKiosk ?? false;
+  // Direkt in den Kassenmodus; Übergaben wie „?auftrag=…“ nimmt er mit
+  useEffect(() => {
+    if (direct && section === "") replacePath(`${KIOSK}${location.search}`);
+  }, [direct, section]);
+  if (!ready || (direct && section === "")) return null;
 
   const TABS = { "": "sell", artikel: "items", belege: "receipts", kassenbuch: "cashbook", einstellungen: "settings" } as const;
   let tab: (typeof TABS)[keyof typeof TABS] = TABS[section as keyof typeof TABS] ?? "sell";
   if (tab === "settings" && !isManager) tab = "sell";
   const tabs = [
-    { id: "sell", to: BASE, icon: ShoppingCart },
+    { id: "sell", to: direct ? KIOSK : BASE, icon: ShoppingCart },
     { id: "items", to: `${BASE}/artikel`, icon: Barcode },
     { id: "receipts", to: `${BASE}/belege`, icon: Receipt },
     { id: "cashbook", to: `${BASE}/kassenbuch`, icon: BookOpen },
@@ -75,10 +89,11 @@ export function RegisterSelect() {
   );
 }
 
-/** Kassenmodus: nur Verkaufen, ohne Menü, großflächig für Theke und Tablet; Scanner ist immer bereit. */
+/** Kassenmodus: nur Verkaufen, ohne Menü der Plattform, großflächig für Theke und Tablet; Scanner ist immer bereit. */
 export function Kiosk({ me }: { me: Me }) {
   const { p, ready } = usePosI18n();
   const [full, setFull] = useState(!!document.fullscreenElement);
+  const [menu, setMenu] = useState(false);
   useEffect(() => {
     const onChange = () => setFull(!!document.fullscreenElement);
     document.addEventListener("fullscreenchange", onChange);
@@ -86,11 +101,19 @@ export function Kiosk({ me }: { me: Me }) {
   }, []);
   if (!ready) return null;
 
+  const isManager = me.user.role !== "staff";
   const toggleFull = () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()).catch(() => {});
-  const exit = () => {
+  const go = (to: string) => {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-    navigate(BASE);
+    navigate(to);
   };
+  const links = [
+    { to: `${BASE}/artikel`, label: p("tabs.items"), icon: Barcode },
+    { to: `${BASE}/belege`, label: p("tabs.receipts"), icon: Receipt },
+    { to: `${BASE}/kassenbuch`, label: p("tabs.cashbook"), icon: BookOpen },
+    ...(isManager ? [{ to: `${BASE}/einstellungen`, label: p("tabs.settings"), icon: Settings2 }] : []),
+    { to: "/", label: p("kiosk.overview"), icon: LayoutDashboard },
+  ];
 
   return (
     <div className="pos pos-kiosk">
@@ -100,13 +123,24 @@ export function Kiosk({ me }: { me: Me }) {
         <span className="row gap-sm push-end">
           <RegisterSelect />
           {document.fullscreenEnabled && (
-            <button className="button" onClick={toggleFull}>{full ? <Minimize size={18} /> : <Maximize size={18} />} {full ? p("kiosk.leaveFullscreen") : p("kiosk.fullscreen")}</button>
+            <button className="button icon-only" onClick={toggleFull} aria-label={full ? p("kiosk.leaveFullscreen") : p("kiosk.fullscreen")} title={full ? p("kiosk.leaveFullscreen") : p("kiosk.fullscreen")}>
+              {full ? <Minimize size={18} /> : <Maximize size={18} />}
+            </button>
           )}
-          <button className="button" onClick={exit}><X size={18} /> {p("kiosk.exit")}</button>
+          <span className="pos-menu">
+            <button className="button" aria-expanded={menu} onClick={() => setMenu(!menu)}>{menu ? <X size={18} /> : <Menu size={18} />} {p("kiosk.menu")}</button>
+            {menu && (
+              <span className="pos-menu-list card" role="menu">
+                {links.map(({ to, label, icon: Icon }) => (
+                  <button key={to} role="menuitem" onClick={() => go(to)}><Icon size={17} aria-hidden /> {label}</button>
+                ))}
+              </span>
+            )}
+          </span>
         </span>
       </header>
-      {(me.tax?.country ?? "DE") === "DE" && <p className="notice small">{p("tse.notice")}</p>}
-      <Register isManager={me.user.role !== "staff"} kiosk />
+      {(me.tax?.country ?? "DE") === "DE" && <p className="notice small pos-tse">{p("tse.notice")}</p>}
+      <Register isManager={isManager} kiosk />
     </div>
   );
 }

@@ -96,6 +96,7 @@ function A4({ receipt }: { receipt: Receipt }) {
                 {name(l)}
                 {l.margin ? <small> ({p("print.marginShort")})</small> : !receipt.smallBusiness && <small> ({formatRate(l.vatRate, lang)})</small>}
                 {l.warrantyUntil && <><br /><small>{p("print.warranty", { day: day(l.warrantyUntil) })}</small></>}
+                {l.discountPct ? <><br /><small>{p("print.discount", { n: l.discountPct })}{l.listCents ? ` (${m(l.listCents)})` : ""}</small></> : null}
               </td>
               <td className="num">{l.qty.toLocaleString(lang)}</td>
               <td className="num">{m(l.unitCents)}</td>
@@ -106,6 +107,7 @@ function A4({ receipt }: { receipt: Receipt }) {
       </table>
       <div className="print-totals"><Totals receipt={receipt} /></div>
       <Notes receipt={receipt} />
+      {receipt.note && <p>{p("print.note")}: {receipt.note}</p>}
       {receipt.kind === "sale" && <p>{p("print.serviceDate")}</p>}
       {receipt.cashier && <p className="muted">{p("print.cashier", { name: receipt.cashier })}</p>}
       {registerName(receipt.register?.id, receipt.register?.name) && <p className="muted">{p("print.register", { name: registerName(receipt.register?.id, receipt.register?.name) })}</p>}
@@ -142,12 +144,14 @@ function Bon({ receipt }: { receipt: Receipt }) {
                 {l.margin ? p("print.marginShort") : !receipt.smallBusiness ? formatRate(l.vatRate, lang) : ""}
               </small>
             )}
+            {l.discountPct ? <small>{p("print.discount", { n: l.discountPct })}</small> : null}
           </div>
         ))}
       </div>
       <div className="bon-totals"><Totals receipt={receipt} /></div>
       <div className="bon-notes">
         <Notes receipt={receipt} />
+        {receipt.note && <p className="pre-line">{receipt.note}</p>}
         {receipt.cashier && <p>{p("print.cashier", { name: receipt.cashier })}</p>}
         {registerName(receipt.register?.id, receipt.register?.name) && <p>{p("print.register", { name: registerName(receipt.register?.id, receipt.register?.name) })}</p>}
         <p className="bon-thanks">{p("print.thanks")}</p>

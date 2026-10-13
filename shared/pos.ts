@@ -25,6 +25,9 @@ export interface PosLine {
   margin?: boolean;
   /** Garantie bis (YYYY-MM-DD), wird auf dem Beleg gedruckt */
   warrantyUntil?: string;
+  /** Rabatt in Prozent; unitCents ist schon der reduzierte Preis, listCents der Preis davor (nur zur Anzeige) */
+  discountPct?: number;
+  listCents?: number;
 }
 
 /** Ein Vorgang eines Moduls, der mit dem Beleg abgeschlossen wird (z. B. Abholung eines Auftrags). */
@@ -90,6 +93,8 @@ export interface Receipt {
   closing: number | null;
   /** Kassenplatz, an dem gebucht wurde (fehlt bei Belegen aus der Zeit vor den Kassenplätzen) */
   register?: PosRegister;
+  /** Notiz zum Verkauf, steht auf dem Beleg */
+  note?: string;
   /** Daten der TSE (nur Deutschland), solange keine angebunden ist: null */
   tse: null | { serial: string; signature: string; counter: number; start: string; end: string };
 }
@@ -164,6 +169,8 @@ export interface PosItem {
   name: string;
   /** Barcode, z. B. EAN-13; leer = ohne */
   barcode: string;
+  /** Kurze Artikelnummer zum Eintippen an der Kasse, z. B. „101“; leer = ohne */
+  code: string;
   /** Warengruppe, z. B. „Getränke“ */
   group: string;
   priceCents: number;
@@ -181,9 +188,11 @@ export interface PosSettings {
   footer: string;
   /** Bon (80 mm) oder A4-Rechnung nach dem Bezahlen vorschlagen */
   print: "bon" | "a4" | "ask";
+  /** „Kasse“ im Menü öffnet gleich den Kassenmodus (Vollbild ohne Menü) */
+  directKiosk: boolean;
 }
 
-export const DEFAULT_POS_SETTINGS: PosSettings = { methods: ["cash", "card"], smallBusiness: false, footer: "", print: "ask" };
+export const DEFAULT_POS_SETTINGS: PosSettings = { methods: ["cash", "card"], smallBusiness: false, footer: "", print: "ask", directKiosk: true };
 
 /** Artikel, den die Kasse zum Suchen anbietet (Schnellartikel oder aus einem Modul). */
 export interface PosArticle {
@@ -205,6 +214,13 @@ export interface PosArticle {
   loaner?: string;
   /** Als Kachel zeigen (Schnellwahl der Kasse) */
   tile?: boolean;
+  /**
+   * Warengruppe für die Leiste oben in der Kasse. Freier Text aus dem Artikelstamm (z. B. „Getränke“)
+   * oder „@modul.gruppe“ für feste Gruppen eines Moduls, die die Kasse übersetzt (z. B. „@repairs.used“).
+   */
+  group?: string;
+  /** Artikelnummer zum Eintippen */
+  code?: string;
 }
 
 // ---------- Rechnen ----------
@@ -305,8 +321,14 @@ export function sanitizeLine(input: unknown, fallbackVat = 19): PosLine | null {
   const kind = str(i.kind, 30) || "item";
   const refId = typeof i.refId === "string" && i.refId ? i.refId.slice(0, 64) : null;
   if (!name && source === "pos") return null;
-  const qty = typeof i.qty === "number" && Number.isFinite(i.qty) ? Math.min(Math.max(Math.round(i.qty * 1000) / 1000, 0.001), 10_000) : 1;
-  return { source, kind, refId, name, qty, unitCents: int(i.unitCents, -MAX_CENTS, MAX_CENTS), vatRate: vatRateOf(i.vatRate, fallbackVat) };
+  // Negative Menge = Rücknahme; nur bei Artikeln der Kasse, Module rechnen ihre Posten selbst
+  const raw = typeof i.qty === "number" && Number.isFinite(i.qty) ? Math.round(i.qty * 1000) / 1000 : 1;
+  const qty = Math.min(Math.max(raw, source === "pos" ? -10_000 : 0.001), 10_000) || 1;
+  const discountPct = int(i.discountPct, 0, 100);
+  return {
+    source, kind, refId, name, qty, unitCents: int(i.unitCents, -MAX_CENTS, MAX_CENTS), vatRate: vatRateOf(i.vatRate, fallbackVat),
+    ...(discountPct ? { discountPct, listCents: int(i.listCents, -MAX_CENTS, MAX_CENTS) } : {}),
+  };
 }
 
 export function sanitizePayments(input: unknown): Payment[] {
@@ -337,6 +359,7 @@ export function sanitizePosSettings(input: unknown): PosSettings {
     smallBusiness: s.smallBusiness === true,
     footer: str(s.footer, 400),
     print: s.print === "bon" || s.print === "a4" ? s.print : "ask",
+    directKiosk: s.directKiosk !== false,
   };
 }
 
@@ -362,6 +385,12 @@ export function cleanBarcode(value: unknown): string {
   return /^[0-9A-Za-z\-./]{1,48}$/.test(code) ? code : "";
 }
 
+/** Artikelnummer: kurz, Ziffern und Buchstaben, z. B. „101“ oder „B12“. */
+export function cleanCode(value: unknown): string {
+  const code = typeof value === "string" ? value.trim().toUpperCase() : "";
+  return /^[0-9A-Z\-]{1,12}$/.test(code) ? code : "";
+}
+
 /** Stimmt die Prüfziffer einer EAN-8, EAN-13 oder UPC-A (12 Stellen)? Andere Codes gelten als gültig. */
 export function eanValid(code: string): boolean {
   if (!/^\d+$/.test(code) || ![8, 12, 13].includes(code.length)) return true;
@@ -377,7 +406,7 @@ export function sanitizeItem(input: unknown, fallbackVat = 19): Omit<PosItem, "i
   if (!name) return null;
   const stock = i.stock === null || i.stock === undefined || i.stock === "" ? null : int(i.stock, -1_000_000, 1_000_000);
   return {
-    name, barcode: cleanBarcode(i.barcode), group: str(i.group, 60), priceCents: int(i.priceCents, 0, MAX_CENTS),
+    name, barcode: cleanBarcode(i.barcode), code: cleanCode(i.code), group: str(i.group, 60), priceCents: int(i.priceCents, 0, MAX_CENTS),
     vatRate: vatRateOf(i.vatRate, fallbackVat), tile: i.tile === true, stock,
   };
 }
