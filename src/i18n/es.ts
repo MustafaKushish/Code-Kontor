@@ -199,7 +199,7 @@ export const es: Dict = {
     installed: "Instalado",
     view: "Ver",
     none: "No se encontró ningún sistema. Prueba otra búsqueda.",
-    categories: { Dienstleistung: "Servicios", Handel: "Comercio", Handwerk: "Oficios", Gastronomie: "Hostelería" },
+    categories: { Dienstleistung: "Servicios", Handel: "Comercio", Handwerk: "Oficios", Gastronomie: "Hostelería", Zusatz: "Complemento" },
   },
   detail: {
     confirmRemove: "¿Seguro que quieres quitar {name}? Tus datos se conservan.",
@@ -704,6 +704,12 @@ export const es: Dict = {
       tagline: "Reparación de móviles, tablets, portátiles y smartwatches",
       description: "Recepción de equipos con IMEI y descripción de la avería, presupuesto que el cliente aprueba en línea, repuestos del almacén, entrega con factura y garantía, y una página de estado para tus clientes.",
       features: ["Recepción con resguardo", "Página de estado y correo para clientes", "Presupuesto con aprobación en línea", "Repuestos y accesorios en almacén", "Entrega con factura y garantía"],
+    },
+    kasse: {
+      name: "Caja",
+      tagline: "Una caja para todos los sistemas, con escáner y varios puestos",
+      description: "Vender con escáner de códigos de barras o fichas, cobrar en efectivo, tarjeta, transferencia o vale, artículos con EAN y stock, varios puestos de caja con su propio libro de caja y cierre diario. Funciona con todos los sistemas instalados.",
+      features: ["Escáner de códigos & modo caja a pantalla completa", "Artículos con EAN & stock", "Efectivo, tarjeta, transferencia, vale", "Varios puestos de caja", "Libro de caja & cierre diario (informe Z)"],
     },
     einzelhandel: {
       name: "Comercio minorista",

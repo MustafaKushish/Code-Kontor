@@ -199,7 +199,7 @@ export const it: Dict = {
     installed: "Installato",
     view: "Vedi",
     none: "Nessun sistema trovato. Prova un altro termine.",
-    categories: { Dienstleistung: "Servizi", Handel: "Commercio", Handwerk: "Artigianato", Gastronomie: "Ristorazione" },
+    categories: { Dienstleistung: "Servizi", Handel: "Commercio", Handwerk: "Artigianato", Gastronomie: "Ristorazione", Zusatz: "Componente aggiuntivo" },
   },
   detail: {
     confirmRemove: "Vuoi davvero rimuovere {name}? I tuoi dati restano salvati.",
@@ -704,6 +704,12 @@ export const it: Dict = {
       tagline: "Riparazioni di smartphone, tablet, laptop e smartwatch",
       description: "Accettazione dei dispositivi con IMEI e descrizione del guasto, preventivo approvato online dal cliente, ricambi dal magazzino, ritiro con fattura e garanzia e una pagina di stato per i tuoi clienti.",
       features: ["Accettazione con ricevuta", "Pagina di stato ed e-mail per i clienti", "Preventivo con approvazione online", "Ricambi e accessori in magazzino", "Ritiro con fattura e garanzia"],
+    },
+    kasse: {
+      name: "Cassa",
+      tagline: "Una cassa per tutti i sistemi, con scanner e più postazioni",
+      description: "Vendere con lettore di codici a barre o riquadri, incassare in contanti, carta, bonifico o buono, articoli con EAN e giacenza, più postazioni cassa con proprio libro cassa e chiusura giornaliera. Funziona con tutti i sistemi installati.",
+      features: ["Lettore di codici & modalità cassa a schermo intero", "Articoli con EAN & giacenza", "Contanti, carta, bonifico, buono", "Più postazioni cassa", "Libro cassa & chiusura (rapporto Z)"],
     },
     einzelhandel: {
       name: "Commercio al dettaglio",

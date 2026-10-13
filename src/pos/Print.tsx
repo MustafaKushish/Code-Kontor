@@ -1,5 +1,6 @@
 import { formatRate } from "../money";
 import type { CashMove, Closing, PosLine, Receipt } from "../../shared/pos";
+import { useRegisterLabel } from "./registers";
 import { usePosI18n } from "./i18n";
 import { CompanyFoot, CompanyHead, PrintFrame } from "./ui";
 import { usePosSettings } from "./PayPanel";
@@ -66,6 +67,7 @@ function Notes({ receipt }: { receipt: Receipt }) {
 
 function A4({ receipt }: { receipt: Receipt }) {
   const { p, money, day, lang } = usePosI18n();
+  const registerName = useRegisterLabel();
   const name = useLineName();
   const m = (c: number) => money(c, receipt.currency);
   const c = receipt.customer;
@@ -106,6 +108,7 @@ function A4({ receipt }: { receipt: Receipt }) {
       <Notes receipt={receipt} />
       {receipt.kind === "sale" && <p>{p("print.serviceDate")}</p>}
       {receipt.cashier && <p className="muted">{p("print.cashier", { name: receipt.cashier })}</p>}
+      {registerName(receipt.register?.id, receipt.register?.name) && <p className="muted">{p("print.register", { name: registerName(receipt.register?.id, receipt.register?.name) })}</p>}
       <CompanyFoot company={receipt.company} />
     </>
   );
@@ -113,6 +116,7 @@ function A4({ receipt }: { receipt: Receipt }) {
 
 function Bon({ receipt }: { receipt: Receipt }) {
   const { p, money, dateTime, lang } = usePosI18n();
+  const registerName = useRegisterLabel();
   const [settings] = usePosSettings();
   const name = useLineName();
   const m = (c: number) => money(c, receipt.currency);
@@ -145,6 +149,7 @@ function Bon({ receipt }: { receipt: Receipt }) {
       <div className="bon-notes">
         <Notes receipt={receipt} />
         {receipt.cashier && <p>{p("print.cashier", { name: receipt.cashier })}</p>}
+        {registerName(receipt.register?.id, receipt.register?.name) && <p>{p("print.register", { name: registerName(receipt.register?.id, receipt.register?.name) })}</p>}
         <p className="bon-thanks">{p("print.thanks")}</p>
         {settings?.footer && <p className="pre-line">{settings.footer}</p>}
       </div>
@@ -155,13 +160,17 @@ function Bon({ receipt }: { receipt: Receipt }) {
 /** Z-Bericht eines Tagesabschlusses (A4). */
 export function ClosingPrint({ closing, moves, company, onClose }: { closing: Closing; moves: CashMove[]; company: Receipt["company"] | null; onClose: () => void }) {
   const { p, money, dateTime, lang } = usePosI18n();
+  const registerName = useRegisterLabel();
   return (
     <PrintFrame format="a4" onClose={onClose}>
       {company && (
         <CompanyHead
           company={company}
           title={p("print.closingTitle", { n: closing.number })}
-          meta={<p>{p("print.period")}: {closing.since ? dateTime(closing.since) : "–"} – {dateTime(closing.at)}</p>}
+          meta={<>
+            <p>{p("print.period")}: {closing.since ? dateTime(closing.since) : "–"} – {dateTime(closing.at)}</p>
+            {registerName(closing.register?.id, closing.register?.name) && <p>{p("print.register", { name: registerName(closing.register?.id, closing.register?.name) })}</p>}
+          </>}
         />
       )}
       <table className="print-table">

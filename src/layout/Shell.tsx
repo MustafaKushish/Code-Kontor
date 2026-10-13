@@ -5,6 +5,7 @@ import { AppIcon, Avatar, Link, Logo } from "../components";
 import { useTheme, type ThemeChoice } from "../theme";
 import { CommandPalette } from "./CommandPalette";
 import { findApp } from "../../shared/apps";
+import { POS_APP_ID } from "../../shared/pos";
 import { useI18n } from "../i18n";
 import { LanguageSwitch } from "./LanguageSwitch";
 import { Assistant } from "./Assistant";
@@ -50,8 +51,10 @@ export function Shell({ me, path, onLogout, children }: { me: Me; path: string; 
   const [paletteOpen, setPaletteOpen] = useState(false);
   const { t, lang, appText } = useI18n();
   const isManager = me.user.role !== "staff";
-  const items = NAV.filter((item) => !item.managersOnly || isManager);
-  const apps = me.installedApps.map(findApp).filter((a) => a !== undefined);
+  // Die Kasse steht oben im Menü, sobald das Kassenmodul gebucht ist
+  const hasPos = me.installedApps.includes(POS_APP_ID);
+  const items = NAV.filter((item) => (!item.managersOnly || isManager) && (item.to !== "/kasse" || hasPos));
+  const apps = me.installedApps.filter((id) => id !== POS_APP_ID).map(findApp).filter((a) => a !== undefined);
   const active = (to: string) => (to === "/" ? path === "/" : path.startsWith(to));
   const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 

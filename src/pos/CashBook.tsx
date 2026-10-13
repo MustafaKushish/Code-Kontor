@@ -7,6 +7,7 @@ import { usePosI18n } from "./i18n";
 import { METHOD_ICON } from "./PayPanel";
 import { ClosingPrint } from "./Print";
 import { Dialog, MoneyInput } from "./ui";
+import { useRegisterLabel, useRegisters } from "./registers";
 
 /** Kassenbuch: Stand seit dem letzten Abschluss, Einlage/Entnahme, Tagesabschluss mit Zählen, frühere Abschlüsse. */
 export function CashBook({ isManager }: { isManager: boolean }) {
@@ -18,13 +19,16 @@ export function CashBook({ isManager }: { isManager: boolean }) {
   const [print, setPrint] = useState<{ closing: Closing; moves: CashMove[] } | null>(null);
   const [company, setCompany] = useState<ReceiptCompany | null>(null);
   const [error, setError] = useState("");
+  const { current } = useRegisters();
+  const registerName = useRegisterLabel();
 
   const load = () => {
     api<{ state: CashState }>("/pos/state").then((d) => setState(d.state)).catch((e) => setError(posError(e)));
     api<{ closings: Closing[] }>("/pos/closings").then((d) => setClosings(d.closings)).catch(() => {});
   };
+  // Jeder Kassenplatz hat sein eigenes Bargeld; beim Wechsel neu laden
+  useEffect(load, [current.id]);
   useEffect(() => {
-    load();
     api<{ company: ReceiptCompany | null }>("/company").then((d) => setCompany(d.company)).catch(() => {});
   }, []);
 
@@ -38,7 +42,7 @@ export function CashBook({ isManager }: { isManager: boolean }) {
         <>
           <section className="card stack">
             <div className="section-head">
-              <h2>{p("cashbook.now")}</h2>
+              <h2>{[registerName(state.register?.id, state.register?.name), p("cashbook.now")].filter(Boolean).join(" · ")}</h2>
               <small className="muted">{state.since ? p("cashbook.since", { time: dateTime(state.since) }) : p("cashbook.neverClosed")}</small>
             </div>
             <div className="pos-expected">

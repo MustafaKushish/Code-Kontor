@@ -4,12 +4,26 @@ export class ApiError extends Error {
   }
 }
 
+/** Kassenplatz dieses Geräts; die Kasse bucht Bargeld und Abschlüsse darauf. */
+export const POS_REGISTER_KEY = "ck-pos-register";
+
+function deviceHeaders(json: boolean): Record<string, string> {
+  const headers: Record<string, string> = json ? { "Content-Type": "application/json" } : {};
+  try {
+    const register = localStorage.getItem(POS_REGISTER_KEY);
+    if (register) headers["x-pos-register"] = register;
+  } catch {
+    // ohne Speicher gilt der Hauptkassenplatz
+  }
+  return headers;
+}
+
 export async function api<T = unknown>(path: string, options: { method?: string; body?: unknown } = {}): Promise<T> {
   let response: Response;
   try {
     response = await fetch(`/api${path}`, {
       method: options.method ?? "GET",
-      headers: options.body !== undefined ? { "Content-Type": "application/json" } : undefined,
+      headers: deviceHeaders(options.body !== undefined),
       body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
       credentials: "same-origin",
     });

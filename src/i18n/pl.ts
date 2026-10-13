@@ -199,7 +199,7 @@ export const pl: Dict = {
     installed: "Zainstalowane",
     view: "Zobacz",
     none: "Nie znaleziono systemu. Spróbuj innego hasła.",
-    categories: { Dienstleistung: "Usługi", Handel: "Handel", Handwerk: "Rzemiosło", Gastronomie: "Gastronomia" },
+    categories: { Dienstleistung: "Usługi", Handel: "Handel", Handwerk: "Rzemiosło", Gastronomie: "Gastronomia", Zusatz: "Dodatek" },
   },
   detail: {
     confirmRemove: "Na pewno usunąć {name}? Twoje dane pozostaną zapisane.",
@@ -704,6 +704,12 @@ export const pl: Dict = {
       tagline: "Naprawy telefonów, tabletów, laptopów i smartwatchy",
       description: "Przyjęcie urządzenia z IMEI i opisem usterki, wycena akceptowana przez klienta online, części z magazynu, odbiór z fakturą i gwarancją oraz strona statusu dla Twoich klientów.",
       features: ["Przyjęcie z potwierdzeniem", "Strona statusu i e-mail dla klientów", "Wycena z akceptacją online", "Części i akcesoria w magazynie", "Odbiór z fakturą i gwarancją"],
+    },
+    kasse: {
+      name: "Kasa",
+      tagline: "Jedna kasa dla wszystkich systemów, ze skanerem i stanowiskami",
+      description: "Sprzedaż skanerem kodów kreskowych lub kafelkami, płatność gotówką, kartą, przelewem lub bonem, artykuły z EAN i stanem, kilka stanowisk kasowych z własnym raportem kasowym i zamknięciem dnia. Działa ze wszystkimi zainstalowanymi systemami.",
+      features: ["Skaner kodów & tryb kasy na pełnym ekranie", "Artykuły z EAN i stanem", "Gotówka, karta, przelew, bon", "Kilka stanowisk kasowych", "Raport kasowy & zamknięcie dnia (raport Z)"],
     },
     einzelhandel: {
       name: "Handel detaliczny",

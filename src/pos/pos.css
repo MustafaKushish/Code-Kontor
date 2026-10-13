@@ -78,7 +78,25 @@
 .pos-denominations { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-top: 10px; }
 .pos-denominations label { display: grid; gap: 4px; font-size: 0.9rem; color: var(--muted); }
 .pos-counted { font-size: 1.25rem; font-variant-numeric: tabular-nums; }
-.pos-quick-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 0.8fr) auto; gap: 8px; align-items: center; }
+.pos-register-row { display: grid; grid-template-columns: minmax(0, 1fr) 6.5rem; justify-items: center; gap: 8px; align-items: center; }
+.pos-register-row input { justify-self: stretch; }
+.page-head > .pos-head-actions { display: flex; align-items: center; flex-wrap: wrap; }
+.pos-head-actions .button { width: auto; }
+.pos-register-select select { min-height: 44px; min-width: 120px; }
+.pos-scan-note { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pos-scan-note.warn { background: var(--warn-soft); }
+.pos-scan-note .button { margin-inline-start: auto; }
+.pos-scan-ready { display: inline-flex; align-items: center; gap: 6px; margin: 0; }
+.pos-camera { width: 100%; max-height: 50vh; border-radius: 14px; background: #000; object-fit: cover; }
+.pos-kiosk { min-height: 100dvh; padding: 14px 18px 18px; display: grid; gap: 14px; align-content: start; background: var(--bg); }
+.pos-kiosk-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.pos-kiosk-bar > strong { font-size: 1.15rem; }
+.pos-layout.pos-big { grid-template-columns: minmax(0, 1.6fr) minmax(340px, 1fr); }
+.pos-layout.pos-big .pos-tiles { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+.pos-layout.pos-big .pos-tile { min-height: 96px; }
+.pos-layout.pos-big .pos-tile .list-main strong { font-size: 1.1rem; }
+.pos-layout.pos-big .pos-articles { max-height: 58vh; }
+.pos-layout.pos-big .pos-pay { min-height: 68px; font-size: 1.25rem; }
 .pos-settings { max-width: 760px; }
 .pos-settings h2 { display: inline-flex; align-items: center; gap: 8px; }
 
@@ -88,8 +106,7 @@
   .pos-articles { max-height: 360px; }
 }
 @media (max-width: 560px) {
-  .pos-quick-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; }
-  .pos-quick-row input:first-child { grid-column: 1 / -1; }
+  .pos-layout.pos-big { grid-template-columns: minmax(0, 1fr); }
   .pos-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 

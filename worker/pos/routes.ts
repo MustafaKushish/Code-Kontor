@@ -6,12 +6,13 @@ import { decryptField } from "../crypto";
 import { defaultTaxSettings } from "../../shared/countries";
 import { REPAIR_APP_ID } from "../../shared/repairs";
 import {
-  sanitizeCustomer, sanitizeLine, sanitizePayments, sanitizePosSettings,
+  POS_APP_ID, cleanBarcode, sanitizeCustomer, sanitizeItem, sanitizeLine, sanitizePayments, sanitizePosSettings, sanitizeRegisterName,
   type PosLine, type PosSource, type ReceiptCompany,
 } from "../../shared/pos";
 import { berlinDay, type Actor, type PosContext, type PosStore } from "./store";
 
-// Schnittstellen der Kasse unter /api/pos. Jede Firma hat genau eine Kasse, egal welche Systeme installiert sind.
+// Schnittstellen der Kasse unter /api/pos. Die Kasse ist ein buchbares Modul („kasse“) mit beliebig vielen Kassenplätzen.
+// Ohne das Modul bleibt nur, was die Branchen-Systeme selbst brauchen: ihre Vorgänge abrechnen (z. B. Abholung) und Belege drucken.
 
 interface User { id: string; tenantId: string; tenantName: string; name: string; role: "owner" | "admin" | "staff" }
 type PosEnv = { Bindings: Env; Variables: { user: User } };
@@ -63,7 +64,13 @@ export async function posContext(env: Env, tenantId: string, actor: Actor, optio
   };
 }
 
-const actor = (c: Ctx): Actor => ({ id: c.get("user").id, name: c.get("user").name });
+/** Kassenplatz des Geräts (die App schickt ihn bei jeder Anfrage mit) oder ausdrücklich gewählt. */
+export function registerOf(c: Context, explicit?: unknown): string | undefined {
+  const value = typeof explicit === "string" && explicit ? explicit : c.req.header("x-pos-register") ?? "";
+  return /^[\w-]{1,64}$/.test(value) ? value : undefined;
+}
+
+const actor = (c: Ctx, register?: unknown): Actor => ({ id: c.get("user").id, name: c.get("user").name, register: registerOf(c, register) });
 const isManager = (c: Ctx) => c.get("user").role !== "staff";
 
 function audit(c: Ctx, action: string, detail: Record<string, unknown>) {
@@ -81,6 +88,16 @@ async function sources(env: Env, tenantId: string): Promise<PosSource[]> {
 }
 
 export const posRoutes = new Hono<PosEnv>();
+
+// Ohne Kassen-Modul nur das, was Branchen-Systeme für ihre eigenen Vorgänge brauchen
+const WITHOUT_MODULE = [/^GET \/api\/pos\/settings$/, /^GET \/api\/pos\/receipts\/[^/]+$/, /^POST \/api\/pos\/checkout$/];
+
+posRoutes.use("*", async (c, next) => {
+  if (WITHOUT_MODULE.some((r) => r.test(`${c.req.method} ${c.req.path}`))) return next();
+  const installed = await tenantStub(c.env, c.get("user").tenantId).installedApps();
+  if (!installed.includes(POS_APP_ID)) return posError(c, "notInstalled");
+  return next();
+});
 
 posRoutes.get("/settings", async (c) => {
   const result = await store(c.env, c.get("user").tenantId).settings();
@@ -102,14 +119,85 @@ posRoutes.get("/articles", async (c) => {
   return c.json({ articles: result.value });
 });
 
+posRoutes.get("/scan", async (c) => {
+  const tenantId = c.get("user").tenantId;
+  const code = cleanBarcode(c.req.query("code"));
+  if (!code) return c.json({ articles: [] });
+  const result = await store(c.env, tenantId).scan(code, await sources(c.env, tenantId));
+  if (!result.ok) return posError(c, result.code);
+  return c.json({ articles: result.value });
+});
+
+// ---------- Artikelstamm ----------
+
+posRoutes.get("/items", async (c) => {
+  const result = await store(c.env, c.get("user").tenantId).items(c.req.query("q") ?? "", 2000);
+  if (!result.ok) return posError(c, result.code);
+  return c.json({ items: result.value });
+});
+
+async function saveItem(c: Ctx, id: string | null) {
+  if (!isManager(c)) return fail(c, "forbidden", 403);
+  const tenantId = c.get("user").tenantId;
+  const tax = await tenantStub(c.env, tenantId).getTaxSettings();
+  const item = sanitizeItem(await readBody(c), tax?.vatRates?.[0] ?? 19);
+  if (!item) return fail(c, "checkFields", 400);
+  const result = await store(c.env, tenantId).saveItem(id, item);
+  if (!result.ok) return posError(c, result.code);
+  return c.json({ item: result.value });
+}
+
+posRoutes.post("/items", (c) => saveItem(c, null));
+posRoutes.put("/items/:id", (c) => saveItem(c, c.req.param("id")));
+
+posRoutes.delete("/items/:id", async (c) => {
+  if (!isManager(c)) return fail(c, "forbidden", 403);
+  const result = await store(c.env, c.get("user").tenantId).removeItem(c.req.param("id"));
+  if (!result.ok) return posError(c, result.code);
+  return c.json({ ok: true });
+});
+
+// ---------- Kassenplätze ----------
+
+posRoutes.get("/registers", async (c) => {
+  const result = await store(c.env, c.get("user").tenantId).registers();
+  if (!result.ok) return posError(c, result.code);
+  return c.json({ registers: result.value });
+});
+
+async function saveRegister(c: Ctx, id: string | null) {
+  if (!isManager(c)) return fail(c, "forbidden", 403);
+  const name = sanitizeRegisterName((await readBody(c)).name);
+  if (!name) return fail(c, "checkFields", 400);
+  const result = await store(c.env, c.get("user").tenantId).saveRegister(id, name);
+  if (!result.ok) return posError(c, result.code);
+  audit(c, id ? "posRegisterRenamed" : "posRegisterAdded", { name });
+  return c.json({ register: result.value });
+}
+
+posRoutes.post("/registers", (c) => saveRegister(c, null));
+posRoutes.put("/registers/:id", (c) => saveRegister(c, c.req.param("id")));
+
+posRoutes.delete("/registers/:id", async (c) => {
+  if (!isManager(c)) return fail(c, "forbidden", 403);
+  const result = await store(c.env, c.get("user").tenantId).removeRegister(c.req.param("id"));
+  if (!result.ok) return posError(c, result.code);
+  audit(c, "posRegisterRemoved", { id: c.req.param("id") });
+  return c.json({ ok: true });
+});
+
+// ---------- Verkaufen ----------
+
 posRoutes.post("/checkout", async (c) => {
   const body = await readBody(c);
   const tenantId = c.get("user").tenantId;
   const raw = Array.isArray(body.lines) ? body.lines.slice(0, 200) : [];
   const lines = raw.map((l) => sanitizeLine(l));
   if (!lines.length || lines.some((l) => !l)) return fail(c, "checkFields", 400);
+  const installed = await tenantStub(c.env, tenantId).installedApps();
   const allowed = await sources(c.env, tenantId);
   if ((lines as PosLine[]).some((l) => l.source !== "pos" && !allowed.includes(l.source))) return fail(c, "unknownApp", 404);
+  if ((lines as PosLine[]).some((l) => l.source === "pos") && !installed.includes(POS_APP_ID)) return posError(c, "notInstalled");
   const options = body.options && typeof body.options === "object" ? { loanerReturned: (body.options as Record<string, unknown>).loanerReturned === true } : {};
   const ctx = await posContext(c.env, tenantId, actor(c), options);
   const result = await store(c.env, tenantId).checkout(
@@ -128,6 +216,7 @@ posRoutes.get("/receipts", async (c) => {
     ...(day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? { day } : {}),
     ...(c.req.query("q") ? { query: c.req.query("q") } : {}),
     ...(closing && /^\d+$/.test(closing) ? { closing: Number(closing) } : {}),
+    ...(c.req.query("register") ? { register: registerOf(c, c.req.query("register")) } : {}),
   });
   if (!result.ok) return posError(c, result.code);
   return c.json({ receipts: result.value });
@@ -150,7 +239,7 @@ posRoutes.post("/receipts/:number/cancel", async (c) => {
 });
 
 posRoutes.get("/state", async (c) => {
-  const result = await store(c.env, c.get("user").tenantId).state();
+  const result = await store(c.env, c.get("user").tenantId).state(registerOf(c, c.req.query("register")));
   if (!result.ok) return posError(c, result.code);
   return c.json({ state: result.value });
 });
@@ -163,7 +252,7 @@ posRoutes.post("/moves", async (c) => {
   const cents = typeof body.cents === "number" && Number.isFinite(body.cents) ? Math.round(Math.abs(body.cents)) : 0;
   if (!cents || cents > 100_000_000) return fail(c, "checkFields", 400);
   const note = typeof body.note === "string" ? body.note.trim().slice(0, 200) : "";
-  const result = await store(c.env, c.get("user").tenantId).addMove({ kind, method: "cash", cents: kind === "out" ? -cents : cents, note }, actor(c));
+  const result = await store(c.env, c.get("user").tenantId).addMove({ kind, method: "cash", cents: kind === "out" ? -cents : cents, note }, actor(c, body.register));
   if (!result.ok) return posError(c, result.code);
   audit(c, kind === "out" ? "posCashOut" : "posCashIn", { cents });
   return c.json({ move: result.value });
@@ -173,14 +262,14 @@ posRoutes.post("/close", async (c) => {
   const body = await readBody(c);
   const amount = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.min(Math.max(Math.round(v), 0), 100_000_000) : 0);
   const note = typeof body.note === "string" ? body.note.trim().slice(0, 300) : "";
-  const result = await store(c.env, c.get("user").tenantId).close({ countedCents: amount(body.countedCents), bankCents: amount(body.bankCents), note }, actor(c));
+  const result = await store(c.env, c.get("user").tenantId).close({ countedCents: amount(body.countedCents), bankCents: amount(body.bankCents), note }, actor(c, body.register));
   if (!result.ok) return posError(c, result.code);
   audit(c, "posClosing", { number: result.value.number, difference: result.value.differenceCents });
   return c.json({ closing: result.value });
 });
 
 posRoutes.get("/closings", async (c) => {
-  const result = await store(c.env, c.get("user").tenantId).closings(60);
+  const result = await store(c.env, c.get("user").tenantId).closings(60, registerOf(c, c.req.query("register")));
   if (!result.ok) return posError(c, result.code);
   return c.json({ closings: result.value });
 });

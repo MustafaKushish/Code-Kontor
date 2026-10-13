@@ -4,6 +4,7 @@ import { api, type Me } from "../../api";
 import { AppIcon, Link } from "../../components";
 import { navigate } from "../../router";
 import { findApp } from "../../../shared/apps";
+import { POS_APP_ID } from "../../../shared/pos";
 import type { RepairOrderRow, StatusGroup } from "../../../shared/repairs";
 import { useRepairI18n } from "./i18n";
 import { IntakeForm } from "./IntakeForm";
@@ -63,7 +64,7 @@ export default function RepairsApp({ me, path }: { me: Me; path: string }) {
           <p className="muted">{appText(app.id).tagline}</p>
         </div>
         <div className="row gap repairs-new">
-          <Link to="/kasse" className="button"><ShoppingCart size={18} /> {r("tabs.cash")}</Link>
+          {me.installedApps.includes(POS_APP_ID) && <Link to="/kasse" className="button"><ShoppingCart size={18} /> {r("tabs.cash")}</Link>}
           <Link to={`${BASE}/neu`} className="button primary"><Plus size={18} /> {r("newOrder")}</Link>
         </div>
       </header>

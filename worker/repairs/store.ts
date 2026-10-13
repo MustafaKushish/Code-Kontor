@@ -629,6 +629,7 @@ export class RepairStore {
   posModule(): PosModule {
     return {
       articles: (query) => this.posArticles(query),
+      scan: (code) => this.posScan(code),
       prepare: (line, ctx) => {
         const settings = this.settings();
         if (line.kind === "part") {
@@ -667,20 +668,26 @@ export class RepairStore {
     const parts = this.parts(query)
       .sort((a, b) => (a.category === b.category ? 0 : a.category === "accessory" ? -1 : 1))
       .slice(0, 40)
-      .map((p): PosArticle => ({ source: "repairs", kind: "part", refId: p.id, name: p.name, detail: p.sku, priceCents: p.priceCents, vatRate: p.vatRate, stock: p.stock }));
-    const used = this.usedDevices("inStock", query)
-      .slice(0, 20)
-      .map((d): PosArticle => ({
-        source: "repairs", kind: "used", refId: d.id, name: [usedLabel(d.device), d.device.storage].filter(Boolean).join(" · "), detail: `A-${d.number}`,
-        priceCents: d.priceCents, vatRate: 0, margin: true, single: true,
-      }));
-    const orders = this.list("pickup", query, 20)
-      .orders.map((row) => this.get(row.id)!)
-      .map((o): PosArticle => ({
-        source: "repairs", kind: "order", refId: o.id, name: `#${o.number}${usedLabel(o.intake.device) ? ` · ${usedLabel(o.intake.device)}` : ""}`, detail: o.customer.name,
-        priceCents: o.items.reduce((sum, i) => sum + Math.round(i.qty * i.unitCents), 0), vatRate: 0, single: true,
-        depositCents: o.intake.depositCents, ...(o.loaner ? { loaner: o.loaner.name } : {}),
-      }));
+      .map(partArticle);
+    const used = this.usedDevices("inStock", query).slice(0, 20).map(usedArticle);
+    const orders = this.list("pickup", query, 20).orders.map((row) => orderArticle(this.get(row.id)!));
+    return [...orders, ...used, ...parts];
+  }
+
+  /** Gescannter Code: Artikelnummer eines Teils, Seriennummer/IMEI eines Gebrauchtgeräts oder Auftragsnummer. */
+  private posScan(code: string): PosArticle[] {
+    const parts = this.sql
+      .exec<Row>("SELECT * FROM repair_parts WHERE active = 1 AND sku <> '' AND lower(sku) = lower(?)", code)
+      .toArray()
+      .map((r) => partArticle(partFromRow(r)));
+    const serial = normalizeSerial(code);
+    const used = serial
+      ? this.sql.exec<Row>("SELECT * FROM repair_used_devices WHERE status = 'inStock' AND serial = ?", serial).toArray().map((r) => usedArticle(usedFromRow(r)))
+      : [];
+    const number = /^#?\d{1,9}$/.test(code) ? Number(code.replace("#", "")) : 0;
+    const order = number ? this.sql.exec<Row>("SELECT id FROM repair_orders WHERE number = ?", number).toArray()[0] : undefined;
+    const found = order ? this.get(S(order.id)) : null;
+    const orders = found && PICKUP_STATUSES.includes(found.status) ? [orderArticle(found)] : [];
     return [...orders, ...used, ...parts];
   }
 
@@ -1430,6 +1437,21 @@ export class RepairStore {
 }
 
 /** Tag nach deutscher Ortszeit, damit ein Verkauf um 0:30 Uhr zum richtigen Tag gehört. */
+const partArticle = (p: RepairPart): PosArticle => ({
+  source: "repairs", kind: "part", refId: p.id, name: p.name, detail: p.sku, priceCents: p.priceCents, vatRate: p.vatRate, stock: p.stock,
+});
+
+const usedArticle = (d: UsedDevice): PosArticle => ({
+  source: "repairs", kind: "used", refId: d.id, name: [usedLabel(d.device), d.device.storage].filter(Boolean).join(" · "), detail: `A-${d.number}`,
+  priceCents: d.priceCents, vatRate: 0, margin: true, single: true,
+});
+
+const orderArticle = (o: RepairOrder): PosArticle => ({
+  source: "repairs", kind: "order", refId: o.id, name: `#${o.number}${usedLabel(o.intake.device) ? ` · ${usedLabel(o.intake.device)}` : ""}`, detail: o.customer.name,
+  priceCents: o.items.reduce((sum, i) => sum + Math.round(i.qty * i.unitCents), 0), vatRate: 0, single: true,
+  depositCents: o.intake.depositCents, ...(o.loaner ? { loaner: o.loaner.name } : {}),
+});
+
 export const berlinDay = (iso: string) => new Date(iso).toLocaleDateString("en-CA", { timeZone: "Europe/Berlin" });
 
 /** Ältere Aufträge kennen manche Felder noch nicht. */

@@ -3,7 +3,7 @@ import { Hono, type Context } from "hono";
 import type { Env } from "../index";
 import { tenantStub, type ModuleResult } from "../tenant";
 import { berlinDay, type RepairStore } from "./store";
-import { posContext } from "../pos/routes";
+import { posContext, registerOf } from "../pos/routes";
 import { PAY_METHODS, type PayMethod } from "../../shared/pos";
 import { fail } from "../errors";
 import { decryptField, encryptField } from "../crypto";
@@ -54,7 +54,8 @@ async function readBody(c: Ctx): Promise<Record<string, unknown>> {
 }
 
 const param = (c: Ctx, name: string) => c.req.param(name) ?? "";
-const actor = (c: Ctx) => ({ id: c.get("user").id, name: c.get("user").name });
+// Mit Kassenplatz des Geräts, damit Anzahlungen und Ankäufe im richtigen Kassenbuch landen
+const actor = (c: Ctx) => ({ id: c.get("user").id, name: c.get("user").name, register: registerOf(c) });
 const berlinToday = () => berlinDay(new Date().toISOString());
 const berlinTime = () => new Date().toLocaleTimeString("en-GB", { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit", hour12: false });
 const deviceName = (o: RepairOrder) => [o.intake.device.brand, o.intake.device.model].filter(Boolean).join(" ") || "Gerät";

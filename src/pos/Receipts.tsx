@@ -6,6 +6,7 @@ import type { Receipt, ReceiptRow } from "../../shared/pos";
 import { usePosI18n } from "./i18n";
 import { ReceiptPrint, useLineName } from "./Print";
 import { Dialog } from "./ui";
+import { useRegisterLabel } from "./registers";
 
 const localDay = (d = new Date()) => d.toLocaleDateString("en-CA");
 const shiftDay = (day: string, n: number) => {
@@ -17,6 +18,7 @@ const shiftDay = (day: string, n: number) => {
 /** Alle Belege eines Tages oder per Suche; Beleg öffnen, nachdrucken, stornieren. */
 export function Receipts({ isManager }: { isManager: boolean }) {
   const { p, money, time, day: fmtDay, posError } = usePosI18n();
+  const registerName = useRegisterLabel();
   const [day, setDay] = useState(localDay());
   const [query, setQuery] = useState("");
   const [rows, setRows] = useState<ReceiptRow[] | null>(null);
@@ -57,7 +59,7 @@ export function Receipts({ isManager }: { isManager: boolean }) {
                   {r.kind !== "sale" && <span className={`pos-badge ${r.kind}`}>{p(`receipts.kinds.${r.kind}`)}</span>}
                   {r.canceledBy && <span className="pos-badge cancel">{p("receipts.canceled")}</span>}
                 </strong>
-                <small className="muted">{[query ? fmtDay(r.issuedAt) : "", time(r.issuedAt), r.customerName, r.label].filter(Boolean).join(" · ")}</small>
+                <small className="muted">{[query ? fmtDay(r.issuedAt) : "", time(r.issuedAt), registerName(r.registerId), r.customerName, r.label].filter(Boolean).join(" · ")}</small>
               </span>
               <span className="pos-row-meta">
                 <strong className={r.dueCents < 0 ? "error" : ""}>{money(r.dueCents)}</strong>
@@ -76,6 +78,7 @@ export function Receipts({ isManager }: { isManager: boolean }) {
 export function ReceiptDialog({ number, isManager, onClose, onChanged, onOpen }: { number: string; isManager: boolean; onClose: () => void; onChanged: () => void; onOpen: (n: string) => void }) {
   const { p, money, dateTime, lang, posError } = usePosI18n();
   const name = useLineName();
+  const registerName = useRegisterLabel();
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [printing, setPrinting] = useState<"bon" | "a4" | null>(null);
   const [confirm, setConfirm] = useState(false);
@@ -110,7 +113,7 @@ export function ReceiptDialog({ number, isManager, onClose, onChanged, onOpen }:
       {receipt && (
         <div className="stack">
           <p className="muted small">
-            {[dateTime(receipt.issuedAt), receipt.cashier ? p("receipts.cashier", { name: receipt.cashier }) : "", receipt.customer?.name ?? "",
+            {[dateTime(receipt.issuedAt), registerName(receipt.register?.id, receipt.register?.name), receipt.cashier ? p("receipts.cashier", { name: receipt.cashier }) : "", receipt.customer?.name ?? "",
               receipt.closing === 0 ? p("receipts.beforePos") : receipt.closing ? p("receipts.closing", { n: receipt.closing }) : ""].filter(Boolean).join(" · ")}
           </p>
           {receipt.canceledBy && <p className="notice">{p("receipts.canceledBy", { number: receipt.canceledBy })} <button className="text-button" onClick={() => onOpen(receipt.canceledBy!)}>→</button></p>}

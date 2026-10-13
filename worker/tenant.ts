@@ -4,7 +4,7 @@ import type { TaxSettings } from "../shared/countries";
 import { emptyEmployee, type Advisor, type Employee, type MonthEntry } from "../shared/accounting";
 import { localDay, type Absence, type RequestStatus, type TimeEntry, type TimeRequest, type TimeRequestData, type TimeSettings } from "../shared/time";
 import { REPAIR_MIGRATIONS, RepairError, RepairStore } from "./repairs/store";
-import { POS_MIGRATIONS, PosError, PosStore } from "./pos/store";
+import { POS_MIGRATIONS, POS_MODULE_MIGRATIONS, PosError, PosStore } from "./pos/store";
 
 // Die eigene Datenbank eines Kunden. Jede Firma bekommt bei der Anmeldung
 // ein eigenes Durable Object mit eigener SQLite-Datenbank, getrennt von allen anderen.
@@ -47,6 +47,7 @@ const MIGRATIONS: string[] = [
 // Tabellen der Branchen-Systeme, je System eigens gezählt, damit sie unabhängig vom Kern wachsen.
 const MODULE_MIGRATIONS: Record<string, (string | ((sql: SqlStorage) => void))[]> = {
   repairs: REPAIR_MIGRATIONS,
+  pos: POS_MODULE_MIGRATIONS,
 };
 
 /** Antwort eines Modul-Aufrufs: Fehler kommen als Code zurück, weil eigene Fehlerklassen den Weg aus dem Durable Object nicht überstehen. */

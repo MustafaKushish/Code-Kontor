@@ -18,7 +18,7 @@ import { MessageDialog, PhotosCard, SignatureCard } from "./Media";
 import { startPurchase } from "./Purchases";
 import { PrintView, type PrintKind } from "./Print";
 import { PayPanel } from "../../pos/PayPanel";
-import type { Payment } from "../../../shared/pos";
+import { POS_APP_ID, type Payment } from "../../../shared/pos";
 
 const BASE = "/app/handy-it";
 
@@ -205,8 +205,8 @@ export function OrderDetail({ id, me }: { id: string; me: Me }) {
                 {PICKUP_STATUSES.includes(order.status) && (
                   <>
                     <button className="button primary block" disabled={busy} onClick={() => setPickup(true)}><ClipboardCheck size={18} /> {r("order.pickup")}</button>
-                    {/* Mit weiteren Artikeln (z. B. Hülle) zusammen abrechnen */}
-                    <Link to={`/kasse?auftrag=${order.id}`} className="button block"><ShoppingCart size={18} /> {r("order.toPos")}</Link>
+                    {/* Mit weiteren Artikeln (z. B. Hülle) zusammen abrechnen, wenn das Kassenmodul gebucht ist */}
+                    {me.installedApps.includes(POS_APP_ID) && <Link to={`/kasse?auftrag=${order.id}`} className="button block"><ShoppingCart size={18} /> {r("order.toPos")}</Link>}
                   </>
                 )}
                 {primary && (

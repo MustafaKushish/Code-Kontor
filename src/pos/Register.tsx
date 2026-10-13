@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Minus, Package, PackageCheck, Plus, Printer, Search, ShoppingCart, Smartphone, Trash2, UserRound, Zap } from "lucide-react";
+import { Barcode, Camera, CheckCircle2, Minus, Package, PackageCheck, Plus, Printer, ScanBarcode, Search, ShoppingCart, Smartphone, Trash2, UserRound } from "lucide-react";
 import { api } from "../api";
 import { Field } from "../components";
 import { formatRate, standardVat, vatChoices } from "../money";
-import { computeTotals, type PosArticle, type PosCustomer, type PosLine, type Receipt } from "../../shared/pos";
+import { cleanBarcode, computeTotals, type PosArticle, type PosCustomer, type PosLine, type Receipt } from "../../shared/pos";
 import { usePosI18n } from "./i18n";
 import { PayPanel, usePosSettings } from "./PayPanel";
 import { ReceiptPrint } from "./Print";
 import { Dialog, MoneyInput } from "./ui";
+import { CameraScan, cameraScanAvailable, useScanner } from "./scanner";
+import { ItemDialog } from "./Items";
 
 /** Eine Zeile im Warenkorb. Aufträge stehen als ein Block; ihre Positionen rechnet der Server. */
 interface CartLine extends PosLine {
@@ -29,10 +31,10 @@ function loadCart(): CartLine[] {
   }
 }
 
-const ICONS: Record<string, typeof Package> = { order: PackageCheck, used: Smartphone, part: Package, quick: Zap };
+const ICONS: Record<string, typeof Package> = { item: Barcode, order: PackageCheck, used: Smartphone, part: Package };
 
-/** Verkaufen: Artikel suchen oder antippen, Warenkorb, bezahlen, Beleg drucken. */
-export function Register() {
+/** Verkaufen: scannen, suchen oder antippen, Warenkorb, bezahlen, Beleg drucken. */
+export function Register({ isManager, kiosk }: { isManager: boolean; kiosk?: boolean }) {
   const { p, money, posError } = usePosI18n();
   const [settings] = usePosSettings();
   const [query, setQuery] = useState("");
@@ -46,6 +48,9 @@ export function Register() {
   const [done, setDone] = useState<{ receipt: Receipt | null } | null>(null);
   const [printing, setPrinting] = useState<"bon" | "a4" | null>(null);
   const [error, setError] = useState("");
+  const [scanNote, setScanNote] = useState<{ code: string; unknown: boolean } | null>(null);
+  const [creating, setCreating] = useState<string | null>(null);
+  const [camera, setCamera] = useState(false);
 
   useEffect(() => {
     try {
@@ -82,18 +87,60 @@ export function Register() {
 
   const add = (a: PosArticle) => {
     setDone(null);
+    setScanNote(null);
     setCart((c) => {
-      const same = a.kind === "quick"
-        ? c.find((l) => l.source === "pos" && l.name === a.name && l.unitCents === a.priceCents && l.vatRate === a.vatRate)
-        : c.find((l) => l.source === a.source && l.kind === a.kind && l.refId === a.refId && a.refId);
+      // Gleicher Artikel erhöht die Menge; freie Beträge nur, wenn Name, Preis und Satz gleich sind
+      const same = a.refId
+        ? c.find((l) => l.source === a.source && l.kind === a.kind && l.refId === a.refId)
+        : c.find((l) => l.source === a.source && !l.refId && l.name === a.name && l.unitCents === a.priceCents && l.vatRate === a.vatRate);
       if (same && a.single) return c;
       if (same) return c.map((l) => (l === same ? { ...l, qty: l.qty + 1 } : l));
       return [...c, {
-        key: crypto.randomUUID(), source: a.kind === "quick" ? "pos" : a.source, kind: a.kind === "quick" ? "item" : a.kind, refId: a.kind === "quick" ? null : a.refId,
+        key: crypto.randomUUID(), source: a.source, kind: a.kind, refId: a.refId,
         name: a.name, qty: 1, unitCents: a.priceCents, vatRate: a.vatRate, margin: a.margin, single: a.single, stock: a.stock, depositCents: a.depositCents, loaner: a.loaner,
       }];
     });
   };
+
+  /** Barcode vom Scanner, von der Kamera oder Enter in der Suche. Gibt zurück, ob etwas gefunden wurde. */
+  const scan = async (raw: string) => {
+    const code = cleanBarcode(raw);
+    if (!code) return false;
+    setError("");
+    try {
+      const { articles: hits } = await api<{ articles: PosArticle[] }>(`/pos/scan?code=${encodeURIComponent(code)}`);
+      if (hits.length === 1) {
+        add(hits[0]!);
+        setQuery("");
+        return true;
+      }
+      if (hits.length > 1) {
+        setArticles(hits);
+        setScanNote({ code, unknown: false });
+        return true;
+      }
+      setScanNote({ code, unknown: true });
+    } catch (e) {
+      setError(posError(e));
+    }
+    return false;
+  };
+
+  const onSearchEnter = async () => {
+    const q = query.trim();
+    if (!q) return;
+    if (!q.includes(" ") && (await scan(q))) return;
+    // Kein Barcode: Enter nimmt den einzigen Treffer der Suche
+    if (/\d/.test(q) && !q.includes(" ")) return;
+    setScanNote(null);
+    const only = articles.filter((a) => !(a.single && cart.some((l) => l.kind === a.kind && l.refId === a.refId)));
+    if (only.length === 1) {
+      add(only[0]!);
+      setQuery("");
+    }
+  };
+
+  useScanner((code) => void scan(code), !paying && !free && !creating && !camera && !printing);
   const change = (key: string, patch: Partial<CartLine>) => setCart((c) => c.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   const remove = (key: string) => setCart((c) => c.filter((l) => l.key !== key));
 
@@ -119,43 +166,66 @@ export function Register() {
     setLoanerBack(false);
     setQuery("");
     setDone({ receipt });
+    setScanNote(null);
     search("");
     if (receipt && settings?.print !== "ask") setPrinting(settings?.print ?? null);
   };
 
-  const groups = (["order", "quick", "used", "part"] as const)
-    .map((kind) => ({ kind, items: articles.filter((a) => a.kind === kind) }))
+  const tiles = articles.filter((a) => a.tile);
+  const groups = (["item", "order", "used", "part"] as const)
+    .map((kind) => ({ kind, items: articles.filter((a) => a.kind === kind && !a.tile) }))
     .filter((g) => g.items.length);
   const inCart = (a: PosArticle) => !!a.single && cart.some((l) => l.kind === a.kind && l.refId === a.refId);
 
   return (
-    <div className="pos-layout">
+    <div className={kiosk ? "pos-layout pos-big" : "pos-layout"}>
       <div className="stack">
         <div className="row gap pos-toolbar">
           <label className="search">
             <Search size={18} />
-            <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={p("sell.search")} aria-label={p("sell.search")} />
+            <input type="search" value={query} onChange={(e) => (setQuery(e.target.value), setScanNote(null))} placeholder={p("sell.search")} aria-label={p("sell.search")}
+              onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), onSearchEnter())} />
           </label>
+          {cameraScanAvailable && <button className="button" onClick={() => setCamera(true)} aria-label={p("scan.camera")} title={p("scan.camera")}><Camera size={18} /></button>}
           <button className="button" onClick={() => setFree(true)}><Plus size={18} /> {p("sell.free")}</button>
         </div>
+        {kiosk && !scanNote && <p className="muted small pos-scan-ready"><ScanBarcode size={16} aria-hidden /> {p("scan.ready")}</p>}
+        {scanNote && (
+          <div className={scanNote.unknown ? "notice pos-scan-note warn" : "notice pos-scan-note"}>
+            <ScanBarcode size={18} aria-hidden />
+            <span>{scanNote.unknown ? p("scan.unknown", { code: scanNote.code }) : p("scan.several", { code: scanNote.code })}</span>
+            {scanNote.unknown && isManager && <button className="button small-button" onClick={() => setCreating(scanNote.code)}><Plus size={15} /> {p("scan.create")}</button>}
+          </div>
+        )}
         {error && <p className="error">{error}</p>}
-        {groups.length === 0 && <p className="card empty muted">{query ? p("sell.noMatch") : p("sell.nothingYet")}</p>}
+        {tiles.length === 0 && groups.length === 0 && <p className="card empty muted">{query ? p("sell.noMatch") : p("sell.nothingYet")}</p>}
+        {tiles.length > 0 && (
+          <section className="stack-sm">
+            <h3 className="pos-group-title">{p("sell.groups.tile")}</h3>
+            <div className="pos-tiles">
+              {tiles.map((a) => (
+                <button key={`${a.source}-${a.kind}-${a.refId}`} className="pos-tile" onClick={() => add(a)} disabled={inCart(a)}>
+                  <span className="list-main"><strong>{a.name}</strong></span>
+                  <strong className="pos-price">{money(a.priceCents)}</strong>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
         {groups.map(({ kind, items }) => {
           const Icon = ICONS[kind]!;
           return (
             <section key={kind} className="stack-sm">
               <h3 className="pos-group-title">{p(`sell.groups.${kind}`)}</h3>
-              <div className={kind === "quick" ? "pos-tiles" : "card list-card pos-articles"}>
+              <div className="card list-card pos-articles">
                 {items.map((a) => (
-                  <button key={`${a.kind}-${a.refId}`} className={kind === "quick" ? "pos-tile" : "list-row pos-article"} onClick={() => add(a)} disabled={inCart(a)}>
-                    {kind !== "quick" && <span className={`pos-icon ${kind}`}><Icon size={16} /></span>}
+                  <button key={`${a.source}-${a.kind}-${a.refId}`} className="list-row pos-article" onClick={() => add(a)} disabled={inCart(a)}>
+                    <span className={`pos-icon ${kind}`}><Icon size={16} /></span>
                     <span className="list-main">
                       <strong>{a.name}</strong>
-                      {kind === "quick" ? null : (
-                        <small className="muted">
-                          {[a.detail, a.stock !== undefined ? p("sell.stock", { n: a.stock }) : "", a.depositCents ? p("sell.deposit", { amount: money(a.depositCents) }) : "", a.loaner ? p("sell.loaner", { name: a.loaner }) : ""].filter(Boolean).join(" · ")}
-                        </small>
-                      )}
+                      <small className={a.stock !== undefined && a.stock <= 0 ? "error" : "muted"}>
+                        {[a.detail, a.stock !== undefined ? p("sell.stock", { n: a.stock }) : "", a.depositCents ? p("sell.deposit", { amount: money(a.depositCents) }) : "", a.loaner ? p("sell.loaner", { name: a.loaner }) : ""].filter(Boolean).join(" · ")}
+                      </small>
                     </span>
                     <strong className="pos-price">{money(a.priceCents)}</strong>
                   </button>
@@ -242,7 +312,12 @@ export function Register() {
         )}
       </section>
 
-      {free && <FreeLineDialog onClose={() => setFree(false)} onAdd={(l) => (add({ source: "pos", kind: "quick", refId: null, name: l.name, detail: "", priceCents: l.unitCents, vatRate: l.vatRate }), setFree(false))} />}
+      {free && <FreeLineDialog onClose={() => setFree(false)} onAdd={(l) => (add({ source: "pos", kind: "item", refId: null, name: l.name, detail: "", priceCents: l.unitCents, vatRate: l.vatRate }), setFree(false))} />}
+      {camera && <CameraScan onClose={() => setCamera(false)} onCode={(code) => (setCamera(false), void scan(code))} />}
+      {creating !== null && (
+        <ItemDialog item={null} barcode={creating} onClose={() => setCreating(null)}
+          onSaved={(item) => (setCreating(null), setScanNote(null), search(query), item.barcode ? void scan(item.barcode) : undefined)} />
+      )}
       {paying && (
         <Dialog title={p("pay.title")} onClose={() => setPaying(false)}>
           <PayPanel

@@ -199,7 +199,7 @@ export const en: Dict = {
     installed: "Installed",
     view: "View",
     none: "No system found. Try another search term.",
-    categories: { Dienstleistung: "Services", Handel: "Retail", Handwerk: "Trades", Gastronomie: "Hospitality" },
+    categories: { Dienstleistung: "Services", Handel: "Retail", Handwerk: "Trades", Gastronomie: "Hospitality", Zusatz: "Add-on" },
   },
   detail: {
     confirmRemove: "Really remove {name}? Your data stays saved.",
@@ -704,6 +704,12 @@ export const en: Dict = {
       tagline: "Repairs for phones, tablets, laptops and smartwatches",
       description: "Device intake with IMEI and fault description, estimates your customers approve online, spare parts from stock, pickup with invoice and warranty, and a status page for your customers.",
       features: ["Device intake with receipt", "Status page & email for customers", "Estimates with online approval", "Spare parts & accessories in stock", "Pickup with invoice & warranty"],
+    },
+    kasse: {
+      name: "Till",
+      tagline: "One till for all systems, with scanner and multiple registers",
+      description: "Sell with a barcode scanner or tiles, take cash, card, bank transfer or vouchers, items with EAN and stock, several registers each with its own cash book and daily closing. Works with every installed system.",
+      features: ["Barcode scanner & full-screen till mode", "Items with EAN & stock", "Cash, card, transfer, voucher", "Multiple registers", "Cash book & daily closing (Z report)"],
     },
     einzelhandel: {
       name: "Retail",
