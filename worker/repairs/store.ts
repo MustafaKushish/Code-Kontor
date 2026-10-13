@@ -4,6 +4,7 @@ import {
   type InvoiceSnapshot, type PaymentMethod, type QuoteDecision, type RepairCustomer, type RepairEvent, type RepairIntake, type RepairInvoice,
   type RepairItem, type RepairOrder, type RepairOrderRow, type RepairPart, type RepairSettings, type RepairStatus, type StatusGroup,
   type InvoiceKind, type SaleLine, type UsedDevice, type UsedDeviceInput, type WarrantyRow,
+  type CashDay, type CheckList, type Loaner, type RepairOrderRow as OrderRow, type RepairPrice, type RepairStats,
 } from "../../shared/repairs";
 
 // Daten des Systems „Handy- & IT-Service“ in der Datenbank der Firma.
@@ -64,11 +65,29 @@ export const REPAIR_MIGRATIONS: string[] = [
    );
    CREATE INDEX repair_used_status ON repair_used_devices(status, number);
    CREATE INDEX repair_used_serial ON repair_used_devices(serial);`,
+  // Werkstatt-Alltag: Preisliste, Leihgeräte, Ausgangs-Check, Kundenkartei
+  `ALTER TABLE repair_orders ADD COLUMN out_checks TEXT;
+   ALTER TABLE repair_customers ADD COLUMN address TEXT NOT NULL DEFAULT '';
+   ALTER TABLE repair_customers ADD COLUMN note TEXT NOT NULL DEFAULT '';
+   ALTER TABLE repair_invoices ADD COLUMN customer_id TEXT;
+   ALTER TABLE repair_used_devices ADD COLUMN sold_cents INTEGER NOT NULL DEFAULT 0;
+   UPDATE repair_invoices SET customer_id = (SELECT o.customer_id FROM repair_orders o WHERE o.id = repair_invoices.order_id) WHERE kind = 'repair';
+   CREATE INDEX repair_invoices_customer ON repair_invoices(customer_id);
+   CREATE TABLE repair_prices (
+     id TEXT PRIMARY KEY, device_type TEXT NOT NULL, brand TEXT NOT NULL DEFAULT '', model TEXT NOT NULL DEFAULT '',
+     service TEXT NOT NULL, price_cents INTEGER NOT NULL, vat_rate INTEGER NOT NULL DEFAULT 19, part_id TEXT,
+     minutes INTEGER NOT NULL DEFAULT 0
+   );
+   CREATE INDEX repair_prices_device ON repair_prices(device_type, brand, model);
+   CREATE TABLE repair_loaners (
+     id TEXT PRIMARY KEY, name TEXT NOT NULL, serial TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '',
+     order_id TEXT, lent_at TEXT, active INTEGER NOT NULL DEFAULT 1
+   );`,
 ];
 
 type Row = Record<string, string | number | null>;
 export class RepairError extends Error {
-  constructor(public code: "notFound" | "statusNotAllowed" | "orderClosed" | "hasInvoice" | "alreadySold" | "emptySale") {
+  constructor(public code: "notFound" | "statusNotAllowed" | "orderClosed" | "hasInvoice" | "alreadySold" | "emptySale" | "loanerOut" | "loanerBusy") {
     super(code);
   }
 }
@@ -110,12 +129,12 @@ export class RepairStore {
         q, q, q, Math.min(Math.max(limit, 1), 100),
       )
       .toArray()
-      .map((r) => ({ id: S(r.id), name: S(r.name), phone: S(r.phone), email: S(r.email), orders: Number(r.orders) }));
+      .map((r) => ({ ...customerFromRow(r), orders: Number(r.orders) }));
   }
 
   private customer(id: string): RepairCustomer | null {
     const r = this.sql.exec<Row>("SELECT * FROM repair_customers WHERE id = ?", id).toArray()[0];
-    return r ? { id: S(r.id), name: S(r.name), phone: S(r.phone), email: S(r.email) } : null;
+    return r ? customerFromRow(r) : null;
   }
 
   // ---------- Aufträge ----------
@@ -145,7 +164,7 @@ export class RepairStore {
       )
       .toArray();
     const orders = rows.map((r) => {
-      const intake = JSON.parse(S(r.intake)) as RepairIntake;
+      const intake = parseIntake(S(r.intake));
       return {
         id: S(r.id), number: Number(r.number), status: S(r.status) as RepairStatus, customerName: S(r.customer_name), customerPhone: S(r.customer_phone),
         device: intake.device, problem: intake.problem.slice(0, 140), dueDay: intake.dueDay, totalCents: Number(r.total),
@@ -200,9 +219,11 @@ export class RepairStore {
       : null;
     return {
       id: S(r.id), number: Number(r.number), status: S(r.status) as RepairStatus, customer,
-      intake: JSON.parse(S(r.intake)) as RepairIntake, quote: r.quote ? (S(r.quote) as QuoteDecision) : null,
+      intake: parseIntake(S(r.intake)), quote: r.quote ? (S(r.quote) as QuoteDecision) : null,
       items: this.items(id), history: this.history(id), invoice, hasUnlockCode: !!r.unlock_code, publicToken: S(r.public_token),
       createdAt: S(r.created_at), updatedAt: S(r.updated_at), createdBy: r.created_by === null ? null : S(r.created_by),
+      outChecks: r.out_checks ? (JSON.parse(S(r.out_checks)) as CheckList) : null,
+      loaner: this.loanerOf(id),
     };
   }
 
@@ -316,10 +337,11 @@ export class RepairStore {
    * Abholung: Rechnung mit fortlaufender Nummer, Garantie-Ende, Status „abgeholt“.
    * Der Entsperr-Code wird dabei gelöscht, er wird nicht mehr gebraucht.
    */
-  pickUp(id: string, payment: PaymentMethod, company: InvoiceSnapshot["company"], actor: Actor, today: string): RepairOrder {
+  pickUp(id: string, payment: PaymentMethod, company: InvoiceSnapshot["company"], actor: Actor, today: string, loanerReturned = false): RepairOrder {
     const order = this.get(id);
     if (!order) throw new RepairError("notFound");
     if (!PICKUP_STATUSES.includes(order.status)) throw new RepairError("statusNotAllowed");
+    if (order.loaner && !loanerReturned) throw new RepairError("loanerOut");
     const settings = this.settings();
     const totals = computeTotals(order.items, settings.smallBusiness);
     const repaired = order.status === "ready";
@@ -331,9 +353,14 @@ export class RepairStore {
           device: order.intake.device, items: order.items, totals, depositCents: order.intake.depositCents, smallBusiness: settings.smallBusiness,
         };
         this.sql.exec(
-          "INSERT INTO repair_invoices (number, year, seq, order_id, total_cents, payment_method, warranty_until, snapshot) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+          "INSERT INTO repair_invoices (number, year, seq, order_id, total_cents, payment_method, warranty_until, snapshot, customer_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
           invoiceNumber(year, seq), year, seq, id, totals.grossCents, payment, repaired ? warrantyEnd(today, settings.warrantyMonths) : "", JSON.stringify(snapshot),
+          order.customer.id,
         );
+      }
+      if (order.loaner) {
+        this.sql.exec("UPDATE repair_loaners SET order_id = NULL, lent_at = NULL WHERE id = ?", order.loaner.id);
+        this.event(id, null, "loanerBack", order.loaner.name, actor);
       }
       this.sql.exec(
         "UPDATE repair_orders SET status = 'pickedUp', unlock_code = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?",
@@ -351,6 +378,7 @@ export class RepairStore {
     if (order.invoice) throw new RepairError("hasInvoice");
     this.transaction(() => {
       if (order.status !== "canceled") for (const item of order.items) if (item.partId && this.part(item.partId)) this.moveStock(item.partId, Math.ceil(item.qty), "orderDeleted", id, actor);
+      this.sql.exec("UPDATE repair_loaners SET order_id = NULL, lent_at = NULL WHERE order_id = ?", id);
       this.sql.exec("DELETE FROM repair_items WHERE order_id = ?", id);
       this.sql.exec("DELETE FROM repair_events WHERE order_id = ?", id);
       this.sql.exec("DELETE FROM repair_orders WHERE id = ?", id);
@@ -518,7 +546,7 @@ export class RepairStore {
    * Verkauf von Zubehör, Teilen und Gebrauchtgeräten mit Rechnung im selben Nummernkreis.
    * Gebrauchtgeräte werden nach § 25a UStG (Differenzbesteuerung) ohne ausgewiesene Steuer berechnet.
    */
-  sell(lines: SaleLine[], customer: InvoiceSnapshot["customer"], payment: PaymentMethod, company: InvoiceSnapshot["company"], actor: Actor, today: string): RepairInvoice & { kind: InvoiceKind; orderId: string } {
+  sell(lines: SaleLine[], customer: InvoiceSnapshot["customer"], payment: PaymentMethod, company: InvoiceSnapshot["company"], actor: Actor, today: string, customerId: string | null = null): RepairInvoice & { kind: InvoiceKind; orderId: string } {
     if (!lines.length) throw new RepairError("emptySale");
     const settings = this.settings();
     const saleId = crypto.randomUUID();
@@ -547,14 +575,15 @@ export class RepairStore {
       number = invoiceNumber(year, seq);
       const snapshot: InvoiceSnapshot = { company, customer, orderNumber: null, device: null, items, totals, depositCents: 0, smallBusiness: settings.smallBusiness };
       this.sql.exec(
-        "INSERT INTO repair_invoices (number, year, seq, order_id, total_cents, payment_method, warranty_until, snapshot, kind) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'sale')",
+        "INSERT INTO repair_invoices (number, year, seq, order_id, total_cents, payment_method, warranty_until, snapshot, kind, customer_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'sale', ?)",
         number, year, seq, saleId, totals.grossCents, payment, lines.some((l) => l.kind === "used") ? warranty : "", JSON.stringify(snapshot),
+        customerId && this.customer(customerId) ? customerId : null,
       );
       for (const line of lines)
         if (line.kind === "used")
           this.sql.exec(
-            "UPDATE repair_used_devices SET status = 'sold', sold_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), sale_invoice = ?, buyer_name = ?, warranty_until = ? WHERE id = ?",
-            number, customer.name, warranty, line.refId,
+            "UPDATE repair_used_devices SET status = 'sold', sold_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), sale_invoice = ?, buyer_name = ?, warranty_until = ?, sold_cents = ? WHERE id = ?",
+            number, customer.name, warranty, line.unitCents, line.refId,
           );
     });
     return this.invoice(number)!;
@@ -595,6 +624,316 @@ export class RepairStore {
       .filter((w) => !q || [w.customer.name, w.customer.phone, w.device.brand, w.device.model, w.invoice, w.label].join(" ").toLowerCase().includes(q)
         || normalizeSerial(w.device.serial).includes(normalizeSerial(q)))
       .sort((a, b) => b.until.localeCompare(a.until));
+  }
+
+  // ---------- Funktions-Check bei Ausgabe ----------
+
+  saveOutChecks(id: string, checks: CheckList, actor: Actor): RepairOrder {
+    this.open(id);
+    this.sql.exec("UPDATE repair_orders SET out_checks = ? WHERE id = ?", JSON.stringify(checks), id);
+    this.event(id, null, "outChecked", "", actor);
+    this.touch(id);
+    return this.get(id)!;
+  }
+
+  // ---------- Preisliste ----------
+
+  prices(query: string): RepairPrice[] {
+    const like = `%${query.trim().toLowerCase()}%`;
+    return this.sql
+      .exec<Row>(
+        `SELECT * FROM repair_prices WHERE lower(brand || ' ' || model || ' ' || service) LIKE ?
+          ORDER BY device_type, lower(brand), lower(model), lower(service) LIMIT 1000`,
+        like,
+      )
+      .toArray()
+      .map(priceFromRow);
+  }
+
+  savePrice(id: string | null, data: Omit<RepairPrice, "id">): RepairPrice {
+    const priceId = id ?? crypto.randomUUID();
+    if (id && !this.sql.exec("SELECT 1 FROM repair_prices WHERE id = ?", id).toArray().length) throw new RepairError("notFound");
+    this.sql.exec(
+      `INSERT INTO repair_prices (id, device_type, brand, model, service, price_cents, vat_rate, part_id, minutes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET device_type = excluded.device_type, brand = excluded.brand, model = excluded.model, service = excluded.service,
+         price_cents = excluded.price_cents, vat_rate = excluded.vat_rate, part_id = excluded.part_id, minutes = excluded.minutes`,
+      priceId, data.deviceType, data.brand, data.model, data.service, data.priceCents, data.vatRate, data.partId, data.minutes,
+    );
+    return priceFromRow(this.sql.exec<Row>("SELECT * FROM repair_prices WHERE id = ?", priceId).one());
+  }
+
+  removePrice(id: string): void {
+    this.sql.exec("DELETE FROM repair_prices WHERE id = ?", id);
+  }
+
+  /**
+   * Leistung aus der Preisliste in den Auftrag übernehmen. Ist ein Teil verknüpft und vorhanden,
+   * wird es als eigene Position gebucht und die Arbeit macht den Rest des Preises aus.
+   */
+  applyPrice(id: string, priceId: string, actor: Actor): RepairOrder {
+    const r = this.sql.exec<Row>("SELECT * FROM repair_prices WHERE id = ?", priceId).toArray()[0];
+    if (!r) throw new RepairError("notFound");
+    const price = priceFromRow(r);
+    const part = price.partId ? this.part(price.partId) : null;
+    if (part) {
+      const partCents = Math.min(part.priceCents, price.priceCents);
+      this.addItem(id, { kind: "part", partId: part.id, name: part.name, qty: 1, unitCents: partCents, vatRate: part.vatRate }, actor);
+      if (price.priceCents > partCents) this.addItem(id, { kind: "labor", partId: null, name: price.service, qty: 1, unitCents: price.priceCents - partCents, vatRate: price.vatRate }, actor);
+    } else {
+      this.addItem(id, { kind: "labor", partId: null, name: price.service, qty: 1, unitCents: price.priceCents, vatRate: price.vatRate }, actor);
+    }
+    return this.get(id)!;
+  }
+
+  // ---------- Leihgeräte ----------
+
+  loaners(): Loaner[] {
+    return this.sql
+      .exec<Row>(
+        `SELECT l.*, o.number AS order_number, c.name AS customer_name FROM repair_loaners l
+           LEFT JOIN repair_orders o ON o.id = l.order_id LEFT JOIN repair_customers c ON c.id = o.customer_id
+          WHERE l.active = 1 ORDER BY lower(l.name)`,
+      )
+      .toArray()
+      .map((r) => ({
+        id: S(r.id), name: S(r.name), serial: S(r.serial), note: S(r.note), orderId: r.order_id === null ? null : S(r.order_id),
+        orderNumber: r.order_number === null ? null : Number(r.order_number), customerName: r.customer_name === null ? null : S(r.customer_name),
+        lentAt: r.lent_at === null ? null : S(r.lent_at),
+      }));
+  }
+
+  saveLoaner(id: string | null, data: { name: string; serial: string; note: string }): Loaner[] {
+    if (id) this.sql.exec("UPDATE repair_loaners SET name = ?, serial = ?, note = ? WHERE id = ?", data.name, data.serial, data.note, id);
+    else this.sql.exec("INSERT INTO repair_loaners (id, name, serial, note) VALUES (?, ?, ?, ?)", crypto.randomUUID(), data.name, data.serial, data.note);
+    return this.loaners();
+  }
+
+  removeLoaner(id: string): Loaner[] {
+    const r = this.sql.exec<{ order_id: string | null }>("SELECT order_id FROM repair_loaners WHERE id = ?", id).toArray()[0];
+    if (r?.order_id) throw new RepairError("loanerBusy");
+    this.sql.exec("UPDATE repair_loaners SET active = 0 WHERE id = ?", id);
+    return this.loaners();
+  }
+
+  /** Leihgerät an einen Auftrag geben (loanerId) oder zurücknehmen (null). */
+  lend(id: string, loanerId: string | null, actor: Actor): RepairOrder {
+    const order = this.open(id);
+    this.transaction(() => {
+      if (order.loaner) {
+        this.sql.exec("UPDATE repair_loaners SET order_id = NULL, lent_at = NULL WHERE id = ?", order.loaner.id);
+        this.event(id, null, "loanerBack", order.loaner.name, actor);
+      }
+      if (loanerId) {
+        const l = this.sql.exec<Row>("SELECT * FROM repair_loaners WHERE id = ? AND active = 1", loanerId).toArray()[0];
+        if (!l) throw new RepairError("notFound");
+        if (l.order_id) throw new RepairError("loanerBusy");
+        this.sql.exec("UPDATE repair_loaners SET order_id = ?, lent_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?", id, loanerId);
+        this.event(id, null, "loanerOut", S(l.name), actor);
+      }
+      this.touch(id);
+    });
+    return this.get(id)!;
+  }
+
+  private loanerOf(orderId: string): RepairOrder["loaner"] {
+    const r = this.sql.exec<Row>("SELECT id, name, serial, lent_at FROM repair_loaners WHERE order_id = ?", orderId).toArray()[0];
+    return r ? { id: S(r.id), name: S(r.name), serial: S(r.serial), lentAt: S(r.lent_at) } : null;
+  }
+
+  // ---------- Kundenkartei ----------
+
+  customerList(query: string): (RepairCustomer & { orders: number; lastAt: string; totalCents: number })[] {
+    const q = `%${query.trim().toLowerCase()}%`;
+    return this.sql
+      .exec<Row>(
+        `SELECT c.*,
+                (SELECT COUNT(*) FROM repair_orders o WHERE o.customer_id = c.id) AS orders,
+                (SELECT COALESCE(SUM(total_cents), 0) FROM repair_invoices i WHERE i.customer_id = c.id) AS total,
+                MAX(c.created_at, COALESCE((SELECT MAX(created_at) FROM repair_orders o WHERE o.customer_id = c.id), ''),
+                    COALESCE((SELECT MAX(issued_at) FROM repair_invoices i WHERE i.customer_id = c.id), '')) AS last_at
+           FROM repair_customers c
+          WHERE lower(c.name) LIKE ? OR c.phone LIKE ? OR lower(c.email) LIKE ? OR lower(c.address) LIKE ?
+          ORDER BY last_at DESC LIMIT 300`,
+        q, q, q, q,
+      )
+      .toArray()
+      .map((r) => ({ ...customerFromRow(r), orders: Number(r.orders), lastAt: S(r.last_at), totalCents: Number(r.total) }));
+  }
+
+  /** Alles zu einem Kunden: Aufträge, Rechnungen, Geräte. */
+  customerCard(id: string): { customer: RepairCustomer; orders: OrderRow[]; invoices: { number: string; kind: InvoiceKind; issuedAt: string; totalCents: number; orderId: string; warrantyUntil: string }[] } | null {
+    const r = this.sql.exec<Row>("SELECT * FROM repair_customers WHERE id = ?", id).toArray()[0];
+    if (!r) return null;
+    const orders = this.sql
+      .exec<Row>(
+        `SELECT o.id, o.number, o.status, o.intake, o.created_at, o.updated_at,
+                (SELECT COALESCE(SUM(ROUND(i.qty * i.unit_cents)), 0) FROM repair_items i WHERE i.order_id = o.id) AS total
+           FROM repair_orders o WHERE o.customer_id = ? ORDER BY o.number DESC LIMIT 200`,
+        id,
+      )
+      .toArray()
+      .map((o): OrderRow => {
+        const intake = parseIntake(S(o.intake));
+        return {
+          id: S(o.id), number: Number(o.number), status: S(o.status) as RepairStatus, customerName: S(r.name), customerPhone: S(r.phone),
+          device: intake.device, problem: intake.problem.slice(0, 140), dueDay: intake.dueDay, totalCents: Number(o.total),
+          createdAt: S(o.created_at), updatedAt: S(o.updated_at),
+        };
+      });
+    const invoices = this.sql
+      .exec<Row>("SELECT number, kind, issued_at, total_cents, order_id, warranty_until FROM repair_invoices WHERE customer_id = ? ORDER BY issued_at DESC LIMIT 200", id)
+      .toArray()
+      .map((i) => ({ number: S(i.number), kind: S(i.kind) as InvoiceKind, issuedAt: S(i.issued_at), totalCents: Number(i.total_cents), orderId: S(i.order_id), warrantyUntil: S(i.warranty_until) }));
+    return { customer: customerFromRow(r), orders, invoices };
+  }
+
+  saveCustomer(id: string, data: { name: string; phone: string; email: string; address: string; note: string }): RepairCustomer {
+    if (!this.customer(id)) throw new RepairError("notFound");
+    this.sql.exec("UPDATE repair_customers SET name = ?, phone = ?, email = ?, address = ?, note = ? WHERE id = ?", data.name, data.phone, data.email, data.address, data.note, id);
+    return customerFromRow(this.sql.exec<Row>("SELECT * FROM repair_customers WHERE id = ?", id).one());
+  }
+
+  /** Neuer Kunde ohne Auftrag, z. B. für einen Verkauf. */
+  addCustomer(data: { name: string; phone: string; email: string; address: string; note: string }): RepairCustomer {
+    const id = crypto.randomUUID();
+    this.sql.exec("INSERT INTO repair_customers (id, name, phone, email, address, note) VALUES (?, ?, ?, ?, ?, ?)", id, data.name, data.phone, data.email, data.address, data.note);
+    return customerFromRow(this.sql.exec<Row>("SELECT * FROM repair_customers WHERE id = ?", id).one());
+  }
+
+  /** Kunde löschen: nur ohne Rechnungen (Aufbewahrungspflicht). Aufträge ohne Rechnung werden mit gelöscht. */
+  removeCustomer(id: string, actor: Actor): void {
+    if (!this.customer(id)) throw new RepairError("notFound");
+    const hasInvoice = this.sql.exec(
+      "SELECT 1 FROM repair_invoices WHERE customer_id = ? OR order_id IN (SELECT id FROM repair_orders WHERE customer_id = ?) LIMIT 1", id, id,
+    ).toArray().length;
+    if (hasInvoice) throw new RepairError("hasInvoice");
+    for (const o of this.sql.exec<{ id: string }>("SELECT id FROM repair_orders WHERE customer_id = ?", id).toArray()) this.remove(o.id, actor);
+    this.sql.exec("DELETE FROM repair_customers WHERE id = ?", id);
+  }
+
+  // ---------- Kasse und Auswertung ----------
+
+  /**
+   * Alle Zahlungen eines Tages (deutsche Ortszeit): Rechnungen, Anzahlungen bei Annahme, Auszahlungen im Ankauf.
+   * Anzahlungen werden als Bargeld gezählt; bei der Abholung wird nur der Rest kassiert.
+   */
+  cashDay(day: string): CashDay {
+    const local = berlinDay;
+    const from = new Date(Date.parse(`${day}T00:00:00Z`) - 86_400_000).toISOString();
+    const to = new Date(Date.parse(`${day}T00:00:00Z`) + 2 * 86_400_000).toISOString();
+    const entries: CashDay["entries"] = [];
+    for (const r of this.sql.exec<Row>("SELECT number, kind, issued_at, total_cents, payment_method, order_id, snapshot FROM repair_invoices WHERE issued_at >= ? AND issued_at < ?", from, to).toArray()) {
+      if (local(S(r.issued_at)) !== day) continue;
+      const snap = JSON.parse(S(r.snapshot)) as InvoiceSnapshot;
+      const paid = Number(r.total_cents) - (snap.depositCents ?? 0);
+      entries.push({
+        at: S(r.issued_at), kind: S(r.kind) === "sale" ? "sale" : "repair", ref: S(r.number), refId: S(r.order_id),
+        label: [snap.customer.name, snap.orderNumber ? `#${snap.orderNumber}` : ""].filter(Boolean).join(" · "),
+        method: S(r.payment_method) as PaymentMethod, cents: paid,
+      });
+    }
+    for (const r of this.sql
+      .exec<Row>(
+        `SELECT e.at, e.note, o.id, o.number, c.name FROM repair_events e JOIN repair_orders o ON o.id = e.order_id JOIN repair_customers c ON c.id = o.customer_id
+          WHERE e.note LIKE 'deposit:%' AND e.at >= ? AND e.at < ?`,
+        from, to,
+      )
+      .toArray()) {
+      if (local(S(r.at)) !== day) continue;
+      entries.push({ at: S(r.at), kind: "deposit", ref: `#${r.number}`, refId: S(r.id), label: S(r.name), method: "cash", cents: Number(S(r.note).slice(8)) || 0 });
+    }
+    for (const r of this.sql.exec<Row>("SELECT * FROM repair_used_devices WHERE purchased_at >= ? AND purchased_at < ?", from, to).toArray()) {
+      if (local(S(r.purchased_at)) !== day) continue;
+      const u = usedFromRow(r);
+      entries.push({ at: u.purchasedAt, kind: "purchase", ref: `A-${u.number}`, refId: u.id, label: [u.device.brand, u.device.model].filter(Boolean).join(" "), method: u.payout, cents: -u.purchaseCents });
+    }
+    entries.sort((a, b) => a.at.localeCompare(b.at));
+    const byMethod = { cash: { inCents: 0, outCents: 0 }, card: { inCents: 0, outCents: 0 }, transfer: { inCents: 0, outCents: 0 } };
+    for (const e of entries) {
+      if (e.cents >= 0) byMethod[e.method].inCents += e.cents;
+      else byMethod[e.method].outCents -= e.cents;
+    }
+    return { day, entries, byMethod };
+  }
+
+  /** Monatsauswertung. `month` = YYYY-MM, Tage nach deutscher Ortszeit. */
+  stats(month: string): RepairStats {
+    const local = berlinDay;
+    const from = new Date(Date.parse(`${month}-01T00:00:00Z`) - 86_400_000).toISOString();
+    const next = new Date(Date.parse(`${month}-01T00:00:00Z`));
+    next.setUTCMonth(next.getUTCMonth() + 1);
+    const to = new Date(next.getTime() + 86_400_000).toISOString();
+    const inMonth = (iso: string | null) => !!iso && local(iso).startsWith(month);
+
+    const revenue = { repairCents: 0, saleCents: 0, invoices: 0 };
+    const daily = new Map<string, number>();
+    const services = new Map<string, { n: number; cents: number }>();
+    for (const r of this.sql.exec<Row>("SELECT kind, issued_at, total_cents, snapshot FROM repair_invoices WHERE issued_at >= ? AND issued_at < ?", from, to).toArray()) {
+      if (!inMonth(S(r.issued_at))) continue;
+      const cents = Number(r.total_cents);
+      revenue.invoices++;
+      if (S(r.kind) === "sale") revenue.saleCents += cents;
+      else {
+        revenue.repairCents += cents;
+        for (const item of (JSON.parse(S(r.snapshot)) as InvoiceSnapshot).items) {
+          if (item.kind !== "labor") continue;
+          const s = services.get(item.name) ?? { n: 0, cents: 0 };
+          s.n++;
+          s.cents += Math.round(item.qty * item.unitCents);
+          services.set(item.name, s);
+        }
+      }
+      const d = local(S(r.issued_at));
+      daily.set(d, (daily.get(d) ?? 0) + cents);
+    }
+
+    const orders = { received: 0, pickedUp: 0, open: 0, avgDays: null as number | null };
+    const models = new Map<string, number>();
+    for (const r of this.sql.exec<Row>("SELECT intake, created_at FROM repair_orders WHERE created_at >= ? AND created_at < ?", from, to).toArray()) {
+      if (!inMonth(S(r.created_at))) continue;
+      orders.received++;
+      const d = (parseIntake(S(r.intake))).device;
+      const label = [d.brand, d.model].filter(Boolean).join(" ");
+      if (label) models.set(label, (models.get(label) ?? 0) + 1);
+    }
+    let days = 0;
+    for (const r of this.sql
+      .exec<Row>(
+        `SELECT e.at, o.created_at FROM repair_events e JOIN repair_orders o ON o.id = e.order_id
+          WHERE e.status = 'pickedUp' AND e.at >= ? AND e.at < ?`,
+        from, to,
+      )
+      .toArray()) {
+      if (!inMonth(S(r.at))) continue;
+      orders.pickedUp++;
+      days += (Date.parse(S(r.at)) - Date.parse(S(r.created_at))) / 86_400_000;
+    }
+    if (orders.pickedUp) orders.avgDays = Math.round((days / orders.pickedUp) * 10) / 10;
+    orders.open = this.sql.exec<{ n: number }>("SELECT COUNT(*) AS n FROM repair_orders WHERE status NOT IN ('pickedUp', 'canceled')").one().n;
+
+    const used = { bought: 0, boughtCents: 0, sold: 0, soldCents: 0, profitCents: 0 };
+    for (const r of this.sql.exec<Row>("SELECT purchased_at, sold_at, purchase_cents, sold_cents FROM repair_used_devices WHERE purchased_at >= ? OR sold_at >= ?", from, from).toArray()) {
+      if (inMonth(S(r.purchased_at))) {
+        used.bought++;
+        used.boughtCents += Number(r.purchase_cents);
+      }
+      if (r.sold_at !== null && inMonth(S(r.sold_at))) {
+        used.sold++;
+        used.soldCents += Number(r.sold_cents);
+        used.profitCents += Number(r.sold_cents) - Number(r.purchase_cents);
+      }
+    }
+
+    const top = <T,>(m: Map<string, T>, key: (v: T) => number) => [...m.entries()].sort((a, b) => key(b[1]) - key(a[1])).slice(0, 5);
+    return {
+      month,
+      revenue,
+      orders,
+      used,
+      topModels: top(models, (n) => n).map(([label, n]) => ({ label, n })),
+      topServices: top(services, (s) => s.n).map(([label, s]) => ({ label, ...s })),
+      daily: [...daily.entries()].sort().map(([day, cents]) => ({ day, cents })),
+    };
   }
 
   // ---------- intern ----------
@@ -645,6 +984,25 @@ export class RepairStore {
     this.sql.exec("UPDATE repair_parts SET stock = stock + ? WHERE id = ?", delta, partId);
     this.sql.exec("INSERT INTO repair_stock_moves (part_id, delta, reason, order_id, user_name) VALUES (?, ?, ?, ?, ?)", partId, delta, reason, orderId, actor.name);
   }
+}
+
+/** Tag nach deutscher Ortszeit, damit ein Verkauf um 0:30 Uhr zum richtigen Tag gehört. */
+export const berlinDay = (iso: string) => new Date(iso).toLocaleDateString("en-CA", { timeZone: "Europe/Berlin" });
+
+/** Ältere Aufträge kennen manche Felder noch nicht. */
+function parseIntake(json: string): RepairIntake {
+  return { warrantyRef: "", checks: {}, planned: [], ...(JSON.parse(json) as Partial<RepairIntake>) } as RepairIntake;
+}
+
+function customerFromRow(r: Row): RepairCustomer {
+  return { id: S(r.id), name: S(r.name), phone: S(r.phone), email: S(r.email), address: S(r.address ?? ""), note: S(r.note ?? "") };
+}
+
+function priceFromRow(r: Row): RepairPrice {
+  return {
+    id: S(r.id), deviceType: S(r.device_type) as RepairPrice["deviceType"], brand: S(r.brand), model: S(r.model), service: S(r.service),
+    priceCents: Number(r.price_cents), vatRate: Number(r.vat_rate), partId: r.part_id === null ? null : S(r.part_id), minutes: Number(r.minutes),
+  };
 }
 
 function partFromRow(r: Row): RepairPart {

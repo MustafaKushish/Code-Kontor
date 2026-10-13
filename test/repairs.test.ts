@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   canChangeStatus, computeTotals, invoiceNumber, isValidImei, parseEuro, sanitizeIntake, sanitizeItem, sanitizeRepairSettings,
   sanitizeSaleLine, sanitizeUsed, validateCustomer, validateIntake, validateUsed, warrantyEnd,
+  CHECKS_FOR, priceMatches, sanitizeChecks, sanitizeCustomerCard, sanitizePrice,
 } from "../shared/repairs";
 import { de } from "../src/modules/repairs/lang/de";
 import { en } from "../src/modules/repairs/lang/en";
@@ -107,6 +108,34 @@ describe("Reparaturen: An- und Verkauf", () => {
   it("begrenzt die Gewährleistung auf Gebrauchtgeräte", () => {
     expect(sanitizeRepairSettings({}).usedWarrantyMonths).toBe(12);
     expect(sanitizeRepairSettings({ usedWarrantyMonths: -3 }).usedWarrantyMonths).toBe(0);
+  });
+});
+
+describe("Reparaturen: Werkstatt-Alltag", () => {
+  it("übernimmt nur gültige Prüfergebnisse", () => {
+    expect(sanitizeChecks({ display: "ok", touch: "fail", power: "untested", wifi: "kaputt", hack: "ok" })).toEqual({ display: "ok", touch: "fail", power: "untested" });
+    expect(sanitizeIntake({ checks: { display: "ok" } }).checks).toEqual({ display: "ok" });
+    expect(sanitizeIntake({}).checks).toEqual({});
+    for (const items of Object.values(CHECKS_FOR)) expect(items).toContain("power");
+  });
+  it("merkt höchstens zehn Leistungen mit Namen vor", () => {
+    const planned = Array.from({ length: 12 }, (_, i) => ({ priceId: `p${i}`, name: `L${i}`, cents: 1000 }));
+    expect(sanitizeIntake({ planned }).planned).toHaveLength(10);
+    expect(sanitizeIntake({ planned: [{ priceId: "x", name: "", cents: 1 }, { name: "ohne Id" }] }).planned).toEqual([]);
+  });
+  it("findet passende Preise für ein Gerät", () => {
+    const device = { type: "phone" as const, brand: "Apple", model: "iPhone 13 Pro" };
+    expect(priceMatches({ deviceType: "phone", brand: "apple", model: "iPhone 13" }, device)).toBe(true);
+    expect(priceMatches({ deviceType: "phone", brand: "Apple", model: "" }, device)).toBe(true);
+    expect(priceMatches({ deviceType: "phone", brand: "Samsung", model: "" }, device)).toBe(false);
+    expect(priceMatches({ deviceType: "tablet", brand: "Apple", model: "" }, device)).toBe(false);
+    expect(priceMatches({ deviceType: "phone", brand: "Apple", model: "iPhone 14" }, device)).toBe(false);
+  });
+  it("prüft Preise und Kundendaten", () => {
+    expect(sanitizePrice({ service: "" })).toBeNull();
+    const p = sanitizePrice({ service: "Display tauschen", priceCents: 14900, vatRate: 5, deviceType: "toaster", minutes: -5, partId: "" });
+    expect(p).toMatchObject({ deviceType: "phone", vatRate: 19, minutes: 0, partId: null, priceCents: 14900 });
+    expect(sanitizeCustomerCard({ name: " Ali ", email: "ALI@X.DE", note: "Stammkunde" })).toEqual({ name: "Ali", phone: "", email: "ali@x.de", address: "", note: "Stammkunde" });
   });
 });
 

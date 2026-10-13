@@ -1,18 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  ArrowLeft, BadgeCheck, Check, ClipboardCheck, Copy, Eye, FileText, History, KeyRound, Link2, Mail, Package, Pencil, Phone, Plus, Printer,
-  Receipt, ShieldCheck, Smartphone, Trash2, TriangleAlert, Wrench, X,
+  ArrowLeft, BadgeCheck, Check, ClipboardCheck, Copy, Eye, FileText, History, KeyRound, Link2, ListChecks, Mail, Package, Pencil, Phone, Plus, Printer,
+  Receipt, Repeat, ShieldCheck, Smartphone, Tags, Trash2, TriangleAlert, Undo2, UserRound, Wrench, X,
 } from "lucide-react";
 import qrcode from "qrcode-generator";
 import { api, type Me } from "../../api";
 import { Link } from "../../components";
 import { navigate } from "../../router";
 import {
-  PAYMENT_METHODS, PICKUP_STATUSES, VAT_RATES, canChangeStatus, computeTotals, isClosed,
-  type PaymentMethod, type RepairItemKind, type RepairOrder, type RepairPart, type RepairSettings, type RepairStatus,
+  PAYMENT_METHODS, PICKUP_STATUSES, VAT_RATES, canChangeStatus, computeTotals, isClosed, priceMatches,
+  type CheckList, type Loaner, type PaymentMethod, type RepairItemKind, type RepairOrder, type RepairPart, type RepairPrice, type RepairSettings, type RepairStatus,
 } from "../../../shared/repairs";
 import { useRepairI18n } from "./i18n";
-import { Dialog, MoneyInput, StatusPill, deviceLabel } from "./parts";
+import { ChecksEditor, ChecksSummary, Dialog, MoneyInput, StatusPill, deviceLabel } from "./parts";
 import { PrintView, type PrintKind } from "./Print";
 
 const BASE = "/app/handy-it";
@@ -42,6 +42,9 @@ export function OrderDetail({ id, me }: { id: string; me: Me }) {
   const [unlock, setUnlock] = useState<string | null>(null);
   const [adding, setAdding] = useState<RepairItemKind | null>(null);
   const [pickup, setPickup] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [pricing, setPricing] = useState(false);
+  const [lending, setLending] = useState(false);
   const [print, setPrint] = useState<PrintKind | null>(null);
   const [copied, setCopied] = useState(false);
   const isManager = me.user.role !== "staff";
@@ -181,6 +184,11 @@ export function OrderDetail({ id, me }: { id: string; me: Me }) {
                   </div>
                 )}
                 {overLimit && <p className="notice"><TriangleAlert size={16} /> {r("order.quoteOverLimit", { amount: euro(order.intake.approvedUpToCents) })}</p>}
+                {order.status === "ready" && !order.outChecks && (
+                  <p className="notice planned-row"><ListChecks size={16} /> <span>{r("checks.outMissing")}</span>
+                    <button className="button small-button" onClick={() => setChecking(true)}>{r("checks.outDo")}</button>
+                  </p>
+                )}
                 {PICKUP_STATUSES.includes(order.status) && (
                   <button className="button primary block" disabled={busy} onClick={() => setPickup(true)}><ClipboardCheck size={18} /> {r("order.pickup")}</button>
                 )}
@@ -247,8 +255,16 @@ export function OrderDetail({ id, me }: { id: string; me: Me }) {
               </div>
             )}
             {order.intake.estimateCents > 0 && <p className="muted small">{r("order.estimate", { amount: euro(order.intake.estimateCents) })}</p>}
+            {!closed && order.intake.planned.filter((p) => !order.items.some((i) => i.name === p.name)).map((p) => (
+              <div key={p.priceId} className="notice planned-row">
+                <Tags size={16} />
+                <span>{r("order.planned", { name: p.name, price: euro(p.cents) })}</span>
+                <button className="button small-button" disabled={busy} onClick={() => run(() => api(`/repairs/orders/${id}/price`, { method: "POST", body: { priceId: p.priceId } }))}>{r("order.applyPlanned")}</button>
+              </div>
+            ))}
             {!closed && (
               <div className="row wrap gap">
+                <button className="button" onClick={() => setPricing(true)}><Tags size={16} /> {r("order.fromPrices")}</button>
                 <button className="button" onClick={() => setAdding("labor")}><Plus size={16} /> {r("order.addLabor")}</button>
                 <button className="button" onClick={() => setAdding("part")}><Plus size={16} /> {r("order.addPart")}</button>
                 <button className="button" onClick={() => setAdding("other")}><Plus size={16} /> {r("order.addOther")}</button>
@@ -265,7 +281,7 @@ export function OrderDetail({ id, me }: { id: string; me: Me }) {
                   <span className="dot" aria-hidden />
                   <div>
                     <strong>
-                      {e.event === "quoteApproved" ? r("order.quoteApproved") : e.event === "quoteRejected" ? r("order.quoteRejected") : e.event === "edited" ? r("order.edited") : e.status ? r(`status.${e.status}`) : ""}
+                      {["quoteApproved", "quoteRejected", "edited", "loanerOut", "loanerBack", "outChecked"].includes(e.event) ? r(`order.events.${e.event}`) : e.status ? r(`status.${e.status}`) : ""}
                     </strong>
                     <small className="muted"> · {dateTime(e.at)} · {e.userName ?? r("order.byCustomer")}</small>
                     {e.note && !e.note.startsWith("deposit:") && <p>{e.note}</p>}
@@ -279,7 +295,7 @@ export function OrderDetail({ id, me }: { id: string; me: Me }) {
         <div className="stack">
           {/* ---------- Kunde ---------- */}
           <section className="card stack">
-            <h2 className="card-title">{order.customer.name}</h2>
+            <h2 className="card-title"><Link to={`${BASE}/kunden/${order.customer.id}`} className="text-link"><UserRound size={18} /> {order.customer.name}</Link></h2>
             <div className="row wrap gap">
               {order.customer.phone && <a className="button" href={`tel:${order.customer.phone.replace(/[^\d+]/g, "")}`}><Phone size={16} /> {order.customer.phone}</a>}
               {order.customer.email && <a className="button" href={`mailto:${order.customer.email}`}><Mail size={16} /> {r("order.mail")}</a>}
@@ -309,6 +325,14 @@ export function OrderDetail({ id, me }: { id: string; me: Me }) {
               {order.intake.dueDay && <><dt>{r("intake.dueDay")}</dt><dd>{day(order.intake.dueDay)}</dd></>}
               {order.intake.internalNote && <><dt>{r("intake.internalNote")}</dt><dd className="pre">{order.intake.internalNote}</dd></>}
             </dl>
+            <dl className="repair-facts">
+              <dt>{r("checks.atIntake")}</dt><dd><ChecksSummary value={order.intake.checks} /></dd>
+              <dt>{r("checks.atOutput")}</dt>
+              <dd>
+                {order.outChecks ? <ChecksSummary value={order.outChecks} compare={order.intake.checks} /> : <span className="muted">{r("checks.notYet")}</span>}
+                {!closed && <> <button className="text-button" onClick={() => setChecking(true)}>{order.outChecks ? r("checks.outEdit") : r("checks.outDo")}</button></>}
+              </dd>
+            </dl>
             {order.intake.dataNotice && <p className="muted small"><ShieldCheck size={14} /> {r("order.dataNotice")}</p>}
             {!closed && (
               <div className="unlock-row">
@@ -323,6 +347,22 @@ export function OrderDetail({ id, me }: { id: string; me: Me }) {
               <Link to={`${BASE}/auftrag/${order.id}/bearbeiten`} className="button"><Pencil size={16} /> {r("order.edit")}</Link>
             )}
           </section>
+
+          {/* ---------- Leihgerät ---------- */}
+          {(order.loaner || !closed) && (
+            <section className="card stack-sm">
+              <h2 className="card-title"><Repeat size={20} /> {r("loaner.title")}</h2>
+              {order.loaner ? (
+                <>
+                  <p><strong>{order.loaner.name}</strong>{order.loaner.serial && <span className="muted mono"> · {order.loaner.serial}</span>}</p>
+                  <small className="muted">{r("loaner.since", { day: day(order.loaner.lentAt) })}</small>
+                  <button className="button" disabled={busy} onClick={() => run(() => api(`/repairs/orders/${id}/loaner`, { method: "PUT", body: { loanerId: null } }))}><Undo2 size={16} /> {r("loaner.giveBack")}</button>
+                </>
+              ) : (
+                <button className="button" onClick={() => setLending(true)}><Plus size={16} /> {r("loaner.lend")}</button>
+              )}
+            </section>
+          )}
 
           {related.length > 0 && (
             <section className="card stack">
@@ -356,13 +396,39 @@ export function OrderDetail({ id, me }: { id: string; me: Me }) {
           }}
         />
       )}
+      {checking && (
+        <OutChecksDialog
+          order={order}
+          onClose={() => setChecking(false)}
+          onSave={async (checks) => {
+            if (await run(() => api(`/repairs/orders/${id}/out-checks`, { method: "PUT", body: { checks } }))) setChecking(false);
+          }}
+        />
+      )}
+      {pricing && (
+        <PriceDialog
+          order={order}
+          onClose={() => setPricing(false)}
+          onPick={async (priceId) => {
+            if (await run(() => api(`/repairs/orders/${id}/price`, { method: "POST", body: { priceId } }))) setPricing(false);
+          }}
+        />
+      )}
+      {lending && (
+        <LendDialog
+          onClose={() => setLending(false)}
+          onPick={async (loanerId) => {
+            if (await run(() => api(`/repairs/orders/${id}/loaner`, { method: "PUT", body: { loanerId } }))) setLending(false);
+          }}
+        />
+      )}
       {pickup && (
         <PickupDialog
           order={order}
           total={Math.max(0, totals.grossCents - order.intake.depositCents)}
           onClose={() => setPickup(false)}
-          onConfirm={async (paymentMethod) => {
-            if (await run(() => api(`/repairs/orders/${id}/pickup`, { method: "POST", body: { paymentMethod } }))) {
+          onConfirm={async (paymentMethod, loanerReturned) => {
+            if (await run(() => api(`/repairs/orders/${id}/pickup`, { method: "POST", body: { paymentMethod, loanerReturned } }))) {
               setPickup(false);
               setPrint("invoice");
             }
@@ -468,10 +534,11 @@ function AddItemDialog({ kind: initialKind, defaultLabor, onClose, onAdd }: {
   );
 }
 
-function PickupDialog({ order, total, onClose, onConfirm }: { order: RepairOrder; total: number; onClose: () => void; onConfirm: (m: PaymentMethod) => void }) {
+function PickupDialog({ order, total, onClose, onConfirm }: { order: RepairOrder; total: number; onClose: () => void; onConfirm: (m: PaymentMethod, loanerReturned: boolean) => void }) {
   const { r, euro } = useRepairI18n();
   const [method, setMethod] = useState<PaymentMethod>("cash");
   const [busy, setBusy] = useState(false);
+  const [loanerBack, setLoanerBack] = useState(false);
   return (
     <Dialog title={r("order.pickup")} onClose={onClose}>
       <div className="stack">
@@ -488,7 +555,90 @@ function PickupDialog({ order, total, onClose, onConfirm }: { order: RepairOrder
             </div>
           </div>
         )}
-        <button className="button primary" disabled={busy} onClick={() => (setBusy(true), onConfirm(method))}><ClipboardCheck size={18} /> {r("order.pickupConfirm")}</button>
+        {order.status === "ready" && !order.outChecks && <p className="notice"><ListChecks size={16} /> {r("checks.outMissing")}</p>}
+        {order.loaner && (
+          <label className="check notice">
+            <input type="checkbox" checked={loanerBack} onChange={(e) => setLoanerBack(e.target.checked)} />
+            <span>{r("loaner.backConfirm", { name: order.loaner.name })}</span>
+          </label>
+        )}
+        <button className="button primary" disabled={busy || (!!order.loaner && !loanerBack)} onClick={() => (setBusy(true), onConfirm(method, loanerBack))}><ClipboardCheck size={18} /> {r("order.pickupConfirm")}</button>
+      </div>
+    </Dialog>
+  );
+}
+
+function OutChecksDialog({ order, onClose, onSave }: { order: RepairOrder; onClose: () => void; onSave: (checks: CheckList) => void }) {
+  const { r } = useRepairI18n();
+  // Vorschlag: wie bei Annahme, damit nur Abweichungen getippt werden müssen
+  const [checks, setChecks] = useState<CheckList>(order.outChecks ?? order.intake.checks);
+  return (
+    <Dialog title={r("checks.outTitle")} onClose={onClose} wide>
+      <div className="stack">
+        <p className="muted">{r("checks.outText")}</p>
+        <ChecksEditor type={order.intake.device.type} value={checks} onChange={setChecks} />
+        <div className="stack-sm">
+          <span className="field-label">{r("checks.atIntake")}</span>
+          <ChecksSummary value={order.intake.checks} />
+        </div>
+        <button className="button primary" onClick={() => onSave(checks)}><Check size={18} /> {r("checks.save")}</button>
+      </div>
+    </Dialog>
+  );
+}
+
+function PriceDialog({ order, onClose, onPick }: { order: RepairOrder; onClose: () => void; onPick: (priceId: string) => void }) {
+  const { r, euro } = useRepairI18n();
+  const [prices, setPrices] = useState<RepairPrice[] | null>(null);
+  const [all, setAll] = useState(false);
+  const [query, setQuery] = useState("");
+  useEffect(() => {
+    api<{ prices: RepairPrice[] }>("/repairs/prices").then((d) => setPrices(d.prices)).catch(() => setPrices([]));
+  }, []);
+  const matching = (prices ?? []).filter((p) => priceMatches(p, order.intake.device));
+  const shown = (all || !matching.length ? prices ?? [] : matching).filter((p) => !query || `${p.brand} ${p.model} ${p.service}`.toLowerCase().includes(query.toLowerCase()));
+  return (
+    <Dialog title={r("order.fromPrices")} onClose={onClose} wide>
+      <div className="stack">
+        <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder={r("prices.search")} aria-label={r("prices.search")} />
+        {matching.length > 0 && (
+          <label className="check"><input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} /> {r("prices.showAll")}</label>
+        )}
+        <div className="part-picker">
+          {prices && shown.length === 0 && <p className="muted small">{r("prices.emptyHint")}</p>}
+          {shown.map((p) => (
+            <button type="button" key={p.id} className="list-row" onClick={() => onPick(p.id)}>
+              <span className="list-main">
+                <strong>{p.service}</strong>
+                <small className="muted">{[p.brand, p.model].filter(Boolean).join(" ") || r(`devices.${p.deviceType}`)}{p.minutes ? ` · ${r("prices.minutesShort", { n: p.minutes })}` : ""}</small>
+              </span>
+              <strong>{euro(p.priceCents)}</strong>
+            </button>
+          ))}
+        </div>
+      </div>
+    </Dialog>
+  );
+}
+
+function LendDialog({ onClose, onPick }: { onClose: () => void; onPick: (loanerId: string) => void }) {
+  const { r } = useRepairI18n();
+  const [loaners, setLoaners] = useState<Loaner[] | null>(null);
+  useEffect(() => {
+    api<{ loaners: Loaner[] }>("/repairs/loaners").then((d) => setLoaners(d.loaners)).catch(() => setLoaners([]));
+  }, []);
+  return (
+    <Dialog title={r("loaner.lend")} onClose={onClose}>
+      <div className="part-picker">
+        {loaners && loaners.length === 0 && <p className="muted small">{r("loaner.emptyHint")}</p>}
+        {(loaners ?? []).map((l) => (
+          <button type="button" key={l.id} className="list-row" disabled={!!l.orderId} onClick={() => onPick(l.id)}>
+            <span className="list-main">
+              <strong>{l.name}</strong>
+              <small className="muted">{l.orderId ? r("loaner.lentTo", { number: l.orderNumber ?? "", name: l.customerName ?? "" }) : [l.serial, l.note].filter(Boolean).join(" · ") || r("loaner.available")}</small>
+            </span>
+          </button>
+        ))}
       </div>
     </Dialog>
   );

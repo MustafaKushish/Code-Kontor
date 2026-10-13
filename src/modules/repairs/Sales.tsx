@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { Minus, Plus, Printer, Search, ShoppingCart, Smartphone, Trash2, UserRound } from "lucide-react";
+import { Minus, Plus, Printer, Search, ShoppingCart, Smartphone, Trash2, UserCheck, UserRound } from "lucide-react";
 import { api } from "../../api";
 import { Field } from "../../components";
 import {
   PAYMENT_METHODS, VAT_RATES, computeTotals,
-  type InvoiceKind, type PaymentMethod, type RepairInvoice, type RepairPart, type SaleLine, type UsedDevice,
+  type InvoiceKind, type PaymentMethod, type RepairCustomer, type RepairInvoice, type RepairPart, type SaleLine, type UsedDevice,
 } from "../../../shared/repairs";
 import { useRepairI18n } from "./i18n";
 import { Dialog, MoneyInput, deviceLabel } from "./parts";
@@ -25,6 +25,8 @@ export function SalesTab() {
   const [cart, setCart] = useState<CartLine[]>([]);
   const [customer, setCustomer] = useState(EMPTY_CUSTOMER);
   const [showCustomer, setShowCustomer] = useState(false);
+  const [customerId, setCustomerId] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<RepairCustomer[]>([]);
   const [payment, setPayment] = useState<PaymentMethod>("cash");
   const [smallBusiness, setSmallBusiness] = useState(false);
   const [other, setOther] = useState(false);
@@ -51,6 +53,17 @@ export function SalesTab() {
     }, query ? 200 : 0);
     return () => clearTimeout(timer);
   }, [query]);
+
+  // Bekannte Kunden vorschlagen, damit der Verkauf in der Kundenkartei landet
+  useEffect(() => {
+    if (!showCustomer || customerId) return setSuggestions([]);
+    const q = customer.phone.length >= 4 ? customer.phone : customer.name;
+    if (q.trim().length < 2) return setSuggestions([]);
+    const timer = setTimeout(() => {
+      api<{ customers: RepairCustomer[] }>(`/repairs/customers?q=${encodeURIComponent(q)}`).then((d) => setSuggestions(d.customers)).catch(() => {});
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [customer.name, customer.phone, customerId, showCustomer]);
 
   // Zubehör zuerst, dann Ersatzteile
   const sortedParts = [...parts].sort((a, b) => (a.category === b.category ? 0 : a.category === "accessory" ? -1 : 1));
@@ -80,10 +93,11 @@ export function SalesTab() {
     try {
       const { invoice } = await api<{ invoice: SaleInvoice }>("/repairs/sales", {
         method: "POST",
-        body: { lines: cart.map(({ key, stock, ...l }) => l), customer, paymentMethod: payment },
+        body: { lines: cart.map(({ key, stock, ...l }) => l), customer, customerId, paymentMethod: payment },
       });
       setCart([]);
       setCustomer(EMPTY_CUSTOMER);
+      setCustomerId(null);
       setShowCustomer(false);
       setPrinting(invoice);
       setQuery("");
@@ -169,8 +183,18 @@ export function SalesTab() {
 
         {showCustomer ? (
           <div className="grid form-grid">
-            <Field label={r("intake.name")}><input value={customer.name} onChange={(e) => setCustomer({ ...customer, name: e.target.value })} autoComplete="off" /></Field>
+            <Field label={r("intake.name")}><input value={customer.name} onChange={(e) => (setCustomer({ ...customer, name: e.target.value }), setCustomerId(null))} autoComplete="off" /></Field>
             <Field label={r("intake.phone")}><input type="tel" value={customer.phone} onChange={(e) => setCustomer({ ...customer, phone: e.target.value })} autoComplete="off" /></Field>
+            {customerId && <p className="wide success-text"><UserCheck size={15} /> {r("sale.knownCustomer")}</p>}
+            {suggestions.length > 0 && (
+              <div className="wide customer-suggestions">
+                {suggestions.slice(0, 5).map((c) => (
+                  <button type="button" key={c.id} className="chip" onClick={() => (setCustomer({ name: c.name, phone: c.phone, email: c.email, address: c.address ?? "" }), setCustomerId(c.id), setSuggestions([]))}>
+                    <UserCheck size={14} /> {c.name}{c.phone ? ` · ${c.phone}` : ""}
+                  </button>
+                ))}
+              </div>
+            )}
             <Field label={r("used.address")} wide><textarea rows={2} value={customer.address} onChange={(e) => setCustomer({ ...customer, address: e.target.value })} /></Field>
             <Field label={r("intake.email")} wide><input type="email" value={customer.email} onChange={(e) => setCustomer({ ...customer, email: e.target.value })} autoComplete="off" /></Field>
           </div>

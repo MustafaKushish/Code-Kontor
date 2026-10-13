@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { X } from "lucide-react";
-import { parseEuro, type RepairDevice, type RepairStatus } from "../../../shared/repairs";
+import { Check, Minus, X } from "lucide-react";
+import { CHECKS_FOR, parseEuro, type CheckItem, type CheckList, type CheckResult, type DeviceType, type RepairDevice, type RepairStatus } from "../../../shared/repairs";
 import { centsToInput, useRepairI18n } from "./i18n";
 
 const STATUS_TONE: Record<RepairStatus, string> = {
@@ -55,5 +55,62 @@ export function Dialog({ title, onClose, children, wide }: { title: string; onCl
       </div>
     </div>,
     document.body,
+  );
+}
+
+const NEXT_RESULT: Record<CheckResult | "none", CheckResult | undefined> = { none: "ok", ok: "fail", fail: "untested", untested: undefined };
+
+/**
+ * Funktions-Check: jeder Punkt wird durch Tippen ok → defekt → nicht prüfbar → leer geschaltet.
+ * „Alles ok“ setzt alle offenen Punkte auf ok.
+ */
+export function ChecksEditor({ type, value, onChange }: { type: DeviceType; value: CheckList; onChange: (v: CheckList) => void }) {
+  const { r } = useRepairI18n();
+  const items = CHECKS_FOR[type];
+  const cycle = (item: CheckItem) => {
+    const next = NEXT_RESULT[value[item] ?? "none"];
+    const copy = { ...value };
+    if (next) copy[item] = next;
+    else delete copy[item];
+    onChange(copy);
+  };
+  return (
+    <div className="stack-sm">
+      <div className="checks-grid">
+        {items.map((item) => {
+          const v = value[item];
+          return (
+            <button type="button" key={item} className={`check-chip ${v ?? ""}`} onClick={() => cycle(item)} aria-label={`${r(`checks.items.${item}`)}: ${v ? r(`checks.result.${v}`) : r("checks.open")}`}>
+              <span className="check-mark" aria-hidden>{v === "ok" ? <Check size={14} /> : v === "fail" ? <X size={14} /> : v === "untested" ? <Minus size={14} /> : null}</span>
+              {r(`checks.items.${item}`)}
+            </button>
+          );
+        })}
+      </div>
+      <div className="row wrap gap">
+        <button type="button" className="text-button" onClick={() => onChange({ ...Object.fromEntries(items.map((i) => [i, "ok"])), ...Object.fromEntries(Object.entries(value).filter(([, v]) => v !== "ok")) })}>{r("checks.allOk")}</button>
+        <button type="button" className="text-button" onClick={() => onChange(Object.fromEntries(items.map((i) => [i, "untested"])))}>{r("checks.noPower")}</button>
+        <small className="muted">{r("checks.hint")}</small>
+      </div>
+    </div>
+  );
+}
+
+/** Kurze Anzeige: defekte Punkte zuerst, dann wie viele ok sind. */
+export function ChecksSummary({ value, compare }: { value: CheckList; compare?: CheckList | null }) {
+  const { r } = useRepairI18n();
+  const entries = Object.entries(value) as [CheckItem, CheckResult][];
+  if (!entries.length) return <span className="muted">{r("checks.none")}</span>;
+  const fails = entries.filter(([, v]) => v === "fail").map(([k]) => k);
+  const untested = entries.filter(([, v]) => v === "untested").length;
+  const ok = entries.filter(([, v]) => v === "ok").length;
+  // Was bei Annahme ging und jetzt nicht mehr: deutlich markieren
+  const worse = compare ? fails.filter((k) => compare[k] === "ok") : [];
+  return (
+    <span className="checks-summary">
+      {fails.map((k) => <span key={k} className={`pill ${worse.includes(k) ? "neg" : "warn"}`}><X size={12} /> {r(`checks.items.${k}`)}</span>)}
+      {ok > 0 && <span className="pill pos"><Check size={12} /> {r("checks.okCount", { n: ok })}</span>}
+      {untested > 0 && <span className="pill">{r("checks.untestedCount", { n: untested })}</span>}
+    </span>
   );
 }

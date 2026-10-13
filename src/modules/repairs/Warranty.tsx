@@ -4,7 +4,7 @@ import { api } from "../../api";
 import { Link } from "../../components";
 import type { WarrantyRow } from "../../../shared/repairs";
 import { useRepairI18n } from "./i18n";
-import { startWarrantyClaim } from "./IntakeForm";
+import { startIntake } from "./IntakeForm";
 import { deviceLabel } from "./parts";
 
 type Filter = "active" | "expired" | "all";
@@ -32,7 +32,7 @@ export function WarrantyTab() {
   const activeCount = (rows ?? []).filter((w) => w.until >= today).length;
 
   const claim = (w: WarrantyRow) =>
-    startWarrantyClaim({
+    startIntake({
       ref: w.invoice,
       customer: w.customer,
       device: { type: w.device.type, brand: w.device.brand, model: w.device.model, serial: w.device.serial, color: w.device.color },

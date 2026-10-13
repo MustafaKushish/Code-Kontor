@@ -1,7 +1,7 @@
 import { Hono, type Context } from "hono";
 import type { Env } from "../index";
 import type { ModuleResult } from "../tenant";
-import type { RepairStore } from "./store";
+import { berlinDay, type RepairStore } from "./store";
 import { fail } from "../errors";
 import { decryptField, encryptField } from "../crypto";
 import { mailEnabled, sendMail } from "../mail";
@@ -10,7 +10,7 @@ import { hasAccess } from "../../shared/billing";
 import { renderRepairMail, type RepairMailKind } from "./mail";
 import {
   PAYMENT_METHODS, REPAIR_APP_ID, REPAIR_STATUSES, STATUS_GROUPS, computeTotals, sanitizeCustomer, sanitizeIntake, sanitizeItem, sanitizePart,
-  sanitizeRepairSettings, sanitizeSaleLine, sanitizeUsed, validateCustomer, validateIntake, validateUsed,
+  sanitizeChecks, sanitizeCustomerCard, sanitizePrice, sanitizeRepairSettings, sanitizeSaleLine, sanitizeUsed, validateCustomer, validateIntake, validateUsed,
   type InvoiceSnapshot, type PaymentMethod, type SaleLine, type RepairOrder, type RepairStatus, type StatusGroup,
 } from "../../shared/repairs";
 
@@ -199,9 +199,30 @@ repairRoutes.post("/orders/:id/pickup", async (c) => {
   const body = await readBody(c);
   const payment = (PAYMENT_METHODS.includes(body.paymentMethod as PaymentMethod) ? body.paymentMethod : "cash") as PaymentMethod;
   const tenantId = c.get("user").tenantId;
-  const result = await store(c.env, tenantId).pickUp(param(c, "id"), payment, await companyForInvoice(c.env, tenantId), actor(c), today());
+  const result = await store(c.env, tenantId).pickUp(param(c, "id"), payment, await companyForInvoice(c.env, tenantId), actor(c), today(), body.loanerReturned === true);
   if (!result.ok) return moduleError(c, result.code);
   audit(c, "repairPickedUp", { number: result.value.number, invoice: result.value.invoice?.number ?? null });
+  return orderResponse(c, result.value);
+});
+
+repairRoutes.put("/orders/:id/out-checks", async (c) => {
+  const result = await store(c.env, c.get("user").tenantId).saveOutChecks(param(c, "id"), sanitizeChecks((await readBody(c)).checks), actor(c));
+  if (!result.ok) return moduleError(c, result.code);
+  return orderResponse(c, result.value);
+});
+
+repairRoutes.post("/orders/:id/price", async (c) => {
+  const body = await readBody(c);
+  const result = await store(c.env, c.get("user").tenantId).applyPrice(param(c, "id"), typeof body.priceId === "string" ? body.priceId : "", actor(c));
+  if (!result.ok) return moduleError(c, result.code);
+  return orderResponse(c, result.value);
+});
+
+/** Leihgerät ausgeben ({ loanerId }) oder zurücknehmen ({ loanerId: null }). */
+repairRoutes.put("/orders/:id/loaner", async (c) => {
+  const body = await readBody(c);
+  const result = await store(c.env, c.get("user").tenantId).lend(param(c, "id"), typeof body.loanerId === "string" ? body.loanerId : null, actor(c));
+  if (!result.ok) return moduleError(c, result.code);
   return orderResponse(c, result.value);
 });
 
@@ -215,6 +236,44 @@ repairRoutes.delete("/orders/:id", managers, async (c) => {
 repairRoutes.get("/customers", async (c) => {
   const result = await store(c.env, c.get("user").tenantId).customers(c.req.query("q") ?? "", 10);
   return c.json({ customers: result.ok ? result.value : [] });
+});
+
+// ---------- Kundenkartei ----------
+
+repairRoutes.get("/customer-list", async (c) => {
+  const result = await store(c.env, c.get("user").tenantId).customerList(c.req.query("q") ?? "");
+  return c.json({ customers: result.ok ? result.value : [] });
+});
+
+repairRoutes.post("/customer-list", async (c) => {
+  const data = sanitizeCustomerCard(await readBody(c));
+  const errors = validateCustomer(data);
+  if (Object.keys(errors).length) return fail(c, "checkFields", 400, { errors });
+  const result = await store(c.env, c.get("user").tenantId).addCustomer(data);
+  if (!result.ok) return moduleError(c, result.code);
+  return c.json({ customer: result.value });
+});
+
+repairRoutes.get("/customer-list/:id", async (c) => {
+  const result = await store(c.env, c.get("user").tenantId).customerCard(param(c, "id"));
+  if (!result.ok || !result.value) return moduleError(c, "notFound");
+  return c.json(result.value);
+});
+
+repairRoutes.put("/customer-list/:id", async (c) => {
+  const data = sanitizeCustomerCard(await readBody(c));
+  const errors = validateCustomer(data);
+  if (Object.keys(errors).length) return fail(c, "checkFields", 400, { errors });
+  const result = await store(c.env, c.get("user").tenantId).saveCustomer(param(c, "id"), data);
+  if (!result.ok) return moduleError(c, result.code);
+  return c.json({ customer: result.value });
+});
+
+repairRoutes.delete("/customer-list/:id", managers, async (c) => {
+  const result = await store(c.env, c.get("user").tenantId).removeCustomer(param(c, "id"), actor(c));
+  if (!result.ok) return moduleError(c, result.code);
+  audit(c, "repairCustomerDeleted", { id: param(c, "id") });
+  return c.json({ ok: true });
 });
 
 repairRoutes.get("/invoices/:number", async (c) => {
@@ -265,6 +324,68 @@ repairRoutes.post("/parts/:id/stock", async (c) => {
 repairRoutes.delete("/parts/:id", managers, async (c) => {
   await store(c.env, c.get("user").tenantId).removePart(param(c, "id"));
   return c.json({ ok: true });
+});
+
+// ---------- Preisliste ----------
+
+repairRoutes.get("/prices", async (c) => {
+  const result = await store(c.env, c.get("user").tenantId).prices(c.req.query("q") ?? "");
+  return c.json({ prices: result.ok ? result.value : [] });
+});
+
+const savePrice = async (c: Ctx, id: string | null) => {
+  const price = sanitizePrice(await readBody(c));
+  if (!price) return fail(c, "checkFields", 400, { errors: { service: "required" } });
+  const result = await store(c.env, c.get("user").tenantId).savePrice(id, price);
+  if (!result.ok) return moduleError(c, result.code);
+  return c.json({ price: result.value });
+};
+repairRoutes.post("/prices", managers, (c) => savePrice(c, null));
+repairRoutes.put("/prices/:id", managers, (c) => savePrice(c, param(c, "id")));
+repairRoutes.delete("/prices/:id", managers, async (c) => {
+  await store(c.env, c.get("user").tenantId).removePrice(param(c, "id"));
+  return c.json({ ok: true });
+});
+
+// ---------- Leihgeräte ----------
+
+repairRoutes.get("/loaners", async (c) => {
+  const result = await store(c.env, c.get("user").tenantId).loaners();
+  return c.json({ loaners: result.ok ? result.value : [] });
+});
+
+const saveLoaner = async (c: Ctx, id: string | null) => {
+  const body = await readBody(c);
+  const text = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+  const data = { name: text(body.name, 120), serial: text(body.serial, 60), note: text(body.note, 500) };
+  if (!data.name) return fail(c, "checkFields", 400, { errors: { name: "required" } });
+  const result = await store(c.env, c.get("user").tenantId).saveLoaner(id, data);
+  if (!result.ok) return moduleError(c, result.code);
+  return c.json({ loaners: result.value });
+};
+repairRoutes.post("/loaners", (c) => saveLoaner(c, null));
+repairRoutes.put("/loaners/:id", (c) => saveLoaner(c, param(c, "id")));
+repairRoutes.delete("/loaners/:id", managers, async (c) => {
+  const result = await store(c.env, c.get("user").tenantId).removeLoaner(param(c, "id"));
+  if (!result.ok) return moduleError(c, result.code);
+  return c.json({ loaners: result.value });
+});
+
+// ---------- Kasse und Auswertung ----------
+
+
+repairRoutes.get("/cash", async (c) => {
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(c.req.query("day") ?? "") ? c.req.query("day")! : berlinDay(new Date().toISOString());
+  const result = await store(c.env, c.get("user").tenantId).cashDay(day);
+  if (!result.ok) return moduleError(c, result.code);
+  return c.json(result.value);
+});
+
+repairRoutes.get("/stats", managers, async (c) => {
+  const month = /^\d{4}-\d{2}$/.test(c.req.query("month") ?? "") ? c.req.query("month")! : berlinDay(new Date().toISOString()).slice(0, 7);
+  const result = await store(c.env, c.get("user").tenantId).stats(month);
+  if (!result.ok) return moduleError(c, result.code);
+  return c.json(result.value);
 });
 
 // ---------- An- und Verkauf ----------
@@ -319,7 +440,8 @@ repairRoutes.post("/sales", async (c) => {
   const customer = { name: text(raw.name, 120), phone: text(raw.phone, 40), email: text(raw.email, 200), address: text(raw.address, 300) };
   const payment = (PAYMENT_METHODS.includes(body.paymentMethod as PaymentMethod) ? body.paymentMethod : "cash") as PaymentMethod;
   const tenantId = c.get("user").tenantId;
-  const result = await store(c.env, tenantId).sell(lines as SaleLine[], customer, payment, await companyForInvoice(c.env, tenantId), actor(c), today());
+  const customerId = typeof body.customerId === "string" ? body.customerId : null;
+  const result = await store(c.env, tenantId).sell(lines as SaleLine[], customer, payment, await companyForInvoice(c.env, tenantId), actor(c), today(), customerId);
   if (!result.ok) return moduleError(c, result.code);
   audit(c, "repairSale", { invoice: result.value.number, cents: result.value.totalCents });
   return c.json({ invoice: result.value });

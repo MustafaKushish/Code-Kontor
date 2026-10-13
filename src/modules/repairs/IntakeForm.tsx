@@ -1,23 +1,29 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { ArrowLeft, Check, ShieldCheck, Smartphone, User, UserCheck, Wallet } from "lucide-react";
+import { ArrowLeft, Check, ListChecks, ShieldCheck, Smartphone, Tags, User, UserCheck, Wallet } from "lucide-react";
 import { api, ApiError } from "../../api";
 import { Field, Link } from "../../components";
 import { navigate } from "../../router";
 import { LANGUAGES } from "../../i18n";
 import {
-  ACCESSORIES, DEVICE_TYPES, isValidImei, looksLikeImei, normalizeSerial,
-  type RepairCustomer, type RepairErrors, type RepairIntake, type RepairOrder,
+  ACCESSORIES, DEVICE_TYPES, isValidImei, looksLikeImei, normalizeSerial, priceMatches,
+  type RepairCustomer, type RepairErrors, type RepairIntake, type RepairOrder, type RepairPrice,
 } from "../../../shared/repairs";
 import { useRepairI18n } from "./i18n";
-import { MoneyInput } from "./parts";
+import { ChecksEditor, MoneyInput } from "./parts";
 
 const BASE = "/app/handy-it";
 const CLAIM_KEY = "ck-repairs-warranty-claim";
 
-interface WarrantyClaim { ref: string; customer: Omit<RepairCustomer, "id" | "orders">; device: RepairIntake["device"] }
+interface IntakePrefill {
+  /** Garantiefall: Rechnungsnummer */
+  ref?: string;
+  customer: Pick<RepairCustomer, "name" | "phone" | "email">;
+  customerId?: string;
+  device?: RepairIntake["device"];
+}
 
-/** Garantiefall vormerken und die Annahme öffnen. */
-export function startWarrantyClaim(claim: WarrantyClaim) {
+/** Annahme mit vorausgefüllten Daten öffnen (Garantiefall oder Kunde aus der Kartei). */
+export function startIntake(claim: IntakePrefill) {
   try {
     sessionStorage.setItem(CLAIM_KEY, JSON.stringify(claim));
   } catch {
@@ -26,11 +32,11 @@ export function startWarrantyClaim(claim: WarrantyClaim) {
   navigate(`${BASE}/neu`);
 }
 
-function takeWarrantyClaim(): WarrantyClaim | null {
+function takePrefill(): IntakePrefill | null {
   try {
     const raw = sessionStorage.getItem(CLAIM_KEY);
     sessionStorage.removeItem(CLAIM_KEY);
-    return raw ? (JSON.parse(raw) as WarrantyClaim) : null;
+    return raw ? (JSON.parse(raw) as IntakePrefill) : null;
   } catch {
     return null;
   }
@@ -39,7 +45,7 @@ function takeWarrantyClaim(): WarrantyClaim | null {
 const BRANDS = ["Apple", "Samsung", "Xiaomi", "Google", "Huawei", "OnePlus", "Oppo", "Motorola", "Nokia", "Sony", "Lenovo", "HP", "Dell", "Asus", "Acer", "Microsoft", "Nintendo"];
 
 export function IntakeForm({ editId }: { editId?: string }) {
-  const { r, lang, repairError } = useRepairI18n();
+  const { r, lang, repairError, euro } = useRepairI18n();
   const [customer, setCustomer] = useState<Omit<RepairCustomer, "id">>({ name: "", phone: "", email: "" });
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [known, setKnown] = useState<RepairCustomer | null>(null);
@@ -47,8 +53,9 @@ export function IntakeForm({ editId }: { editId?: string }) {
   const [intake, setIntake] = useState<RepairIntake>({
     device: { type: "phone", brand: "", model: "", serial: "", color: "" },
     problem: "", accessories: [], accessoriesOther: "", condition: "", approvedUpToCents: 0, estimateCents: 0, depositCents: 0,
-    dataNotice: false, dueDay: "", internalNote: "", customerLang: lang, warrantyRef: "",
+    dataNotice: false, dueDay: "", internalNote: "", customerLang: lang, warrantyRef: "", checks: {}, planned: [],
   });
+  const [prices, setPrices] = useState<RepairPrice[]>([]);
   const [unlockCode, setUnlockCode] = useState("");
   const [hasUnlock, setHasUnlock] = useState(false);
   const [number, setNumber] = useState<number | null>(null);
@@ -75,11 +82,16 @@ export function IntakeForm({ editId }: { editId?: string }) {
   // Garantiefall aus der Garantie-Übersicht: Kunde und Gerät sind schon ausgefüllt
   useEffect(() => {
     if (editId) return;
-    const claim = takeWarrantyClaim();
+    const claim = takePrefill();
     if (!claim) return;
-    setCustomer(claim.customer);
-    setIntake((i) => ({ ...i, device: { ...i.device, ...claim.device }, warrantyRef: claim.ref }));
+    setCustomer({ name: claim.customer.name, phone: claim.customer.phone, email: claim.customer.email });
+    if (claim.customerId) setCustomerId(claim.customerId);
+    setIntake((i) => ({ ...i, device: { ...i.device, ...claim.device }, warrantyRef: claim.ref ?? "" }));
   }, [editId]);
+
+  useEffect(() => {
+    api<{ prices: RepairPrice[] }>("/repairs/prices").then((d) => setPrices(d.prices)).catch(() => {});
+  }, []);
 
   // Bekannte Kunden vorschlagen, während Name oder Telefon getippt wird
   useEffect(() => {
@@ -104,6 +116,14 @@ export function IntakeForm({ editId }: { editId?: string }) {
     setCustomerId(c.id);
     setKnown(c);
     setSuggestions([]);
+  };
+
+  // Passende Preise zum Gerät; Tippen merkt die Leistung vor und setzt den voraussichtlichen Preis
+  const matchingPrices = intake.device.brand || intake.device.model ? prices.filter((p) => priceMatches(p, intake.device)).slice(0, 12) : [];
+  const togglePlanned = (p: RepairPrice) => {
+    const on = intake.planned.some((x) => x.priceId === p.id);
+    const planned = on ? intake.planned.filter((x) => x.priceId !== p.id) : [...intake.planned, { priceId: p.id, name: p.service, cents: p.priceCents }];
+    set({ planned, estimateCents: planned.reduce((sum, x) => sum + x.cents, 0) });
   };
 
   const serialWarning = looksLikeImei(intake.device.serial) && normalizeSerial(intake.device.serial).length === 15 && !isValidImei(intake.device.serial);
@@ -203,6 +223,22 @@ export function IntakeForm({ editId }: { editId?: string }) {
           </Field>
         </div>
         <datalist id="repair-brands">{BRANDS.map((b) => <option key={b} value={b} />)}</datalist>
+        {matchingPrices.length > 0 && (
+          <div className="field">
+            <span className="field-label"><Tags size={15} /> {r("intake.pricesFor", { device: [intake.device.brand, intake.device.model].filter(Boolean).join(" ") })}</span>
+            <div className="chips wrap">
+              {matchingPrices.map((p) => {
+                const on = intake.planned.some((x) => x.priceId === p.id);
+                return (
+                  <button type="button" key={p.id} aria-pressed={on} className={on ? "chip active" : "chip"} onClick={() => togglePlanned(p)}>
+                    {on && <Check size={14} />} {p.service} · {euro(p.priceCents)}
+                  </button>
+                );
+              })}
+            </div>
+            <small className="muted">{r("intake.pricesHint")}</small>
+          </div>
+        )}
         <Field label={r("intake.problem")} error={fieldError("problem")} wide>
           <textarea rows={3} value={intake.problem} onChange={(e) => set({ problem: e.target.value })} placeholder={r("intake.problemHint")} />
         </Field>
@@ -227,6 +263,12 @@ export function IntakeForm({ editId }: { editId?: string }) {
         <label className="check">
           <input type="checkbox" checked={intake.dataNotice} onChange={(e) => set({ dataNotice: e.target.checked })} /> {r("intake.dataNotice")}
         </label>
+      </section>
+
+      <section className="card stack">
+        <h2 className="card-title"><ListChecks size={20} /> {r("checks.intakeTitle")}</h2>
+        <p className="muted small">{r("checks.intakeText")}</p>
+        <ChecksEditor type={intake.device.type} value={intake.checks} onChange={(checks) => set({ checks })} />
       </section>
 
       <section className="card stack">

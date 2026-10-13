@@ -79,6 +79,16 @@ export interface RepairIntake {
   customerLang: string;
   /** Garantiefall: Bezug auf die frühere Rechnung oder den früheren Auftrag (leer = normaler Auftrag) */
   warrantyRef: string;
+  /** Funktions-Check bei Annahme */
+  checks: CheckList;
+  /** Bei Annahme vorgemerkte Leistungen aus der Preisliste */
+  planned: PlannedService[];
+}
+
+export interface PlannedService {
+  priceId: string;
+  name: string;
+  cents: number;
 }
 
 export interface RepairCustomer {
@@ -86,6 +96,9 @@ export interface RepairCustomer {
   name: string;
   phone: string;
   email: string;
+  /** Nur in der Kundenkartei gesetzt */
+  address?: string;
+  note?: string;
   /** Anzahl Aufträge (nur in Listen gesetzt) */
   orders?: number;
 }
@@ -156,6 +169,10 @@ export interface RepairOrder {
   createdAt: string;
   updatedAt: string;
   createdBy: string | null;
+  /** Funktions-Check bei Ausgabe (null = noch nicht gemacht) */
+  outChecks: CheckList | null;
+  /** Ausgeliehenes Leihgerät, solange es nicht zurück ist */
+  loaner: { id: string; name: string; serial: string; lentAt: string } | null;
 }
 
 /** Kurzfassung für Listen */
@@ -304,6 +321,12 @@ export function sanitizeCustomer(input: unknown): Omit<RepairCustomer, "id"> {
   return { name: str(c.name, 120), phone: str(c.phone, 40), email: str(c.email, 200).toLowerCase() };
 }
 
+/** Kundenkartei: Kontakt plus Anschrift und Notiz. */
+export function sanitizeCustomerCard(input: unknown): { name: string; phone: string; email: string; address: string; note: string } {
+  const c = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  return { ...sanitizeCustomer(c), address: str(c.address, 300), note: str(c.note, 2000) };
+}
+
 export function validateCustomer(c: Omit<RepairCustomer, "id">): RepairErrors {
   const errors: RepairErrors = {};
   if (!c.name) errors.customerName = "required";
@@ -336,6 +359,12 @@ export function sanitizeIntake(input: unknown): RepairIntake {
     internalNote: str(i.internalNote, 2000),
     customerLang: typeof i.customerLang === "string" && LANG.test(i.customerLang) ? i.customerLang : "de",
     warrantyRef: str(i.warrantyRef, 40),
+    checks: sanitizeChecks(i.checks),
+    planned: (Array.isArray(i.planned) ? i.planned : []).slice(0, 10).flatMap((x) => {
+      const p = (x && typeof x === "object" ? x : {}) as Record<string, unknown>;
+      const name = str(p.name, 120);
+      return typeof p.priceId === "string" && name ? [{ priceId: p.priceId.slice(0, 64), name, cents: cents(p.cents) }] : [];
+    }),
   };
 }
 
@@ -505,4 +534,119 @@ export interface WarrantyRow {
   customer: { name: string; phone: string; email: string };
   from: string;
   until: string;
+}
+
+// ---------- Funktions-Check ----------
+
+export const CHECK_ITEMS = [
+  "power", "display", "touch", "frontCamera", "backCamera", "speaker", "earpiece", "microphone", "charging", "battery",
+  "wifi", "bluetooth", "mobile", "biometrics", "buttons", "keyboard", "trackpad", "ports", "storage",
+] as const;
+export type CheckItem = (typeof CHECK_ITEMS)[number];
+export type CheckResult = "ok" | "fail" | "untested";
+export type CheckList = Partial<Record<CheckItem, CheckResult>>;
+
+/** Welche Prüfpunkte je Gerätetyp angeboten werden. */
+export const CHECKS_FOR: Record<DeviceType, readonly CheckItem[]> = {
+  phone: ["power", "display", "touch", "frontCamera", "backCamera", "speaker", "earpiece", "microphone", "charging", "battery", "wifi", "bluetooth", "mobile", "biometrics", "buttons"],
+  tablet: ["power", "display", "touch", "frontCamera", "backCamera", "speaker", "microphone", "charging", "battery", "wifi", "bluetooth", "biometrics", "buttons"],
+  laptop: ["power", "display", "keyboard", "trackpad", "charging", "battery", "wifi", "bluetooth", "speaker", "microphone", "frontCamera", "ports", "storage"],
+  pc: ["power", "ports", "wifi", "bluetooth", "storage", "speaker"],
+  watch: ["power", "display", "touch", "charging", "battery", "bluetooth", "buttons", "speaker"],
+  console: ["power", "display", "ports", "wifi", "bluetooth", "buttons", "storage", "charging"],
+  other: ["power", "display", "buttons", "charging", "ports"],
+};
+
+export function sanitizeChecks(input: unknown): CheckList {
+  const c = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const out: CheckList = {};
+  for (const item of CHECK_ITEMS) if (c[item] === "ok" || c[item] === "fail" || c[item] === "untested") out[item] = c[item];
+  return out;
+}
+
+// ---------- Preisliste ----------
+
+export interface RepairPrice {
+  id: string;
+  deviceType: DeviceType;
+  brand: string;
+  /** Modell; leer = gilt für alle Modelle der Marke */
+  model: string;
+  /** Leistung, z. B. „Display tauschen“ */
+  service: string;
+  /** Endpreis für den Kunden inkl. Teil */
+  priceCents: number;
+  vatRate: number;
+  /** Teil aus dem Lager, das dabei verbaut wird */
+  partId: string | null;
+  /** Ungefähre Dauer in Minuten (0 = keine Angabe) */
+  minutes: number;
+}
+
+export function sanitizePrice(input: unknown): Omit<RepairPrice, "id"> | null {
+  const p = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const service = str(p.service, 120);
+  if (!service) return null;
+  return {
+    deviceType: DEVICE_TYPES.includes(p.deviceType as DeviceType) ? (p.deviceType as DeviceType) : "phone",
+    brand: str(p.brand, 60),
+    model: str(p.model, 100),
+    service,
+    priceCents: cents(p.priceCents),
+    vatRate: VAT_RATES.includes(p.vatRate as 19) ? (p.vatRate as number) : 19,
+    partId: typeof p.partId === "string" && p.partId ? p.partId.slice(0, 64) : null,
+    minutes: typeof p.minutes === "number" && Number.isFinite(p.minutes) ? Math.min(Math.max(Math.round(p.minutes), 0), 10_000) : 0,
+  };
+}
+
+/** Passt ein Preis zum Gerät? Marke muss stimmen (oder leer sein), Modell ebenso. */
+export function priceMatches(p: Pick<RepairPrice, "brand" | "model" | "deviceType">, device: Pick<RepairDevice, "brand" | "model" | "type">): boolean {
+  const norm = (v: string) => v.toLowerCase().replace(/\s+/g, " ").trim();
+  if (p.deviceType !== device.type) return false;
+  if (p.brand && norm(p.brand) !== norm(device.brand)) return false;
+  if (p.model && !norm(device.model).startsWith(norm(p.model))) return false;
+  return true;
+}
+
+// ---------- Leihgeräte ----------
+
+export interface Loaner {
+  id: string;
+  name: string;
+  serial: string;
+  note: string;
+  /** Ausgeliehen an Auftrag (null = verfügbar) */
+  orderId: string | null;
+  orderNumber: number | null;
+  customerName: string | null;
+  lentAt: string | null;
+}
+
+// ---------- Kasse ----------
+
+export interface CashDay {
+  day: string;
+  entries: {
+    at: string;
+    kind: "repair" | "sale" | "deposit" | "purchase";
+    /** Rechnungsnummer, Auftragsnummer oder Ankaufsnummer */
+    ref: string;
+    /** Für Links: Auftrag, Ankauf */
+    refId: string;
+    label: string;
+    method: PaymentMethod;
+    /** Positiv = Einnahme, negativ = Auszahlung */
+    cents: number;
+  }[];
+  byMethod: Record<PaymentMethod, { inCents: number; outCents: number }>;
+}
+
+export interface RepairStats {
+  month: string;
+  revenue: { repairCents: number; saleCents: number; invoices: number };
+  orders: { received: number; pickedUp: number; open: number; avgDays: number | null };
+  used: { bought: number; boughtCents: number; sold: number; soldCents: number; profitCents: number };
+  topModels: { label: string; n: number }[];
+  topServices: { label: string; n: number; cents: number }[];
+  daily: { day: string; cents: number }[];
 }

@@ -14,7 +14,7 @@ export type PrintKind = "intake" | "quote" | "invoice";
 type Company = InvoiceSnapshot["company"];
 
 /** Gemeinsamer Rahmen: Ebene über der App, Knöpfe, A4-Blatt mit Firmenkopf und Fußzeile. */
-function PrintFrame({ title, meta, company: given, onClose, children }: { title: string; meta: ReactNode; company?: Company | null; onClose: () => void; children: ReactNode }) {
+export function PrintFrame({ title, meta, company: given, onClose, children }: { title: string; meta: ReactNode; company?: Company | null; onClose: () => void; children: ReactNode }) {
   const { r } = useRepairI18n();
   const [company, setCompany] = useState<Company | null>(given ?? null);
 
@@ -161,6 +161,16 @@ export function PrintView({ kind, order, statusUrl, qr, settings, onClose }: {
             <section>
               <h2>{r("order.condition")}</h2>
               <p className="pre">{order.intake.condition}</p>
+            </section>
+          )}
+          {Object.keys(order.intake.checks ?? {}).length > 0 && (
+            <section>
+              <h2>{r("checks.intakeTitle")}</h2>
+              <p className="print-checks">
+                {Object.entries(order.intake.checks).map(([k, v]) => (
+                  <span key={k}>{v === "ok" ? "✓" : v === "fail" ? "✗" : "–"} {r(`checks.items.${k}`)}</span>
+                ))}
+              </p>
             </section>
           )}
           <section className="print-grid">

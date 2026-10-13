@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CalendarClock, ClipboardList, Hourglass, PackageCheck, PackageSearch, Plus, Receipt, Repeat, Search, Settings2, ShieldCheck, ShoppingCart, TriangleAlert, Wrench } from "lucide-react";
+import { CalendarClock, ClipboardList, Hourglass, PackageCheck, PackageSearch, Plus, Repeat, Search, Settings2, ShieldCheck, ShoppingCart, TriangleAlert, Users, Wallet, Wrench } from "lucide-react";
 import { api, type Me } from "../../api";
 import { AppIcon, Link } from "../../components";
 import { navigate } from "../../router";
@@ -14,12 +14,16 @@ import { SettingsTab } from "./Settings";
 import { SalesTab } from "./Sales";
 import { UsedTab } from "./Used";
 import { WarrantyTab } from "./Warranty";
+import { PricesPanel } from "./Prices";
+import { LoanersPanel } from "./Loaners";
+import { CustomersTab, CustomerCard } from "./Customers";
+import { CashDayPanel, StatsPanel } from "./Cash";
 import { StatusPill, deviceLabel } from "./parts";
 import "./repairs.css";
 
 export const BASE = "/app/handy-it";
 
-/** System „Handy- & IT-Service“: Aufträge, Verkauf, Ankauf, Lager, Garantie, Rechnungen, Einstellungen. */
+/** System „Handy- & IT-Service“: Aufträge, Verkauf, Ankauf, Kunden, Lager, Garantie, Kasse, Einstellungen. */
 export default function RepairsApp({ me, path }: { me: Me; path: string }) {
   const { r, appText, ready } = useRepairI18n();
   const app = findApp("handy-it")!;
@@ -31,17 +35,20 @@ export default function RepairsApp({ me, path }: { me: Me; path: string }) {
   if (section === "neu") return <IntakeForm />;
   if (section === "auftrag" && id) return sub === "bearbeiten" ? <IntakeForm editId={id} /> : <OrderDetail id={id} me={me} />;
 
-  const SECTIONS: Record<string, string> = { verkauf: "sales", ankauf: "used", lager: "stock", garantie: "warranty", rechnungen: "invoices" };
+  const SECTIONS: Record<string, string> = { verkauf: "sales", ankauf: "used", kunden: "customers", lager: "stock", garantie: "warranty", kasse: "cash", rechnungen: "cash" };
   const tab = SECTIONS[section ?? ""] ?? (section === "einstellungen" && isManager ? "settings" : "orders");
   const tabs = [
     { id: "orders", to: BASE, label: r("tabs.orders"), icon: ClipboardList },
     { id: "sales", to: `${BASE}/verkauf`, label: r("tabs.sales"), icon: ShoppingCart },
     { id: "used", to: `${BASE}/ankauf`, label: r("tabs.used"), icon: Repeat },
+    { id: "customers", to: `${BASE}/kunden`, label: r("tabs.customers"), icon: Users },
     { id: "stock", to: `${BASE}/lager`, label: r("tabs.stock"), icon: PackageSearch },
     { id: "warranty", to: `${BASE}/garantie`, label: r("tabs.warranty"), icon: ShieldCheck },
-    { id: "invoices", to: `${BASE}/rechnungen`, label: r("tabs.invoices"), icon: Receipt },
+    { id: "cash", to: `${BASE}/kasse`, label: r("tabs.cash"), icon: Wallet },
     ...(isManager ? [{ id: "settings", to: `${BASE}/einstellungen`, label: r("tabs.settings"), icon: Settings2 }] : []),
   ];
+  const stockSub = id === "preise" ? "prices" : id === "leihgeraete" ? "loaners" : "parts";
+  const cashSub = section === "rechnungen" ? "invoices" : id === "auswertung" && isManager ? "stats" : "day";
 
   return (
     <div className="stack-lg repairs">
@@ -65,10 +72,43 @@ export default function RepairsApp({ me, path }: { me: Me; path: string }) {
       {tab === "orders" && <OrdersTab />}
       {tab === "sales" && <SalesTab />}
       {tab === "used" && <UsedTab isManager={isManager} />}
-      {tab === "stock" && <StockTab isManager={isManager} />}
+      {tab === "customers" && (id ? <CustomerCard id={id} isManager={isManager} /> : <CustomersTab />)}
+      {tab === "stock" && (
+        <>
+          <SubNav current={stockSub} items={[
+            { id: "parts", to: `${BASE}/lager`, label: r("tabs.parts") },
+            { id: "prices", to: `${BASE}/lager/preise`, label: r("tabs.prices") },
+            { id: "loaners", to: `${BASE}/lager/leihgeraete`, label: r("tabs.loaners") },
+          ]} />
+          {stockSub === "parts" && <StockTab isManager={isManager} />}
+          {stockSub === "prices" && <PricesPanel isManager={isManager} />}
+          {stockSub === "loaners" && <LoanersPanel isManager={isManager} />}
+        </>
+      )}
+      {tab === "cash" && (
+        <>
+          <SubNav current={cashSub} items={[
+            { id: "day", to: `${BASE}/kasse`, label: r("tabs.cashDay") },
+            ...(isManager ? [{ id: "stats", to: `${BASE}/kasse/auswertung`, label: r("tabs.stats") }] : []),
+            { id: "invoices", to: `${BASE}/rechnungen`, label: r("tabs.invoices") },
+          ]} />
+          {cashSub === "day" && <CashDayPanel />}
+          {cashSub === "stats" && <StatsPanel />}
+          {cashSub === "invoices" && <InvoicesTab />}
+        </>
+      )}
       {tab === "warranty" && <WarrantyTab />}
-      {tab === "invoices" && <InvoicesTab />}
       {tab === "settings" && <SettingsTab />}
+    </div>
+  );
+}
+
+function SubNav({ current, items }: { current: string; items: { id: string; to: string; label: string }[] }) {
+  return (
+    <div className="chips sub-nav" role="tablist">
+      {items.map((i) => (
+        <button key={i.id} role="tab" aria-selected={current === i.id} className={current === i.id ? "chip active" : "chip"} onClick={() => navigate(i.to)}>{i.label}</button>
+      ))}
     </div>
   );
 }
