@@ -48,6 +48,16 @@ const MODULE_MIGRATIONS: Record<string, string[]> = {
 /** Antwort eines Modul-Aufrufs: Fehler kommen als Code zurück, weil eigene Fehlerklassen den Weg aus dem Durable Object nicht überstehen. */
 export type ModuleResult<T> = { ok: true; value: T } | { ok: false; code: string };
 
+/**
+ * Datenbank einer Firma. Alle Firmen-Datenbanken liegen nur in EU-Rechenzentren (Jurisdiktion „eu“),
+ * dieselbe Firmen-ID ergibt dort eine andere Datenbank als ohne Jurisdiktion.
+ */
+export function tenantStub(env: { TENANT_DB: DurableObjectNamespace<TenantDatabase>; LOCAL_NO_JURISDICTION?: string }, tenantId: string) {
+  // Nur lokal (wrangler dev kennt keine Jurisdiktionen) über .dev.vars abschaltbar, online immer EU
+  const ns = env.LOCAL_NO_JURISDICTION === "1" ? env.TENANT_DB : env.TENANT_DB.jurisdiction("eu");
+  return ns.get(ns.idFromName(tenantId));
+}
+
 export interface AuditEntry {
   id: number;
   at: string;

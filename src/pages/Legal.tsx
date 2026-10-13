@@ -97,8 +97,8 @@ export function PrivacyPage() {
 
       <h2>3. Hosting und Datenspeicherung</h2>
       <p>
-        Die Anwendung und alle Daten liegen bei Cloudflare, Inc., 101 Townsend St., San Francisco, CA 94107, USA. Jede Firma erhält eine
-        eigene, von anderen Kunden getrennte Datenbank. Daten werden bei der Übertragung verschlüsselt (HTTPS), besonders schützenswerte
+        Die Anwendung und alle Daten liegen bei Cloudflare, Inc., 101 Townsend St., San Francisco, CA 94107, USA. Die Datenbanken liegen
+        ausschließlich in Rechenzentren in der Europäischen Union. Jede Firma erhält eine eigene, von anderen Kunden getrennte Datenbank. Daten werden bei der Übertragung verschlüsselt (HTTPS), besonders schützenswerte
         Felder wie Steuer-ID, Sozialversicherungsnummer und IBAN zusätzlich verschlüsselt gespeichert. Cloudflare ist unter dem
         EU-US Data Privacy Framework zertifiziert; mit Cloudflare besteht ein Vertrag zur Auftragsverarbeitung. Beim Aufruf der Seiten
         verarbeitet Cloudflare technisch notwendige Verbindungsdaten (z. B. IP-Adresse, Zeitpunkt, aufgerufene Adresse), um die Seite

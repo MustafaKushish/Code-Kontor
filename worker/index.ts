@@ -4,7 +4,7 @@ import { secureHeaders } from "hono/secure-headers";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { hashPassword, hashToken, newSessionToken, passwordProblem, verifyPassword, DUMMY_PASSWORD_HASH } from "./auth";
 import { attemptKeys, clearFailures, isLocked, recordFailure } from "./throttle";
-import { TenantDatabase } from "./tenant";
+import { TenantDatabase, tenantStub } from "./tenant";
 import { sanitizeCompany, validateCompany } from "../shared/company";
 import { findApp } from "../shared/apps";
 import { fail } from "./errors";
@@ -33,6 +33,8 @@ export { TenantDatabase };
 export interface Env {
   PLATFORM_DB: D1Database;
   TENANT_DB: DurableObjectNamespace<TenantDatabase>;
+  /** Nur für wrangler dev: „1“ schaltet die EU-Jurisdiktion ab, die lokal nicht unterstützt wird */
+  LOCAL_NO_JURISDICTION?: string;
   ASSETS: Fetcher;
   /** Schlüssel für den KI-Assistenten (Google Gemini), gesetzt mit `wrangler secret put GEMINI_API_KEY`. */
   GEMINI_API_KEY?: string;
@@ -77,7 +79,7 @@ app.use(csrf());
 app.use(secureHeaders({ crossOriginResourcePolicy: "same-origin" }));
 
 function tenantDb(env: Env, tenantId: string) {
-  return env.TENANT_DB.get(env.TENANT_DB.idFromName(tenantId));
+  return tenantStub(env, tenantId);
 }
 
 async function startSession(c: Ctx, userId: string) {
