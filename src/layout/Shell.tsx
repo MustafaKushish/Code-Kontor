@@ -86,7 +86,7 @@ export function Shell({ me, path, onLogout, children }: { me: Me; path: string; 
           <div className="nav-group">
             <p className="nav-title">{t("nav.yourSystems")}</p>
             {apps.map((app) => (
-              <Link key={app.id} to={`/app/${app.id}`} className={path === `/app/${app.id}` ? "nav-item active" : "nav-item"}>
+              <Link key={app.id} to={`/app/${app.id}`} className={path.startsWith(`/app/${app.id}`) ? "nav-item active" : "nav-item"}>
                 <AppIcon app={app} size="sm" /> {appText(app.id).name}
               </Link>
             ))}

@@ -683,9 +683,9 @@ export const fr: Dict = {
     },
     "handy-it": {
       name: "Service téléphonie & informatique",
-      tagline: "Réparations, réception d'appareils et accessoires",
-      description: "Réception d'appareils avec numéro de série et panne, suivi de réparation par SMS ou e-mail, vente d'accessoires et rachat.",
-      features: ["Réception d'appareils", "Suivi de réparation", "Accessoires & stock", "Achat et vente", "Gestion des garanties"],
+      tagline: "Réparations de smartphones, tablettes, ordinateurs et montres connectées",
+      description: "Dépôt d'appareil avec IMEI et description de la panne, devis validé en ligne par le client, pièces détachées en stock, retrait avec facture et garantie, et une page de suivi pour vos clients.",
+      features: ["Dépôt avec bon de dépôt", "Page de suivi & e-mail pour les clients", "Devis avec validation en ligne", "Pièces & accessoires en stock", "Retrait avec facture & garantie"],
     },
     einzelhandel: {
       name: "Commerce de détail",

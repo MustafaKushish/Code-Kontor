@@ -683,9 +683,9 @@ export const es: Dict = {
     },
     "handy-it": {
       name: "Servicio de móviles e informática",
-      tagline: "Reparaciones, recepción de equipos y accesorios",
-      description: "Recepción de equipos con número de serie y avería, estado de reparación por SMS o correo, venta de accesorios y compra.",
-      features: ["Recepción de equipos", "Estado de reparación", "Accesorios y stock", "Compra y venta", "Gestión de garantías"],
+      tagline: "Reparación de móviles, tablets, portátiles y smartwatches",
+      description: "Recepción de equipos con IMEI y descripción de la avería, presupuesto que el cliente aprueba en línea, repuestos del almacén, entrega con factura y garantía, y una página de estado para tus clientes.",
+      features: ["Recepción con resguardo", "Página de estado y correo para clientes", "Presupuesto con aprobación en línea", "Repuestos y accesorios en almacén", "Entrega con factura y garantía"],
     },
     einzelhandel: {
       name: "Comercio minorista",
