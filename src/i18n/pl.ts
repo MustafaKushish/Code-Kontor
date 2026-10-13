@@ -676,7 +676,7 @@ export const pl: Dict = {
       features: ["Zlecenia naprawy", "Karta pojazdu", "Magazyn części", "Kosztorysy", "Portal statusu dla klientów"],
     },
     "handy-it": {
-      name: "Serwis IT i urządzeń smart",
+      name: "Serwis telefonów i IT",
       tagline: "Naprawy telefonów, tabletów, laptopów i smartwatchy",
       description: "Przyjęcie urządzenia z IMEI i opisem usterki, wycena akceptowana przez klienta online, części z magazynu, odbiór z fakturą i gwarancją oraz strona statusu dla Twoich klientów.",
       features: ["Przyjęcie z potwierdzeniem", "Strona statusu i e-mail dla klientów", "Wycena z akceptacją online", "Części i akcesoria w magazynie", "Odbiór z fakturą i gwarancją"],

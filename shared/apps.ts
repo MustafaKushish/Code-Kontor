@@ -47,7 +47,7 @@ export const CATALOG: CatalogApp[] = [
   },
   {
     id: "handy-it",
-    name: "IT- & Smartgeräte-Service",
+    name: "Handy- & IT-Service",
     tagline: "Reparaturen für Handy, Tablet, Laptop und Smartwatch",
     description:
       "Geräteannahme mit IMEI und Fehlerbild, Kostenvoranschlag mit Freigabe durch den Kunden, Ersatzteile aus dem Lager, Abholung mit Rechnung und Garantie und eine Statusseite für deine Kunden.",

@@ -676,7 +676,7 @@ export const en: Dict = {
       features: ["Repair orders", "Vehicle records", "Spare parts stock", "Estimates", "Status portal for customers"],
     },
     "handy-it": {
-      name: "IT & smart device service",
+      name: "Phone & IT service",
       tagline: "Repairs for phones, tablets, laptops and smartwatches",
       description: "Device intake with IMEI and fault description, estimates your customers approve online, spare parts from stock, pickup with invoice and warranty, and a status page for your customers.",
       features: ["Device intake with receipt", "Status page & email for customers", "Estimates with online approval", "Spare parts & accessories in stock", "Pickup with invoice & warranty"],

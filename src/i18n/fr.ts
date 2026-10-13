@@ -676,7 +676,7 @@ export const fr: Dict = {
       features: ["Ordres de réparation", "Dossier véhicule", "Stock de pièces", "Devis", "Portail de suivi clients"],
     },
     "handy-it": {
-      name: "Service informatique et appareils connectés",
+      name: "Service téléphonie & informatique",
       tagline: "Réparations de smartphones, tablettes, ordinateurs et montres connectées",
       description: "Dépôt d'appareil avec IMEI et description de la panne, devis validé en ligne par le client, pièces détachées en stock, retrait avec facture et garantie, et une page de suivi pour vos clients.",
       features: ["Dépôt avec bon de dépôt", "Page de suivi & e-mail pour les clients", "Devis avec validation en ligne", "Pièces & accessoires en stock", "Retrait avec facture & garantie"],

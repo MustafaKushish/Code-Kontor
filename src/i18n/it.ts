@@ -676,7 +676,7 @@ export const it: Dict = {
       features: ["Ordini di riparazione", "Scheda veicolo", "Magazzino ricambi", "Preventivi", "Portale di stato per clienti"],
     },
     "handy-it": {
-      name: "Assistenza IT e dispositivi smart",
+      name: "Assistenza telefoni & IT",
       tagline: "Riparazioni di smartphone, tablet, laptop e smartwatch",
       description: "Accettazione dei dispositivi con IMEI e descrizione del guasto, preventivo approvato online dal cliente, ricambi dal magazzino, ritiro con fattura e garanzia e una pagina di stato per i tuoi clienti.",
       features: ["Accettazione con ricevuta", "Pagina di stato ed e-mail per i clienti", "Preventivo con approvazione online", "Ricambi e accessori in magazzino", "Ritiro con fattura e garanzia"],

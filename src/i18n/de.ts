@@ -677,7 +677,7 @@ export const de = {
       features: ["Reparaturaufträge", "Fahrzeugakte", "Ersatzteillager", "Kostenvoranschläge", "Status-Portal für Kunden"],
     },
     "handy-it": {
-      name: "IT- & Smartgeräte-Service",
+      name: "Handy- & IT-Service",
       tagline: "Reparaturen für Handy, Tablet, Laptop und Smartwatch",
       description: "Geräteannahme mit IMEI und Fehlerbild, Kostenvoranschlag mit Freigabe durch den Kunden, Ersatzteile aus dem Lager, Abholung mit Rechnung und Garantie und eine Statusseite für deine Kunden.",
       features: ["Geräteannahme mit Annahmeschein", "Statusseite & E-Mail für Kunden", "Kostenvoranschlag mit Online-Freigabe", "Ersatzteile & Zubehör im Lager", "Abholung mit Rechnung & Garantie"],
