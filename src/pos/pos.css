@@ -63,8 +63,11 @@
 .pos-order-totals { padding: 8px 14px; border-top: 1px solid var(--line-strong); display: grid; gap: 2px; }
 .pos-order-totals p { display: flex; justify-content: space-between; margin: 0; font-variant-numeric: tabular-nums; font-size: 0.88rem; }
 .pos-order-totals .grand { font-size: 1.2rem; font-weight: 700; color: var(--ink); }
-.pos-order-actions { display: flex; gap: 6px; padding: 6px 10px; border-top: 1px solid var(--line); }
-.pos-order-actions .button { min-height: 40px; padding: 4px 12px; font-size: 0.92rem; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pos-order-actions { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; padding: 6px; border-top: 1px solid var(--line); }
+.pos-order-actions .button {
+  display: grid; justify-items: center; gap: 2px; min-height: 52px; padding: 4px 2px; border-radius: 10px; font-size: 0.78rem; font-weight: 600;
+}
+.pos-order-actions .button span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pos-order-actions .button.set { border-color: var(--brand); color: var(--brand); }
 .pos-pad { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--line); }
 .pos-pad button {
@@ -78,8 +81,19 @@
 .pos-pad button.mode.active { box-shadow: inset 0 0 0 2px var(--brand); color: var(--brand); }
 .pos-pad button.sign { background: var(--warn-soft); }
 .pos-pad button.back { background: color-mix(in srgb, var(--error) 18%, var(--panel)); color: var(--error); }
-.pos-pay { min-height: 60px; font-size: 1.15rem; border-radius: 0; border: none; background: var(--primary-bg); color: var(--primary-fg); justify-content: center; }
+.pos-pay-row { display: grid; grid-template-columns: 1fr 1fr auto; }
+.pos-pay {
+  min-height: 64px; font-size: 1.15rem; border-radius: 0; border: none; justify-content: center; gap: 10px;
+  background: var(--primary-bg); color: var(--primary-fg);
+}
+.pos-pay span { display: grid; text-align: start; line-height: 1.15; }
+.pos-pay small { font-size: 0.85rem; font-weight: 500; opacity: 0.85; font-variant-numeric: tabular-nums; }
+.pos-pay.pay-cash { background: var(--success); color: #fff; }
+.pos-pay.pay-card { border-inline-start: 1px solid color-mix(in srgb, var(--primary-fg) 25%, transparent); }
+.pos-pay.pay-more { width: 60px; padding: 0; background: var(--panel-2); color: var(--ink); border-inline-start: 1px solid var(--line); }
 .pos-pay:disabled { opacity: 0.5; }
+.pos-pay-row:not(:has(.pay-card)) { grid-template-columns: 1fr auto; }
+.pos-recent { max-height: 60vh; overflow-y: auto; }
 .pos-done { display: grid; justify-items: center; gap: 8px; padding: 22px 16px; text-align: center; color: var(--success); }
 .pos-done strong { color: var(--ink); font-size: 1.05rem; }
 .pos-done-change { font-size: 1.4rem; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }

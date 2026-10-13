@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { Camera, CheckCircle2, Delete, NotebookPen, PlusCircle, Printer, ScanBarcode, Search, Trash2, UserRound } from "lucide-react";
+import { Banknote, Camera, CheckCircle2, CreditCard, Delete, Ellipsis, History, NotebookPen, PlusCircle, Printer, ScanBarcode, Search, Undo2, UserRound } from "lucide-react";
 import { api } from "../api";
 import { Field } from "../components";
 import { formatRate, standardVat, vatChoices } from "../money";
-import { cleanBarcode, computeTotals, type PosArticle, type PosCustomer, type PosLine, type Receipt } from "../../shared/pos";
+import { cleanBarcode, computeTotals, type Payment, type PosArticle, type PosCustomer, type PosLine, type Receipt, type ReceiptRow } from "../../shared/pos";
 import { usePosI18n } from "./i18n";
 import { PayPanel, usePosSettings } from "./PayPanel";
 import { ReceiptPrint } from "./Print";
+import { ReceiptDialog } from "./Receipts";
+import { deviceRegisterId } from "./registers";
 import { Dialog, MoneyInput } from "./ui";
 import { CameraScan, cameraScanAvailable, useScanner } from "./scanner";
 import { ItemDialog } from "./Items";
@@ -56,7 +58,10 @@ export function Register({ isManager, kiosk }: { isManager: boolean; kiosk?: boo
   const [buffer, setBuffer] = useState<string | null>(null);
   const [customer, setCustomer] = useState<PosCustomer>(EMPTY_CUSTOMER);
   const [note, setNote] = useState("");
-  const [dialog, setDialog] = useState<"customer" | "note" | "free" | "pay" | "camera" | null>(null);
+  const [dialog, setDialog] = useState<"customer" | "note" | "free" | "pay" | "camera" | "recent" | null>(null);
+  const [last, setLast] = useState<Receipt | null>(null);
+  const [opened, setOpened] = useState<string | null>(null);
+  const [paying, setPaying] = useState(false);
   const [creating, setCreating] = useState<string | null>(null);
   const [loanerBack, setLoanerBack] = useState(false);
   const [done, setDone] = useState<{ receipt: Receipt | null } | null>(null);
@@ -181,7 +186,7 @@ export function Register({ isManager, kiosk }: { isManager: boolean; kiosk?: boo
     }
   };
 
-  const busy = dialog !== null || creating !== null || printing !== null;
+  const busy = dialog !== null || creating !== null || printing !== null || opened !== null;
   useScanner((code) => void scan(code), !busy);
 
   // ---------- Ziffernblock ----------
@@ -240,7 +245,7 @@ export function Register({ isManager, kiosk }: { isManager: boolean; kiosk?: boo
   const loaner = cart.find((l) => l.loaner)?.loaner;
   const count = cart.reduce((s, l) => s + (canQty(l) ? Math.abs(l.qty) : 1), 0);
 
-  const pay = async (payments: { method: string; cents: number }[]) => {
+  const pay = async (payments: Payment[]) => {
     const { receipt } = await api<{ receipt: Receipt | null }>("/pos/checkout", {
       method: "POST",
       body: {
@@ -259,9 +264,33 @@ export function Register({ isManager, kiosk }: { isManager: boolean; kiosk?: boo
     setLoanerBack(false);
     setQuery("");
     setDone({ receipt });
+    if (receipt) setLast(receipt);
     setView("order");
     loadCatalog();
     if (receipt && settings?.print !== "ask") setPrinting(settings?.print ?? null);
+  };
+
+  /** Ein Tipp: genau passend bar oder mit Karte (nach „Zahlung erfolgt“ am Terminal). */
+  const quickPay = async (method: "cash" | "card") => {
+    if (loaner && !loanerBack) return setDialog("pay");
+    setPaying(true);
+    setError("");
+    try {
+      await pay(due === 0 ? [] : [{ method, cents: due }]);
+    } catch (e) {
+      setError(posError(e));
+      setView("order");
+    } finally {
+      setPaying(false);
+    }
+  };
+  const cardOn = settings?.methods.includes("card") ?? false;
+
+  /** Storno: offenen Bon leeren, sonst den gerade gebuchten Beleg öffnen (dort mit Gegenbeleg stornieren). */
+  const storno = () => {
+    if (cart.length) {
+      if (confirm(p("sell.voidConfirm"))) (setCart([]), setSelected(null), setNote(""), setCustomer(EMPTY_CUSTOMER));
+    } else if (last) setOpened(last.number);
   };
 
   const inCart = (a: PosArticle) => !!a.single && cart.some((l) => l.kind === a.kind && l.refId === a.refId);
@@ -360,9 +389,11 @@ export function Register({ isManager, kiosk }: { isManager: boolean; kiosk?: boo
         </div>
 
         <div className="pos-order-actions">
-          <button className={`button ${customer.name ? "set" : ""}`} onClick={() => setDialog("customer")}><UserRound size={16} /> {customer.name || p("sell.customer")}</button>
-          <button className={`button ${note ? "set" : ""}`} onClick={() => setDialog("note")}><NotebookPen size={16} /> {p("sell.note")}</button>
-          {cart.length > 0 && <button className="button icon-only push-end" onClick={() => (setCart([]), setSelected(null))} aria-label={p("sell.clear")} title={p("sell.clear")}><Trash2 size={16} /></button>}
+          <button className={`button ${customer.name ? "set" : ""}`} onClick={() => setDialog("customer")} title={customer.name || p("sell.customer")}><UserRound size={17} /> <span>{customer.name || p("sell.customer")}</span></button>
+          <button className={`button ${note ? "set" : ""}`} onClick={() => setDialog("note")} title={p("sell.noteTitle")}><NotebookPen size={17} /> <span>{p("sell.note")}</span></button>
+          <button className="button" onClick={storno} disabled={!cart.length && !last} title={cart.length ? p("sell.voidCart") : p("sell.voidLast")}><Undo2 size={17} /> <span>{p("sell.void")}</span></button>
+          <button className="button" onClick={() => last && setPrinting("bon")} disabled={!last} title={p("sell.printLast")}><Printer size={17} /> <span>{p("sell.bon")}</span></button>
+          <button className="button" onClick={() => setDialog("recent")} title={p("sell.recentTitle")}><History size={17} /> <span>{p("sell.recent")}</span></button>
         </div>
 
         <div className="pos-pad">
@@ -375,9 +406,19 @@ export function Register({ isManager, kiosk }: { isManager: boolean; kiosk?: boo
           ))}
         </div>
 
-        <button className="button pos-pay" disabled={payable.length === 0} onClick={() => setDialog("pay")}>
-          {p("sell.payButton")}{payable.length > 0 ? ` · ${money(Math.abs(due))}` : ""}
-        </button>
+        <div className="pos-pay-row">
+          <button className="button pos-pay pay-cash" disabled={payable.length === 0 || paying} onClick={() => quickPay("cash")}>
+            <Banknote size={22} aria-hidden /> <span>{p("methods.cash")}{payable.length > 0 ? <small>{money(Math.abs(due))}</small> : null}</span>
+          </button>
+          {cardOn && (
+            <button className="button pos-pay pay-card" disabled={payable.length === 0 || paying} onClick={() => quickPay("card")}>
+              <CreditCard size={22} aria-hidden /> <span>{p("methods.card")}{payable.length > 0 ? <small>{money(Math.abs(due))}</small> : null}</span>
+            </button>
+          )}
+          <button className="button pos-pay pay-more" disabled={payable.length === 0 || paying} onClick={() => setDialog("pay")} aria-label={p("sell.payMore")} title={p("sell.payMore")}>
+            <Ellipsis size={22} />
+          </button>
+        </div>
       </section>
 
       <nav className="pos-switch" aria-label={p("sell.order")}>
@@ -408,7 +449,9 @@ export function Register({ isManager, kiosk }: { isManager: boolean; kiosk?: boo
           />
         </Dialog>
       )}
-      {printing && done?.receipt && <ReceiptPrint receipt={done.receipt} format={printing} onClose={() => setPrinting(null)} />}
+      {printing && (done?.receipt ?? last) && <ReceiptPrint receipt={(done?.receipt ?? last)!} format={printing} onClose={() => setPrinting(null)} />}
+      {dialog === "recent" && <RecentDialog onClose={() => setDialog(null)} onOpen={(n) => (setDialog(null), setOpened(n))} />}
+      {opened && <ReceiptDialog number={opened} isManager={isManager} onClose={() => setOpened(null)} onChanged={() => (loadCatalog(), setDone(null))} onOpen={setOpened} />}
     </div>
   );
 }
@@ -467,6 +510,43 @@ function FreeLineDialog({ onClose, onAdd }: { onClose: () => void; onAdd: (l: { 
         </div>
         <button className="button primary" disabled={!name.trim() || !cents}>{p("sell.add")}</button>
       </form>
+    </Dialog>
+  );
+}
+
+/** Letzte Belege dieses Kassenplatzes von heute, z. B. wenn ein Kunde seinen Kassenzettel vergessen hat. */
+function RecentDialog({ onClose, onOpen }: { onClose: () => void; onOpen: (number: string) => void }) {
+  const { p, money, time, posError } = usePosI18n();
+  const [rows, setRows] = useState<ReceiptRow[] | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    // Der Server zählt Tage nach deutscher Ortszeit
+    const day = new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Berlin" });
+    api<{ receipts: ReceiptRow[] }>(`/pos/receipts?day=${day}&register=${encodeURIComponent(deviceRegisterId())}`)
+      .then((d) => setRows(d.receipts.slice(0, 30)))
+      .catch((e) => setError(posError(e)));
+  }, []);
+  return (
+    <Dialog title={p("sell.recentTitle")} onClose={onClose}>
+      <div className="stack-sm">
+        <p className="muted small">{p("sell.recentHint")}</p>
+        {error && <p className="error">{error}</p>}
+        {rows && rows.length === 0 && <p className="muted">{p("receipts.empty")}</p>}
+        <div className="list-card pos-recent">
+          {rows?.map((r) => (
+            <button key={r.number} className="list-row pos-article" onClick={() => onOpen(r.number)}>
+              <span className="list-main">
+                <strong>{r.number}{r.canceledBy && <span className="pos-badge cancel">{p("receipts.canceled")}</span>}</strong>
+                <small className="muted">{[time(r.issuedAt), r.label].filter(Boolean).join(" · ")}</small>
+              </span>
+              <span className="pos-row-meta">
+                <strong className={r.dueCents < 0 ? "error" : ""}>{money(r.dueCents)}</strong>
+                <small className="muted">{r.payments.map((x) => p(`methods.${x.method}`)).join(" + ")}</small>
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
     </Dialog>
   );
 }
