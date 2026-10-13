@@ -26,6 +26,7 @@ import {
 } from "../shared/time";
 import { newRecoveryCodes, newTotpSecret, normalizeRecoveryCode, otpauthUrl, verifyTotp } from "./totp";
 import type { CompanyProfile } from "../shared/company";
+import { repairRoutes, repairStatusRoutes } from "./repairs/routes";
 
 export { TenantDatabase };
 
@@ -480,6 +481,9 @@ async function stamp(env: Env, tenantId: string, employeeId: string, source: "ap
   await db.addTimeEntry({ employeeId, kind, at, source, note: "" }, userId);
   return { kind, at, duplicate: false };
 }
+
+// Reparatur-Status für Endkunden (Handy- & IT-Service), ohne Anmeldung
+app.route("/repair-status", repairStatusRoutes);
 
 // ---------- Ab hier nur mit Anmeldung ----------
 
@@ -1312,6 +1316,10 @@ app.post("/assistant", async (c) => {
   });
   return new Response(stream, { headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store" } });
 });
+
+// ---------- Branchen-Systeme ----------
+
+app.route("/repairs", repairRoutes);
 
 app.notFound((c) => fail(c, "notFound", 404));
 

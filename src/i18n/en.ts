@@ -677,9 +677,9 @@ export const en: Dict = {
     },
     "handy-it": {
       name: "Phone & IT service",
-      tagline: "Repairs, device intake and accessory sales",
-      description: "Device intake with serial number and fault description, repair status by SMS or email, accessory sales and buy-back.",
-      features: ["Device intake", "Repair status for customers", "Accessories & stock", "Buy & sell", "Warranty management"],
+      tagline: "Repairs for phones, tablets, laptops and smartwatches",
+      description: "Device intake with IMEI and fault description, estimates your customers approve online, spare parts from stock, pickup with invoice and warranty, and a status page for your customers.",
+      features: ["Device intake with receipt", "Status page & email for customers", "Estimates with online approval", "Spare parts & accessories in stock", "Pickup with invoice & warranty"],
     },
     einzelhandel: {
       name: "Retail",
