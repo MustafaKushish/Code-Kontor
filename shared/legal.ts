@@ -4,12 +4,12 @@
 export const OPERATOR = {
   name: "Mustafa Al-Zurgany",
   business: "Code Kontor",
-  street: "",
-  postalCode: "",
-  city: "",
+  street: "Nürnberger Str. 10 A",
+  postalCode: "92318",
+  city: "Neumarkt in der Oberpfalz",
   country: "Deutschland",
-  email: "",
-  phone: "",
+  email: "mustafa.alzurgany@gmail.com",
+  phone: "+49 176 41744443",
   /** Umsatzsteuer-Identifikationsnummer nach § 27a UStG, falls vorhanden */
   vatId: "",
   /** z. B. „Kleinunternehmer nach § 19 UStG“ */
