@@ -12,6 +12,8 @@ import { Team } from "./pages/Team";
 import { Settings } from "./pages/Settings";
 import { AccountPage } from "./pages/Account";
 import { AccountingPage } from "./pages/Accounting";
+import { TimePage } from "./pages/Time";
+import { TerminalPage } from "./pages/Terminal";
 import { findApp } from "../shared/apps";
 
 export function App() {
@@ -40,6 +42,10 @@ export function App() {
     setMe(null);
     navigate("/");
   };
+
+  // Stempeluhr: eigene Ansicht ohne Anmeldung
+  const [, firstPart, terminalToken] = path.split("/");
+  if (firstPart === "terminal" && terminalToken) return <TerminalPage token={terminalToken} />;
 
   if (loading) return <div className="splash"><img src="/icon.svg" alt="" width={56} height={56} /></div>;
 
@@ -79,6 +85,8 @@ export function App() {
     page = <Team me={me} />;
   } else if (section === "buchhaltung" && isManager) {
     page = <AccountingPage me={me} />;
+  } else if (section === "zeiten") {
+    page = <TimePage me={me} />;
   } else if (section === "konto") {
     page = <AccountPage me={me} onChanged={refresh} />;
   } else if (section === "einstellungen") {

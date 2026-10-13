@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Calculator, CornerDownLeft, LayoutDashboard, Search, Settings, ShieldCheck, Store, Users } from "lucide-react";
+import { Calculator, Clock, CornerDownLeft, LayoutDashboard, Search, Settings, ShieldCheck, Store, Users } from "lucide-react";
 import type { Me } from "../api";
 import { AppIcon } from "../components";
 import { navigate } from "../router";
@@ -24,6 +24,7 @@ export function CommandPalette({ me, open, onClose }: { me: Me; open: boolean; o
   const entries = useMemo<Entry[]>(() => {
     const pages: Entry[] = [
       { id: "home", label: t("nav.overview"), hint: t("palette.page"), to: "/", icon: <LayoutDashboard size={18} /> },
+      { id: "time", label: t("nav.time"), hint: t("palette.page"), to: "/zeiten", icon: <Clock size={18} /> },
       { id: "catalog", label: t("nav.catalog"), hint: t("palette.page"), to: "/katalog", icon: <Store size={18} /> },
       { id: "company", label: t("palette.companyData"), hint: t("palette.page"), to: "/einstellungen", icon: <Settings size={18} /> },
       { id: "account", label: t("nav.account"), hint: t("palette.page"), to: "/konto", icon: <ShieldCheck size={18} /> },

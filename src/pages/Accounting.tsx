@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Briefcase, CalendarDays, Download, Lock, Pencil, Plus, Save, Send, Trash2, UserRound, Users, Wallet, X } from "lucide-react";
+import { Briefcase, CalendarDays, Clock, Download, Lock, Pencil, Plus, Save, Send, Trash2, UserRound, Users, Wallet, X } from "lucide-react";
 import { api, ApiError, type Me } from "../api";
 import { Avatar, Field } from "../components";
 import { useI18n } from "../i18n";
@@ -114,7 +114,9 @@ function EmployeesTab({ employees, onChanged }: { employees: Employee[]; onChang
 }
 
 function EmployeeEditor({ employee, onClose, onSaved }: { employee: Employee | null; onClose: () => void; onSaved: () => void }) {
-  const { t, errorText } = useI18n();
+  const { t, errorText, lang } = useI18n();
+  // 2024-01-01 war ein Montag
+  const weekdayName = (d: number) => new Intl.DateTimeFormat(lang, { weekday: "short", timeZone: "UTC" }).format(new Date(Date.UTC(2024, 0, d)));
   const [form, setForm] = useState<EmployeeForm>(() => {
     if (!employee) return { ...emptyEmployee, startDate: new Date().toISOString().slice(0, 10) };
     const { id: _id, personnelNumber: _nr, ...rest } = employee;
@@ -123,6 +125,10 @@ function EmployeeEditor({ employee, onClose, onSaved }: { employee: Employee | n
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [users, setUsers] = useState<{ id: string; name: string; email: string }[]>([]);
+  useEffect(() => {
+    api<{ users: { id: string; name: string; email: string }[] }>("/users").then((r) => setUsers(r.users)).catch(() => setUsers([]));
+  }, []);
 
   const set = <K extends keyof EmployeeForm>(key: K, value: EmployeeForm[K]) => setForm((f) => ({ ...f, [key]: value }));
   const text = (key: keyof EmployeeForm, props: { type?: string; autoComplete?: string; inputMode?: "numeric" | "decimal" } = {}) => (
@@ -199,6 +205,33 @@ function EmployeeEditor({ employee, onClose, onSaved }: { employee: Employee | n
         <Field label={t("accounting.startDate")} error={err("startDate")}>{text("startDate", { type: "date" })}</Field>
         <Field label={t("accounting.endDate")} error={err("endDate")} hint={t("accounting.endDateHint")}>{text("endDate", { type: "date" })}</Field>
         <Field label={t("accounting.vacationDays")}>{text("vacationDays", { type: "number", inputMode: "decimal" })}</Field>
+      </section>
+
+      <section className="card form-grid">
+        <h3 className="card-title wide"><Clock size={20} /> {t("accounting.sectionTime")}</h3>
+        <Field label={t("accounting.chipId")} error={err("chipId")} hint={t("accounting.chipIdHint")}>{text("chipId")}</Field>
+        <Field label={t("accounting.linkedUser")} error={err("userId")} hint={t("accounting.linkedUserHint")}>
+          <select value={form.userId} onChange={(e) => set("userId", e.target.value)}>
+            <option value="">{t("accounting.linkedUserNone")}</option>
+            {users.map((u) => <option key={u.id} value={u.id}>{u.name} ({u.email})</option>)}
+          </select>
+        </Field>
+        <fieldset className="wide weekdays">
+          <legend>{t("accounting.workDays")}</legend>
+          {[1, 2, 3, 4, 5, 6, 7].map((d) => (
+            <label key={d} className={`weekday ${form.workDays.includes(d) ? "on" : ""}`}>
+              <input
+                type="checkbox" checked={form.workDays.includes(d)}
+                onChange={(e) => set("workDays", e.target.checked ? [...form.workDays, d].sort() : form.workDays.filter((x) => x !== d))}
+              />
+              {weekdayName(d)}
+            </label>
+          ))}
+        </fieldset>
+        <Field label={t("accounting.openingBalance")} hint={t("accounting.openingBalanceHint")}>
+          <input type="number" inputMode="decimal" step="any" value={form.openingBalance || ""} placeholder="0" onChange={(e) => set("openingBalance", Number(e.target.value) || 0)} />
+        </Field>
+        <Field label={t("accounting.vacationCarryover")} hint={t("accounting.vacationCarryoverHint")}>{text("vacationCarryover", { type: "number", inputMode: "decimal" })}</Field>
       </section>
 
       <section className="card form-grid">
@@ -283,6 +316,15 @@ function MonthTab({ me, employees, advisor, onGoAdvisor }: { me: Me; employees: 
   };
 
   const save = () => run(async () => { await persist(); return t("accounting.monthSaved"); });
+  const fromTime = () => run(async () => {
+    const r = await api<{ entries: { employeeId: string; hours: number; overtimeHours: number; vacationDays: number; sickDays: number }[] }>(`/accounting/month/${month}/from-time`);
+    setRows((current) => {
+      const next = { ...current };
+      for (const { employeeId, ...values } of r.entries) next[employeeId] = { ...(current[employeeId] ?? emptyRow), ...values };
+      return next;
+    });
+    return t("accounting.fromTimeDone");
+  });
   const download = () => run(async () => { await persist(); window.location.href = `/api/accounting/month/${month}/export`; });
   const send = () => run(async () => {
     await persist();
@@ -307,6 +349,7 @@ function MonthTab({ me, employees, advisor, onGoAdvisor }: { me: Me; employees: 
           <input type="month" value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} />
         </Field>
         <p className="muted">{t("accounting.monthHint")}</p>
+        <button className="button" onClick={fromTime} disabled={busy || !loaded}><Clock size={18} /> {t("accounting.fromTime")}</button>
       </div>
 
       <section className="card month-card">

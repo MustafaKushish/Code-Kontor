@@ -847,3 +847,88 @@ input[aria-invalid="true"] { border-color: var(--error); }
   .actions .button { flex: 1 1 auto; justify-content: center; }
   .billing-interval small { font-size: 0.7rem; }
 }
+
+/* ---------- Zeiten ---------- */
+.time-me { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+.time-me > .card:nth-child(n + 3) { grid-column: 1 / -1; }
+.stamp-card { display: grid; justify-items: center; text-align: center; gap: 8px; padding-block: 28px; }
+.stamp-card .muted { margin: 0; }
+.stamp-clock { margin: 0; font-family: var(--display); font-size: clamp(3rem, 10vw, 4.4rem); font-weight: 700; letter-spacing: -0.04em; line-height: 1; font-variant-numeric: tabular-nums; }
+.stamp-button {
+  margin-top: 10px; width: min(100%, 320px); min-height: 72px; justify-content: center; font-size: 1.3rem; border-radius: 22px; border: none; color: #fff;
+}
+.stamp-button.in { background: linear-gradient(135deg, #059669, #0d9488); box-shadow: 0 14px 30px -12px #059669; }
+.stamp-button.out { background: linear-gradient(135deg, #e11d48, #f97316); box-shadow: 0 14px 30px -12px #e11d48; }
+.stamp-button:disabled { opacity: 0.7; }
+.stamp-card.is-in { border-color: color-mix(in srgb, #059669 45%, var(--line)); }
+.time-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.time-stats > div { display: grid; gap: 2px; align-content: start; }
+.time-stats strong { font-family: var(--display); font-size: 1.7rem; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.stack > .time-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.neg { color: var(--error); }
+.pos { color: var(--success); }
+.pill.neg { background: color-mix(in srgb, var(--error) 12%, transparent); border-color: transparent; }
+.pill.pos { background: var(--success-soft); border-color: transparent; }
+.pill.warn { background: var(--warn-soft); border-color: transparent; display: inline-flex; align-items: center; gap: 4px; }
+.stamp-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-variant-numeric: tabular-nums; }
+.stamp-list li { display: flex; gap: 8px; flex-wrap: wrap; }
+.time-figures { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; font-variant-numeric: tabular-nums; }
+.presence { width: 10px; height: 10px; border-radius: 50%; background: var(--line-strong); flex: none; }
+.presence.on { background: #10b981; box-shadow: 0 0 0 4px color-mix(in srgb, #10b981 25%, transparent); }
+.day-table td { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.day-table td:nth-child(2) { white-space: normal; }
+.day-table tr.off { opacity: 0.55; }
+.day-table tr.incomplete th strong { color: var(--error); }
+.day-table .session { display: inline-block; margin-inline-end: 8px; }
+.weekdays { border: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.weekdays legend { font-size: 0.9rem; font-weight: 600; margin-bottom: 8px; padding: 0; }
+.weekday {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 52px; padding: 9px 12px; border-radius: 12px; cursor: pointer;
+  border: 1px solid var(--line-strong); font-weight: 600; user-select: none;
+}
+.weekday input { position: absolute; opacity: 0; pointer-events: none; }
+.weekday.on { background: var(--brand-soft); border-color: var(--brand); color: var(--brand); }
+.weekday:focus-within { box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand) 18%, transparent); }
+.check { display: flex; align-items: center; gap: 10px; font-weight: 500; }
+.check input { width: 20px; height: 20px; accent-color: var(--brand); }
+.absence-dot { width: 12px; height: 12px; border-radius: 4px; flex: none; background: var(--muted); }
+.absence-dot.type-vacation { background: #0ea5e9; }
+.absence-dot.type-sick, .absence-dot.type-childSick { background: #f43f5e; }
+.absence-dot.type-training { background: #8b5cf6; }
+.absence-dot.type-compensation { background: #f59e0b; }
+.steps { margin: 0; padding-inline-start: 22px; display: grid; gap: 8px; }
+.terminal-link { display: block; padding: 12px 14px; border-radius: 12px; background: var(--panel-2); overflow-wrap: anywhere; font-size: 0.9rem; }
+.time-rules h3 { margin: 0; font-size: 1rem; }
+.time-rules ul { margin: 0; padding-inline-start: 20px; display: grid; gap: 6px; color: var(--ink-soft); }
+@media (max-width: 760px) {
+  .time-me { grid-template-columns: 1fr; }
+  .stack > .time-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .time-row { flex-wrap: wrap; }
+  .time-row .list-main { flex: 1 1 calc(100% - 80px); }
+  .time-figures { width: 100%; justify-content: flex-start; padding-inline-start: 52px; }
+  .time-row .presence { order: -1; position: absolute; margin: 30px 0 0 30px; }
+  .time-row { position: relative; }
+  .day-table tbody tr { grid-template-columns: 1fr 1fr 1fr; }
+  .day-table td:nth-child(2) { grid-column: 1 / -1; }
+  .day-table td:last-child { grid-column: auto; }
+  .day-table tr.off { display: none; }
+}
+
+/* ---------- Stempeluhr (Vollbild, ohne Anmeldung) ---------- */
+.kiosk { min-height: 100dvh; display: grid; grid-template-rows: auto 1fr; background: #0a0b10; color: #f1efe9; padding: 18px; }
+.kiosk-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-weight: 600; }
+.kiosk-head .muted { color: #9a9cab; flex: 1; }
+.kiosk-panel { display: grid; place-items: center; align-content: center; gap: 16px; text-align: center; }
+.kiosk-time { margin: 0; font-family: var(--display); font-size: clamp(4rem, 18vw, 9rem); font-weight: 700; letter-spacing: -0.05em; line-height: 1; font-variant-numeric: tabular-nums; }
+.kiosk-date { margin: 0; color: #9a9cab; font-size: 1.2rem; }
+.kiosk-hint, .kiosk-result { display: grid; justify-items: center; gap: 10px; padding: 28px 36px; border-radius: 28px; min-width: min(100%, 420px); }
+.kiosk-hint { color: #5eead4; background: rgb(94 234 212 / 0.08); font-size: 1.3rem; }
+.kiosk-result strong { font-size: clamp(1.6rem, 6vw, 2.4rem); }
+.kiosk-result.in { background: #065f46; }
+.kiosk-result.out { background: #9f1239; }
+.kiosk-result.error { background: #7c2d12; }
+.kiosk-msg { font-size: 1.3rem; }
+.kiosk-form { display: flex; gap: 8px; opacity: 0.35; }
+.kiosk-form:focus-within { opacity: 1; }
+.kiosk-form .button { background: #2dd4bf; color: #0a0b10; }
+.kiosk-form input { width: 200px; background: #191c27; color: #f1efe9; border-color: #2f3344; }

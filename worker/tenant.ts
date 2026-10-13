@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import type { CompanyProfile } from "../shared/company";
-import type { Advisor, Employee, MonthEntry } from "../shared/accounting";
+import { emptyEmployee, type Advisor, type Employee, type MonthEntry } from "../shared/accounting";
+import { localDay, type Absence, type TimeEntry, type TimeSettings } from "../shared/time";
 
 // Die eigene Datenbank eines Kunden. Jede Firma bekommt bei der Anmeldung
 // ein eigenes Durable Object mit eigener SQLite-Datenbank, getrennt von allen anderen.
@@ -18,6 +19,16 @@ const MIGRATIONS: string[] = [
    CREATE INDEX audit_log_at ON audit_log(at);`,
   `CREATE TABLE employees (id TEXT PRIMARY KEY, personnel_number INTEGER NOT NULL, data TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT (datetime('now')));
    CREATE TABLE payroll_entries (employee_id TEXT NOT NULL, month TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY (employee_id, month));`,
+  `CREATE TABLE time_entries (
+     id TEXT PRIMARY KEY, employee_id TEXT NOT NULL, kind TEXT NOT NULL, at TEXT NOT NULL,
+     source TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', created_by TEXT, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+   );
+   CREATE INDEX time_entries_employee_at ON time_entries(employee_id, at);
+   CREATE TABLE absences (
+     id TEXT PRIMARY KEY, employee_id TEXT NOT NULL, type TEXT NOT NULL, from_day TEXT NOT NULL, to_day TEXT NOT NULL,
+     half_day INTEGER NOT NULL DEFAULT 0, note TEXT NOT NULL DEFAULT ''
+   );
+   CREATE INDEX absences_employee ON absences(employee_id, from_day);`,
 ];
 
 export interface AuditEntry {
@@ -80,7 +91,7 @@ export class TenantDatabase extends DurableObject<Record<string, never>> {
     return this.sql
       .exec<{ id: string; personnel_number: number; data: string }>("SELECT id, personnel_number, data FROM employees ORDER BY personnel_number")
       .toArray()
-      .map((r) => ({ ...(JSON.parse(r.data) as Employee), id: r.id, personnelNumber: String(r.personnel_number) }));
+      .map((r) => ({ ...emptyEmployee, ...(JSON.parse(r.data) as Employee), id: r.id, personnelNumber: String(r.personnel_number) }));
   }
 
   /** Neue Person anlegen (bekommt die nächste Personalnummer ab 1001) oder bestehende ändern. */
@@ -98,6 +109,8 @@ export class TenantDatabase extends DurableObject<Record<string, never>> {
 
   async deleteEmployee(id: string): Promise<void> {
     this.sql.exec("DELETE FROM payroll_entries WHERE employee_id = ?", id);
+    this.sql.exec("DELETE FROM time_entries WHERE employee_id = ?", id);
+    this.sql.exec("DELETE FROM absences WHERE employee_id = ?", id);
     this.sql.exec("DELETE FROM employees WHERE id = ?", id);
   }
 
@@ -126,6 +139,83 @@ export class TenantDatabase extends DurableObject<Record<string, never>> {
       `INSERT INTO settings (key, value) VALUES ('advisor', ?)
        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`,
       JSON.stringify(advisor),
+    );
+  }
+
+  // ---------- Zeitwirtschaft ----------
+
+  /** Stempel einer Person (oder aller) im Zeitraum, from/to als UTC-ISO. */
+  async timeEntries(employeeId: string | null, from: string, to: string): Promise<TimeEntry[]> {
+    const rows = employeeId
+      ? this.sql.exec<Record<string, string>>("SELECT * FROM time_entries WHERE employee_id = ? AND at >= ? AND at < ? ORDER BY at", employeeId, from, to)
+      : this.sql.exec<Record<string, string>>("SELECT * FROM time_entries WHERE at >= ? AND at < ? ORDER BY at", from, to);
+    return rows.toArray().map((r) => ({ id: r.id!, employeeId: r.employee_id!, kind: r.kind as TimeEntry["kind"], at: r.at!, source: r.source as TimeEntry["source"], note: r.note ?? "" }));
+  }
+
+  async lastTimeEntry(employeeId: string): Promise<TimeEntry | null> {
+    const r = this.sql.exec<Record<string, string>>("SELECT * FROM time_entries WHERE employee_id = ? ORDER BY at DESC LIMIT 1", employeeId).toArray()[0];
+    return r ? { id: r.id!, employeeId: r.employee_id!, kind: r.kind as TimeEntry["kind"], at: r.at!, source: r.source as TimeEntry["source"], note: r.note ?? "" } : null;
+  }
+
+  async addTimeEntry(entry: Omit<TimeEntry, "id">, createdBy: string | null): Promise<string> {
+    const id = crypto.randomUUID();
+    this.sql.exec(
+      "INSERT INTO time_entries (id, employee_id, kind, at, source, note, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      id, entry.employeeId, entry.kind, entry.at, entry.source, entry.note, createdBy,
+    );
+    return id;
+  }
+
+  async updateTimeEntry(id: string, patch: Pick<TimeEntry, "kind" | "at" | "note">): Promise<TimeEntry | null> {
+    this.sql.exec("UPDATE time_entries SET kind = ?, at = ?, note = ? WHERE id = ?", patch.kind, patch.at, patch.note, id);
+    const r = this.sql.exec<Record<string, string>>("SELECT * FROM time_entries WHERE id = ?", id).toArray()[0];
+    return r ? { id: r.id!, employeeId: r.employee_id!, kind: r.kind as TimeEntry["kind"], at: r.at!, source: r.source as TimeEntry["source"], note: r.note ?? "" } : null;
+  }
+
+  async deleteTimeEntry(id: string): Promise<string | null> {
+    const r = this.sql.exec<{ employee_id: string }>("SELECT employee_id FROM time_entries WHERE id = ?", id).toArray()[0];
+    this.sql.exec("DELETE FROM time_entries WHERE id = ?", id);
+    return r?.employee_id ?? null;
+  }
+
+  /** Abwesenheiten, die den Zeitraum (Tage YYYY-MM-DD) berühren. */
+  async absences(employeeId: string | null, from: string, to: string): Promise<Absence[]> {
+    const rows = employeeId
+      ? this.sql.exec<Record<string, string | number>>("SELECT * FROM absences WHERE employee_id = ? AND to_day >= ? AND from_day <= ? ORDER BY from_day", employeeId, from, to)
+      : this.sql.exec<Record<string, string | number>>("SELECT * FROM absences WHERE to_day >= ? AND from_day <= ? ORDER BY from_day", from, to);
+    return rows.toArray().map((r) => ({
+      id: String(r.id), employeeId: String(r.employee_id), type: r.type as Absence["type"], from: String(r.from_day), to: String(r.to_day),
+      halfDay: !!r.half_day, note: String(r.note ?? ""),
+    }));
+  }
+
+  async addAbsence(a: Omit<Absence, "id">): Promise<string> {
+    const id = crypto.randomUUID();
+    this.sql.exec(
+      "INSERT INTO absences (id, employee_id, type, from_day, to_day, half_day, note) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      id, a.employeeId, a.type, a.from, a.to, a.halfDay ? 1 : 0, a.note,
+    );
+    return id;
+  }
+
+  async deleteAbsence(id: string): Promise<void> {
+    this.sql.exec("DELETE FROM absences WHERE id = ?", id);
+  }
+
+  async getTimeSettings(): Promise<TimeSettings> {
+    const rows = this.sql.exec<{ value: string }>("SELECT value FROM settings WHERE key = 'time'").toArray();
+    if (rows.length) return { state: "", since: "", ...(JSON.parse(rows[0]!.value) as Partial<TimeSettings>) };
+    // Erster Aufruf: Das Zeitkonto zählt erst ab heute, sonst hätten alle sofort riesige Minusstunden
+    const settings: TimeSettings = { state: "", since: localDay(new Date().toISOString()) };
+    await this.saveTimeSettings(settings);
+    return settings;
+  }
+
+  async saveTimeSettings(settings: TimeSettings): Promise<void> {
+    this.sql.exec(
+      `INSERT INTO settings (key, value) VALUES ('time', ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`,
+      JSON.stringify(settings),
     );
   }
 

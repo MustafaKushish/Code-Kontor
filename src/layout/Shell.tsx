@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Calculator, Laptop, LayoutDashboard, LogOut, Moon, Search, Settings, ShieldCheck, Store, Sun, Users } from "lucide-react";
+import { Calculator, Clock, Laptop, LayoutDashboard, LogOut, Moon, Search, Settings, ShieldCheck, Store, Sun, Users } from "lucide-react";
 import type { Me } from "../api";
 import { AppIcon, Avatar, Link, Logo } from "../components";
 import { useTheme, type ThemeChoice } from "../theme";
@@ -13,10 +13,11 @@ import { BillingBanner } from "../pages/Billing";
 
 const NAV = [
   { to: "/", label: "nav.overview", short: "nav.startShort", icon: LayoutDashboard },
-  { to: "/katalog", label: "nav.catalog", short: "nav.catalogShort", icon: Store },
+  { to: "/zeiten", label: "nav.time", short: "nav.time", icon: Clock },
+  { to: "/katalog", label: "nav.catalog", short: "nav.catalogShort", icon: Store, notInTabbar: true },
   { to: "/team", label: "nav.team", short: "nav.team", icon: Users, managersOnly: true },
   { to: "/buchhaltung", label: "nav.accounting", short: "nav.accountingShort", icon: Calculator, managersOnly: true },
-  { to: "/einstellungen", label: "nav.company", short: "nav.company", icon: Settings },
+  { to: "/einstellungen", label: "nav.company", short: "nav.company", icon: Settings, notInTabbar: true },
   { to: "/konto", label: "nav.account", short: "nav.account", icon: ShieldCheck },
 ];
 
@@ -127,7 +128,8 @@ export function Shell({ me, path, onLogout, children }: { me: Me; path: string; 
       </main>
 
       <nav className="tabbar" aria-label={t("nav.menu")}>
-        {items.map(({ to, short, icon: Icon }) => (
+        {/* Auf dem Handy nur die wichtigsten Punkte; Katalog und Firma gibt es über Start und die Suche */}
+        {items.filter((item) => !item.notInTabbar).map(({ to, short, icon: Icon }) => (
           <Link key={to} to={to} className={active(to) ? "tab active" : "tab"}>
             <Icon size={21} />
             <span>{t(short)}</span>

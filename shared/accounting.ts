@@ -32,6 +32,17 @@ export interface Employee {
   iban: string;
   vacationDays: number;
   notes: string;
+  // Zeitwirtschaft
+  /** Nummer des Stempel-Chips (RFID), eindeutig in der Firma */
+  chipId: string;
+  /** Verknüpftes Benutzerkonto, damit die Person in der App stempeln kann */
+  userId: string;
+  /** Arbeitstage 1 = Montag … 7 = Sonntag */
+  workDays: number[];
+  /** Startwert bzw. Übertrag des Zeitkontos in Stunden (kann negativ sein) */
+  openingBalance: number;
+  /** Resturlaub aus dem Vorjahr in Tagen */
+  vacationCarryover: number;
 }
 
 export interface Advisor {
@@ -62,6 +73,7 @@ export const emptyEmployee: Omit<Employee, "id" | "personnelNumber"> = {
   firstName: "", lastName: "", email: "", phone: "", birthDate: "", street: "", postalCode: "", city: "",
   employmentType: "fullTime", startDate: "", endDate: "", weeklyHours: 40, payType: "monthly", payAmount: 0,
   taxClass: "", taxId: "", socialSecurityNumber: "", healthInsurance: "", iban: "", vacationDays: 24, notes: "",
+  chipId: "", userId: "", workDays: [1, 2, 3, 4, 5], openingBalance: 0, vacationCarryover: 0,
 };
 
 export const emptyAdvisor: Advisor = { firm: "", contactName: "", email: "", phone: "", consultantNumber: "", clientNumber: "", chartOfAccounts: "", notes: "" };
@@ -101,6 +113,13 @@ export function sanitizeEmployee(input: Record<string, unknown>): Omit<Employee,
     iban: normalizeIban(str(input.iban, 40)),
     vacationDays: num(input.vacationDays, 0, 60),
     notes: str(input.notes, 2000),
+    chipId: str(input.chipId, 64).replace(/\s+/g, "").toUpperCase(),
+    userId: str(input.userId, 64),
+    workDays: Array.isArray(input.workDays)
+      ? [...new Set(input.workDays.filter((d): d is number => Number.isInteger(d) && d >= 1 && d <= 7))].sort()
+      : [1, 2, 3, 4, 5],
+    openingBalance: num(input.openingBalance, -10_000, 10_000),
+    vacationCarryover: num(input.vacationCarryover, 0, 100),
   };
 }
 

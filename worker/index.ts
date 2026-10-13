@@ -19,6 +19,10 @@ import { decryptField, encryptField, isEncrypted } from "./crypto";
 import { billingEnabled, cancelForDeletion, countUsers, createCheckout, createPortal, getSubscription, handleStripeEvent, syncSubscription, trialEnd } from "./billing";
 import { verifyWebhook } from "./stripe";
 import { daysLeft, hasAccess, quote } from "../shared/billing";
+import {
+  computeDays, computeYear, localDay, monthTotals, nextStampKind, sanitizeAbsence, sanitizeTimeSettings,
+  type StampKind, type WorkProfile,
+} from "../shared/time";
 import { newRecoveryCodes, newTotpSecret, normalizeRecoveryCode, otpauthUrl, verifyTotp } from "./totp";
 import type { CompanyProfile } from "../shared/company";
 
@@ -404,6 +408,61 @@ app.post("/billing/webhook", async (c) => {
   return c.json({ received: true });
 });
 
+// ---------- Stempel-Terminal (ohne Anmeldung, mit Geräteschlüssel) ----------
+
+async function terminalFor(c: Ctx) {
+  const token = c.req.param("token") ?? c.req.header("X-Terminal-Key") ?? "";
+  if (!/^[A-Za-z0-9_-]{20,100}$/.test(token)) return null;
+  return c.env.PLATFORM_DB.prepare(
+    "SELECT t.id, t.tenant_id AS tenantId, t.name, n.name AS company FROM terminals t JOIN tenants n ON n.id = t.tenant_id WHERE t.token_hash = ?",
+  )
+    .bind(await hashToken(token))
+    .first<{ id: string; tenantId: string; name: string; company: string }>();
+}
+
+app.get("/terminal/:token", async (c) => {
+  const terminal = await terminalFor(c);
+  if (!terminal) return fail(c, "terminalInvalid", 404);
+  return c.json({ name: terminal.name, company: terminal.company });
+});
+
+// Eigene Stempelgeräte schicken den Schlüssel im Header X-Terminal-Key an /api/terminal/stamp
+const terminalStamp = async (c: Ctx) => {
+  const terminal = await terminalFor(c);
+  if (!terminal) return fail(c, "terminalInvalid", 404);
+  if (billingEnabled(c.env)) {
+    const sub = await getSubscription(c.env, terminal.tenantId);
+    if (!hasAccess(sub.status, sub.trialEndsAt)) return fail(c, "subscriptionRequired", 402);
+  }
+  const body = await readBody(c);
+  const chip = text(body.chip).replace(/\s+/g, "").toUpperCase().slice(0, 64);
+  const keys = [{ key: `terminal:${terminal.id}`, limit: 30 }];
+  if (await isLocked(c.env.PLATFORM_DB, keys)) return fail(c, "tooManyAttempts", 429);
+  const db = tenantDb(c.env, terminal.tenantId);
+  const employee = chip ? (await db.listEmployees()).find((e) => e.chipId === chip && (!e.endDate || e.endDate >= localDay(nowIso()))) : undefined;
+  c.executionCtx.waitUntil(c.env.PLATFORM_DB.prepare("UPDATE terminals SET last_seen_at = ? WHERE id = ?").bind(nowIso(), terminal.id).run());
+  if (!employee) {
+    await recordFailure(c.env.PLATFORM_DB, keys);
+    return fail(c, "unknownChip", 404);
+  }
+  const result = await stamp(c.env, terminal.tenantId, employee.id, "terminal", null);
+  return c.json({ name: `${employee.firstName} ${employee.lastName}`.trim(), ...result });
+};
+app.post("/terminal/stamp", terminalStamp);
+app.post("/terminal/:token/stamp", terminalStamp);
+
+/** Stempeln: nächste Richtung bestimmen, doppelte Stempel innerhalb einer Minute ignorieren. */
+async function stamp(env: Env, tenantId: string, employeeId: string, source: "app" | "terminal", userId: string | null, wanted?: StampKind) {
+  const db = tenantDb(env, tenantId);
+  const last = await db.lastTimeEntry(employeeId);
+  const now = new Date();
+  if (last && now.getTime() - Date.parse(last.at) < 60_000) return { kind: last.kind, at: last.at, duplicate: true };
+  const kind = wanted ?? nextStampKind(last, now);
+  const at = now.toISOString();
+  await db.addTimeEntry({ employeeId, kind, at, source, note: "" }, userId);
+  return { kind, at, duplicate: false };
+}
+
 // ---------- Ab hier nur mit Anmeldung ----------
 
 app.use("*", async (c, next) => {
@@ -601,6 +660,7 @@ app.post("/account/delete-company", requireRole("owner"), async (c) => {
     db.prepare(`DELETE FROM login_challenges WHERE user_id IN (${users})`).bind(user.tenantId),
     db.prepare("DELETE FROM invites WHERE tenant_id = ?").bind(user.tenantId),
     db.prepare("DELETE FROM subscriptions WHERE tenant_id = ?").bind(user.tenantId),
+    db.prepare("DELETE FROM terminals WHERE tenant_id = ?").bind(user.tenantId),
     db.prepare("DELETE FROM users WHERE tenant_id = ?").bind(user.tenantId),
     db.prepare("DELETE FROM tenants WHERE id = ?").bind(user.tenantId),
   ]);
@@ -756,10 +816,23 @@ app.get("/accounting/employees", accounting, async (c) => {
   return c.json({ employees: await loadEmployees(c.env, c.get("user").tenantId) });
 });
 
+/** Chip und Benutzerkonto dürfen nur einer Person gehören. */
+async function linkErrors(c: Ctx, data: Pick<Employee, "chipId" | "userId">, selfId: string | null) {
+  const errors: Record<string, string> = {};
+  const others = (await tenantDb(c.env, c.get("user").tenantId).listEmployees()).filter((e) => e.id !== selfId);
+  if (data.chipId && others.some((e) => e.chipId === data.chipId)) errors.chipId = "chipTaken";
+  if (data.userId) {
+    if (others.some((e) => e.userId === data.userId)) errors.userId = "userTaken";
+    const exists = await c.env.PLATFORM_DB.prepare("SELECT 1 FROM users WHERE id = ? AND tenant_id = ?").bind(data.userId, c.get("user").tenantId).first();
+    if (!exists) errors.userId = "userUnknown";
+  }
+  return errors;
+}
+
 app.post("/accounting/employees", accounting, async (c) => {
   const user = c.get("user");
   const data = sanitizeEmployee(await readBody(c));
-  const errors = validateEmployee(data);
+  const errors = { ...validateEmployee(data), ...(await linkErrors(c, data, null)) };
   if (Object.keys(errors).length) return fail(c, "checkFields", 400, { errors });
   const id = await tenantDb(c.env, user.tenantId).saveEmployee(null, await encryptEmployee(c.env, data));
   audit(c, user.tenantId, user, "employeeAdded", { name: `${data.firstName} ${data.lastName}` });
@@ -769,7 +842,7 @@ app.post("/accounting/employees", accounting, async (c) => {
 app.put("/accounting/employees/:id", accounting, async (c) => {
   const user = c.get("user");
   const data = sanitizeEmployee(await readBody(c));
-  const errors = validateEmployee(data);
+  const errors = { ...validateEmployee(data), ...(await linkErrors(c, data, c.req.param("id") ?? "")) };
   if (Object.keys(errors).length) return fail(c, "checkFields", 400, { errors });
   try {
     await tenantDb(c.env, user.tenantId).saveEmployee(c.req.param("id") ?? "", await encryptEmployee(c.env, data));
@@ -906,6 +979,223 @@ app.post("/billing/portal", requireRole("owner"), async (c) => {
     console.error("billing portal", error);
     return fail(c, "paymentFailed", 502);
   }
+});
+
+// ---------- Zeitwirtschaft ----------
+
+const profileOf = (e: Employee): WorkProfile => ({
+  id: e.id, startDate: e.startDate, endDate: e.endDate, weeklyHours: e.weeklyHours, workDays: e.workDays,
+  vacationDays: e.vacationDays, openingBalance: e.openingBalance, vacationCarryover: e.vacationCarryover,
+});
+const publicEmployee = (e: Employee) => ({ id: e.id, name: `${e.firstName} ${e.lastName}`.trim(), personnelNumber: e.personnelNumber, chip: !!e.chipId, linked: !!e.userId });
+/** UTC-Grenzen mit Puffer, damit Stempel kurz vor/nach Mitternacht (Zeitzone) mitkommen. */
+const utcRange = (from: string, to: string) => ({ from: `${shiftDay(from, -1)}T00:00:00Z`, to: `${shiftDay(to, 2)}T00:00:00Z` });
+function shiftDay(day: string, n: number) {
+  const d = new Date(`${day}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+const yearOf = (c: Ctx) => {
+  const y = Number(c.req.query("year"));
+  return Number.isInteger(y) && y >= 2000 && y <= 2100 ? y : new Date().getUTCFullYear();
+};
+
+async function yearData(env: Env, tenantId: string, employeeId: string | null, year: number) {
+  const db = tenantDb(env, tenantId);
+  const r = utcRange(`${year}-01-01`, `${year}-12-31`);
+  const [entries, absences, settings] = await Promise.all([
+    db.timeEntries(employeeId, r.from, r.to),
+    db.absences(employeeId, `${year}-01-01`, `${year}-12-31`),
+    db.getTimeSettings(),
+  ]);
+  return { entries, absences, settings };
+}
+
+/** Eigene Zeiten: Stempelstatus, heute, Jahreskonto. Für alle Rollen, sofern das Konto mit einer Person verknüpft ist. */
+async function myTime(c: Ctx) {
+  const user = c.get("user");
+  const employee = (await tenantDb(c.env, user.tenantId).listEmployees()).find((e) => e.userId === user.id);
+  if (!employee) return { employee: null };
+  const year = new Date().getUTCFullYear();
+  const { entries, absences, settings } = await yearData(c.env, user.tenantId, employee.id, year);
+  const today = localDay(nowIso());
+  const last = entries.at(-1) ?? null;
+  return {
+    employee: publicEmployee(employee),
+    next: nextStampKind(last),
+    lastAt: last?.at ?? null,
+    today: computeDays(profileOf(employee), entries, absences, { from: today, to: today }, settings)[0],
+    account: computeYear(profileOf(employee), entries, absences, year, settings),
+    upcomingAbsences: absences.filter((a) => a.to >= today).slice(0, 5),
+  };
+}
+
+app.get("/time/me", async (c) => c.json(await myTime(c)));
+
+app.post("/time/me/stamp", async (c) => {
+  const user = c.get("user");
+  const employee = (await tenantDb(c.env, user.tenantId).listEmployees()).find((e) => e.userId === user.id);
+  if (!employee) return fail(c, "notLinked", 400);
+  const body = await readBody(c);
+  const wanted = body.kind === "in" || body.kind === "out" ? (body.kind as StampKind) : undefined;
+  await stamp(c.env, user.tenantId, employee.id, "app", user.id, wanted);
+  return c.json(await myTime(c));
+});
+
+const timeManager = requireRole("owner", "admin");
+
+app.get("/time/overview", timeManager, async (c) => {
+  const user = c.get("user");
+  const year = yearOf(c);
+  const employees = await tenantDb(c.env, user.tenantId).listEmployees();
+  const { entries, absences, settings } = await yearData(c.env, user.tenantId, null, year);
+  const today = localDay(nowIso());
+  const rows = employees
+    .filter((e) => e.startDate && e.startDate <= `${year}-12-31` && (!e.endDate || e.endDate >= `${year}-01-01`))
+    .map((e) => {
+      const own = entries.filter((t) => t.employeeId === e.id);
+      const ownAbs = absences.filter((a) => a.employeeId === e.id);
+      const last = own.at(-1) ?? null;
+      const present = nextStampKind(last) === "out";
+      const absentToday = ownAbs.find((a) => a.from <= today && a.to >= today)?.type ?? null;
+      return { ...publicEmployee(e), present, since: present ? last!.at : null, absentToday, account: computeYear(profileOf(e), own, ownAbs, year, settings) };
+    });
+  return c.json({ year, settings, employees: rows });
+});
+
+app.get("/time/days/:employeeId/:month", timeManager, async (c) => {
+  const user = c.get("user");
+  const month = c.req.param("month") ?? "";
+  if (!isValidMonth(month)) return fail(c, "notFound", 404);
+  const employee = (await tenantDb(c.env, user.tenantId).listEmployees()).find((e) => e.id === c.req.param("employeeId"));
+  if (!employee) return fail(c, "notFound", 404);
+  const db = tenantDb(c.env, user.tenantId);
+  const from = `${month}-01`;
+  const to = shiftDay(`${shiftMonth(month)}-01`, -1);
+  const r = utcRange(from, to);
+  const [entries, absences, settings] = await Promise.all([db.timeEntries(employee.id, r.from, r.to), db.absences(employee.id, from, to), db.getTimeSettings()]);
+  const days = computeDays(profileOf(employee), entries, absences, { from, to }, settings);
+  return c.json({
+    employee: publicEmployee(employee),
+    days,
+    totals: monthTotals(days),
+    entries: entries.filter((e) => { const d = localDay(e.at); return d >= from && d <= to; }),
+    absences,
+  });
+});
+function shiftMonth(month: string) {
+  const [y, m] = month.split("-").map(Number) as [number, number];
+  return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`;
+}
+
+const isIsoTime = (v: unknown): v is string => typeof v === "string" && !Number.isNaN(Date.parse(v)) && /^\d{4}-\d{2}-\d{2}T/.test(v);
+
+app.post("/time/entries", timeManager, async (c) => {
+  const user = c.get("user");
+  const body = await readBody(c);
+  const employees = await tenantDb(c.env, user.tenantId).listEmployees();
+  const employee = employees.find((e) => e.id === body.employeeId);
+  if (!employee || (body.kind !== "in" && body.kind !== "out") || !isIsoTime(body.at)) return fail(c, "checkFields", 400);
+  const at = new Date(body.at).toISOString();
+  const id = await tenantDb(c.env, user.tenantId).addTimeEntry({ employeeId: employee.id, kind: body.kind, at, source: "manual", note: text(body.note).slice(0, 300) }, user.id);
+  audit(c, user.tenantId, user, "timeCorrected", { name: publicEmployee(employee).name, at, kind: body.kind });
+  return c.json({ id }, 201);
+});
+
+app.put("/time/entries/:id", timeManager, async (c) => {
+  const user = c.get("user");
+  const body = await readBody(c);
+  if ((body.kind !== "in" && body.kind !== "out") || !isIsoTime(body.at)) return fail(c, "checkFields", 400);
+  const at = new Date(body.at).toISOString();
+  const entry = await tenantDb(c.env, user.tenantId).updateTimeEntry(c.req.param("id") ?? "", { kind: body.kind, at, note: text(body.note).slice(0, 300) });
+  if (!entry) return fail(c, "notFound", 404);
+  audit(c, user.tenantId, user, "timeCorrected", { at, kind: body.kind });
+  return c.json({ entry });
+});
+
+app.delete("/time/entries/:id", timeManager, async (c) => {
+  const user = c.get("user");
+  const employeeId = await tenantDb(c.env, user.tenantId).deleteTimeEntry(c.req.param("id") ?? "");
+  if (!employeeId) return fail(c, "notFound", 404);
+  audit(c, user.tenantId, user, "timeDeleted");
+  return c.json({ ok: true });
+});
+
+app.get("/time/absences", timeManager, async (c) => {
+  const year = yearOf(c);
+  const absences = await tenantDb(c.env, c.get("user").tenantId).absences(null, `${year}-01-01`, `${year}-12-31`);
+  return c.json({ absences });
+});
+
+app.post("/time/absences", timeManager, async (c) => {
+  const user = c.get("user");
+  const absence = sanitizeAbsence(await readBody(c));
+  const employee = absence && (await tenantDb(c.env, user.tenantId).listEmployees()).find((e) => e.id === absence.employeeId);
+  if (!absence || !employee) return fail(c, "checkFields", 400);
+  const id = await tenantDb(c.env, user.tenantId).addAbsence(absence);
+  audit(c, user.tenantId, user, "absenceAdded", { name: publicEmployee(employee).name, type: absence.type, from: absence.from, to: absence.to });
+  return c.json({ id }, 201);
+});
+
+app.delete("/time/absences/:id", timeManager, async (c) => {
+  const user = c.get("user");
+  await tenantDb(c.env, user.tenantId).deleteAbsence(c.req.param("id") ?? "");
+  audit(c, user.tenantId, user, "absenceRemoved");
+  return c.json({ ok: true });
+});
+
+app.put("/time/settings", timeManager, async (c) => {
+  const user = c.get("user");
+  const settings = sanitizeTimeSettings(await readBody(c));
+  await tenantDb(c.env, user.tenantId).saveTimeSettings(settings);
+  return c.json({ settings });
+});
+
+app.get("/time/terminals", timeManager, async (c) => {
+  const { results } = await c.env.PLATFORM_DB.prepare(
+    "SELECT id, name, created_at AS createdAt, last_seen_at AS lastSeenAt FROM terminals WHERE tenant_id = ? ORDER BY created_at",
+  )
+    .bind(c.get("user").tenantId)
+    .all();
+  return c.json({ terminals: results });
+});
+
+app.post("/time/terminals", timeManager, async (c) => {
+  const user = c.get("user");
+  const name = text((await readBody(c)).name).slice(0, 80) || "Terminal";
+  const token = newSessionToken();
+  await c.env.PLATFORM_DB.prepare("INSERT INTO terminals (id, tenant_id, token_hash, name) VALUES (?, ?, ?, ?)")
+    .bind(crypto.randomUUID(), user.tenantId, await hashToken(token), name)
+    .run();
+  audit(c, user.tenantId, user, "terminalAdded", { name });
+  // Der Schlüssel wird nur jetzt einmal angezeigt
+  return c.json({ token, link: appLink(c, `/terminal/${token}`) }, 201);
+});
+
+app.delete("/time/terminals/:id", timeManager, async (c) => {
+  const user = c.get("user");
+  await c.env.PLATFORM_DB.prepare("DELETE FROM terminals WHERE id = ? AND tenant_id = ?").bind(c.req.param("id") ?? "", user.tenantId).run();
+  audit(c, user.tenantId, user, "terminalRemoved");
+  return c.json({ ok: true });
+});
+
+/** Monatsmeldung aus der Zeiterfassung vorschlagen. */
+app.get("/accounting/month/:month/from-time", accounting, async (c) => {
+  const user = c.get("user");
+  const month = c.req.param("month") ?? "";
+  if (!isValidMonth(month)) return fail(c, "notFound", 404);
+  const db = tenantDb(c.env, user.tenantId);
+  const from = `${month}-01`;
+  const to = shiftDay(`${shiftMonth(month)}-01`, -1);
+  const r = utcRange(from, to);
+  const [employees, entries, absences, settings] = await Promise.all([db.listEmployees(), db.timeEntries(null, r.from, r.to), db.absences(null, from, to), db.getTimeSettings()]);
+  const result = employees
+    .filter((e) => employedInMonth(e, month))
+    .map((e) => {
+      const days = computeDays(profileOf(e), entries.filter((t) => t.employeeId === e.id), absences.filter((a) => a.employeeId === e.id), { from, to }, settings);
+      return { employeeId: e.id, ...monthTotals(days) };
+    });
+  return c.json({ entries: result });
 });
 
 // ---------- Adressvorschläge ----------
