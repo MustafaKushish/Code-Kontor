@@ -364,7 +364,8 @@ a.tile:hover { transform: translateY(-3px); box-shadow: var(--shadow-lift); }
 }
 
 /* ---------- Katalog ---------- */
-.toolbar { display: grid; gap: 14px; }
+.toolbar { display: grid; gap: 14px; min-width: 0; }
+.toolbar > * { min-width: 0; }
 .search { position: relative; max-width: 560px; }
 .search svg { position: absolute; inset-inline-start: 18px; top: 50%; transform: translateY(-50%); color: var(--muted); }
 .search input { padding-inline-start: 48px; border-radius: 999px; height: 52px; box-shadow: var(--shadow); border-color: var(--line); }
@@ -782,9 +783,9 @@ input[aria-invalid="true"] { border-color: var(--error); }
 }
 .page-tabs button.active { background: var(--panel); color: var(--ink); box-shadow: var(--shadow-sm); }
 .page-tabs button.active svg { color: var(--brand); }
-.toolbar { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
-.toolbar > p { flex: 1; min-width: 220px; margin: 0; }
-.toolbar .field { min-width: 200px; }
+.acc-toolbar { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+.acc-toolbar > p { flex: 1; min-width: 220px; margin: 0; }
+.acc-toolbar .field { min-width: 200px; }
 .section-title { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; font-size: 1.3rem; }
 .employee-row { width: 100%; border: none; background: none; font: inherit; color: inherit; text-align: start; cursor: pointer; }
 .list-card .empty { padding: 18px 14px; margin: 0; }
@@ -829,3 +830,20 @@ input[aria-invalid="true"] { border-color: var(--error); }
 .price-table tfoot th { border-top: 2px solid var(--line-strong); font-size: 1.05rem; }
 .price-table .pill { margin-inline-start: 8px; }
 .billing-actions { flex-wrap: wrap; gap: 10px; }
+
+/* ---------- Handy: mehr Platz, nichts ragt über den Rand ---------- */
+.content > * { min-width: 0; }
+.facts dd, .list-main strong, .list-main small { overflow-wrap: anywhere; }
+.billing-interval button { display: grid; justify-items: center; line-height: 1.25; }
+.billing-interval small { font-size: 0.75rem; }
+@media (max-width: 640px) {
+  .card { padding: 18px; gap: 14px; border-radius: 20px; }
+  .list-card { padding: 4px; }
+  .list-row { padding: 12px 10px; gap: 10px; }
+  .page-head { gap: 12px; }
+  .page-head .button { width: 100%; justify-content: center; }
+  .stack-lg { gap: 20px; }
+  .actions { flex-wrap: wrap; }
+  .actions .button { flex: 1 1 auto; justify-content: center; }
+  .billing-interval small { font-size: 0.7rem; }
+}

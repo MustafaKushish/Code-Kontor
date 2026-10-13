@@ -110,7 +110,7 @@ export function BillingCard({ me }: { me: Me }) {
               {(["month", "year"] as const).map((i) => (
                 <button key={i} type="button" role="radio" aria-checked={interval === i} className={interval === i ? "active" : ""} onClick={() => setBillingInterval(i)}>
                   {t(i === "year" ? "billing.yearly" : "billing.monthly")}
-                  {i === "year" && <small> · {t("billing.yearlyHint")}</small>}
+                  {i === "year" && <small>{t("billing.yearlyHint")}</small>}
                 </button>
               ))}
             </div>

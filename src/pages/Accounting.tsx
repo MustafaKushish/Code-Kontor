@@ -95,7 +95,7 @@ function EmployeesTab({ employees, onChanged }: { employees: Employee[]; onChang
 
   return (
     <>
-      <div className="toolbar">
+      <div className="acc-toolbar">
         <p className="muted">{t("accounting.noPayroll")}</p>
         <button className="button primary" onClick={() => setEditing("new")}><Plus size={18} /> {t("accounting.addEmployee")}</button>
       </div>
@@ -168,7 +168,7 @@ function EmployeeEditor({ employee, onClose, onSaved }: { employee: Employee | n
 
   return (
     <form className="stack" onSubmit={save} noValidate>
-      <div className="toolbar">
+      <div className="acc-toolbar">
         <h2 className="section-title">
           {employee ? `${employee.firstName} ${employee.lastName}` : t("accounting.newEmployee")}
           {employee && <small className="muted"> · {t("accounting.personnelNumber", { n: employee.personnelNumber })}</small>}
@@ -302,7 +302,7 @@ function MonthTab({ me, employees, advisor, onGoAdvisor }: { me: Me; employees: 
   const canSend = me.mailEnabled && !!advisor.email;
   return (
     <div className="stack">
-      <div className="toolbar">
+      <div className="acc-toolbar">
         <Field label={t("accounting.month")}>
           <input type="month" value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} />
         </Field>
