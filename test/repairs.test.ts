@@ -137,7 +137,7 @@ describe("Reparaturen: Werkstatt-Alltag", () => {
   });
   it("prüft Preise und Kundendaten", () => {
     expect(sanitizePrice({ service: "" })).toBeNull();
-    const p = sanitizePrice({ service: "Display tauschen", priceCents: 14900, vatRate: 5, deviceType: "toaster", minutes: -5, partId: "" });
+    const p = sanitizePrice({ service: "Display tauschen", priceCents: 14900, vatRate: 150, deviceType: "toaster", minutes: -5, partId: "" });
     expect(p).toMatchObject({ deviceType: "phone", vatRate: 19, minutes: 0, partId: null, priceCents: 14900 });
     expect(sanitizeCustomerCard({ name: " Ali ", email: "ALI@X.DE", note: "Stammkunde" })).toEqual({ name: "Ali", phone: "", email: "ali@x.de", address: "", note: "Stammkunde" });
   });
