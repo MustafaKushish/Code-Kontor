@@ -6,6 +6,7 @@ import { emptyEmployee, type Advisor, type Employee, type MonthEntry } from "../
 import { localDay, type Absence, type RequestStatus, type TimeEntry, type TimeRequest, type TimeRequestData, type TimeSettings } from "../shared/time";
 import { REPAIR_MIGRATIONS, RepairError, RepairStore } from "./repairs/store";
 import { POS_MIGRATIONS, POS_MODULE_MIGRATIONS, PosError, PosStore } from "./pos/store";
+import { OFFICE_MIGRATIONS, OfficeError, OfficeStore } from "./office/store";
 import { bucketOf, comparisonRange, workTime, type Insights, type Range } from "../shared/insights";
 
 // Die eigene Datenbank eines Kunden. Jede Firma bekommt bei der Anmeldung
@@ -50,6 +51,7 @@ const MIGRATIONS: string[] = [
 const MODULE_MIGRATIONS: Record<string, (string | ((sql: SqlStorage) => void))[]> = {
   repairs: REPAIR_MIGRATIONS,
   pos: POS_MODULE_MIGRATIONS,
+  buero: OFFICE_MIGRATIONS,
 };
 
 /** Antwort eines Modul-Aufrufs: Fehler kommen als Code zurück, weil eigene Fehlerklassen den Weg aus dem Durable Object nicht überstehen. */
@@ -60,9 +62,16 @@ export type ModuleResult<T> = { ok: true; value: T } | { ok: false; code: string
  * dieselbe Firmen-ID ergibt dort eine andere Datenbank als ohne Jurisdiktion.
  */
 export function tenantStub(env: { TENANT_DB: DurableObjectNamespace<TenantDatabase>; LOCAL_NO_JURISDICTION?: string }, tenantId: string) {
-  // Nur lokal (wrangler dev kennt keine Jurisdiktionen) über .dev.vars abschaltbar, online immer EU
-  const ns = env.LOCAL_NO_JURISDICTION === "1" ? env.TENANT_DB : env.TENANT_DB.jurisdiction("eu");
-  return ns.get(ns.idFromName(tenantId));
+  // Nur lokal (wrangler dev kennt keine Jurisdiktionen) über .dev.vars oder Fallback, online immer EU
+  if (env.LOCAL_NO_JURISDICTION === "1") {
+    return env.TENANT_DB.get(env.TENANT_DB.idFromName(tenantId));
+  }
+  try {
+    const ns = env.TENANT_DB.jurisdiction("eu");
+    return ns.get(ns.idFromName(tenantId));
+  } catch {
+    return env.TENANT_DB.get(env.TENANT_DB.idFromName(tenantId));
+  }
 }
 
 export interface AuditEntry {
@@ -106,9 +115,7 @@ export class TenantDatabase extends DurableObject<Record<string, never>> {
     }
   }
 
-  // ---------- Kasse (worker/pos) und Handy- & IT-Service (worker/repairs) ----------
-
-  private storesCache?: { pos: PosStore; repairs: RepairStore };
+  private storesCache?: { pos: PosStore; repairs: RepairStore; office: OfficeStore };
   private txDepth = 0;
 
   /** Kasse und Module teilen sich eine Datenbank; verschachtelte Transaktionen laufen in der äußeren mit. */
@@ -125,8 +132,9 @@ export class TenantDatabase extends DurableObject<Record<string, never>> {
       };
       const pos = new PosStore(this.sql, transaction);
       const repairs = new RepairStore(this.sql, transaction, pos);
+      const office = new OfficeStore(this.sql, transaction);
       pos.register("repairs", repairs.posModule());
-      this.storesCache = { pos, repairs };
+      this.storesCache = { pos, repairs, office };
     }
     return this.storesCache;
   }
@@ -139,6 +147,7 @@ export class TenantDatabase extends DurableObject<Record<string, never>> {
     } catch (error) {
       if (error instanceof RepairError) return { ok: false, code: prefix.repairs + error.code };
       if (error instanceof PosError) return { ok: false, code: prefix.pos + error.code };
+      if (error instanceof OfficeError) return { ok: false, code: error.code };
       throw error;
     }
   }
@@ -149,6 +158,10 @@ export class TenantDatabase extends DurableObject<Record<string, never>> {
 
   async pos(action: string, args: unknown[]): Promise<ModuleResult<unknown>> {
     return this.call(this.stores().pos, action, args, { repairs: "repairs.", pos: "" });
+  }
+
+  async office(action: string, args: unknown[]): Promise<ModuleResult<unknown>> {
+    return this.call(this.stores().office, action, args, { repairs: "repairs.", pos: "pos." });
   }
 
   async getCompany(): Promise<CompanyProfile | null> {

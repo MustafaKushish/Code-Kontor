@@ -4,10 +4,11 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite build && wrangler dev",
+    "dev": "vite build && wrangler d1 migrations apply PLATFORM_DB --local && wrangler dev",
     "dev:web": "vite",
     "build": "vite build",
     "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit",
     "test": "vitest run",
     "db:migrate:local": "wrangler d1 migrations apply PLATFORM_DB --local",
     "db:migrate:remote": "wrangler d1 migrations apply PLATFORM_DB --remote",

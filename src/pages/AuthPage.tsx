@@ -2,7 +2,7 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import { countryTax, guessCountry, sortedCountries } from "../../shared/countries";
 import { countryMethods, PAYMENT_METHOD_NAMES } from "../../shared/payments";
 import { MonitorSmartphone, ShieldCheck, Sparkles } from "lucide-react";
-import { api, ApiError } from "../api";
+import { api, ApiError, setStoredToken } from "../api";
 import { AppIcon, Field, Logo } from "../components";
 import { CATALOG } from "../../shared/apps";
 import { useI18n } from "../i18n";
@@ -65,6 +65,20 @@ export function AuthPage({ onDone }: { onDone: () => void }) {
     setForgotSent(false);
   };
 
+  const loginAsDemo = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const r = await api<{ token?: string }>("/auth/demo", { method: "POST" });
+      if (r.token) setStoredToken(r.token);
+      onDone();
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     // Manche Browser füllen Felder aus, ohne das Formular zu benachrichtigen: Werte direkt aus den Feldern lesen
@@ -80,12 +94,16 @@ export function AuthPage({ onDone }: { onDone: () => void }) {
         await api("/auth/forgot", { method: "POST", body: { email: filled.email, lang } });
         setForgotSent(true);
       } else if (ticket) {
-        await api("/auth/login/2fa", { method: "POST", body: { ticket, code } });
+        const r = await api<{ token?: string }>("/auth/login/2fa", { method: "POST", body: { ticket, code } });
+        if (r.token) setStoredToken(r.token);
         onDone();
       } else {
-        const r = await api<{ twoFactor?: boolean; ticket?: string }>(`/auth/${mode}`, { method: "POST", body: { ...form, ...filled, lang } });
+        const r = await api<{ twoFactor?: boolean; ticket?: string; token?: string }>(`/auth/${mode}`, { method: "POST", body: { ...form, ...filled, lang } });
         if (r.twoFactor && r.ticket) setTicket(r.ticket);
-        else onDone();
+        else {
+          if (r.token) setStoredToken(r.token);
+          onDone();
+        }
       }
     } catch (err) {
       setError(errorText(err));
@@ -140,7 +158,29 @@ export function AuthPage({ onDone }: { onDone: () => void }) {
   const register = mode === "register";
   return (
     <AuthLayout>
-          <div className="segmented" role="tablist">
+          <div className="card" style={{ background: "linear-gradient(135deg, var(--panel), var(--panel-2))", border: "1.5px solid var(--brand)", padding: "16px 18px", borderRadius: "18px", display: "grid", gap: "10px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: "700" }}>
+              <Sparkles size={18} style={{ color: "var(--brand)" }} />
+              <span>Direkter Demo-Zugang</span>
+            </div>
+            <p className="muted small" style={{ margin: 0 }}>
+              Klicke hier, um dich sofort ohne Passworteingabe mit einem voll eingerichteten Demo-Konto anzumelden (inkl. Handy- & IT-Service, Kasse und Daten):
+            </p>
+            <button
+              type="button"
+              className="button primary block"
+              onClick={loginAsDemo}
+              disabled={busy}
+            >
+              <Sparkles size={18} /> {busy ? t("common.wait") : "Demo-Konto öffnen (1-Klick Login)"}
+            </button>
+            <div className="small muted" style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "4px", fontSize: "0.8rem", borderTop: "1px solid var(--line)", paddingTop: "8px" }}>
+              <span>E-Mail: <strong>demo@code-kontor.de</strong></span>
+              <span>Passwort: <strong>Password123!</strong></span>
+            </div>
+          </div>
+
+          <div className="segmented" role="tablist" style={{ marginTop: "12px" }}>
             <button role="tab" aria-selected={!register} className={!register ? "active" : ""} onClick={() => switchTo("login")}>{t("auth.login")}</button>
             <button role="tab" aria-selected={register} className={register ? "active" : ""} onClick={() => switchTo("register")}>{t("auth.register")}</button>
           </div>
@@ -183,7 +223,11 @@ export function AuthPage({ onDone }: { onDone: () => void }) {
               {busy ? t("common.wait") : register ? t("auth.startFree") : t("auth.login")}
             </button>
           </form>
-          {!register && <button type="button" className="text-button" onClick={() => switchTo("forgot")}>{t("auth.forgot")}</button>}
+          {!register && (
+            <div className="stack" style={{ marginTop: "4px" }}>
+              <button type="button" className="text-button" onClick={() => switchTo("forgot")}>{t("auth.forgot")}</button>
+            </div>
+          )}
     </AuthLayout>
   );
 }

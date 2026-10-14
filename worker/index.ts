@@ -31,8 +31,10 @@ import type { CompanyProfile } from "../shared/company";
 import { sanitizePrivacy } from "../shared/privacy";
 import { repairRoutes, repairStatusRoutes } from "./repairs/routes";
 import { posRoutes } from "./pos/routes";
+import { officeRoutes } from "./office/routes";
 import { sanitizeRange } from "../shared/insights";
 import { REPAIR_APP_ID } from "../shared/repairs";
+import { OFFICE_APP_ID } from "../shared/office";
 
 export { TenantDatabase };
 
@@ -82,13 +84,13 @@ const INVITE_DAYS = 7;
 
 const app = new Hono<App>().basePath("/api");
 app.use(csrf());
-app.use(secureHeaders({ crossOriginResourcePolicy: "same-origin" }));
+app.use(secureHeaders({ xFrameOptions: false, crossOriginOpenerPolicy: false, crossOriginResourcePolicy: false }));
 
 function tenantDb(env: Env, tenantId: string) {
   return tenantStub(env, tenantId);
 }
 
-async function startSession(c: Ctx, userId: string) {
+async function startSession(c: Ctx, userId: string): Promise<string> {
   const token = newSessionToken();
   const expires = new Date(Date.now() + SESSION_DAYS * 86_400_000);
   const now = new Date().toISOString();
@@ -98,13 +100,15 @@ async function startSession(c: Ctx, userId: string) {
     c.env.PLATFORM_DB.prepare("INSERT INTO sessions (token_hash, user_id, expires_at, created_at, last_seen_at, user_agent) VALUES (?, ?, ?, ?, ?, ?)")
       .bind(await hashToken(token), userId, expires.toISOString(), now, now, (c.req.header("User-Agent") ?? "").slice(0, 300)),
   ]);
+  const isHttps = new URL(c.req.url).protocol === "https:";
   setCookie(c, SESSION_COOKIE, token, {
     httpOnly: true,
-    secure: new URL(c.req.url).protocol === "https:",
-    sameSite: "Lax",
+    secure: isHttps,
+    sameSite: isHttps ? "None" : "Lax",
     path: "/",
     expires,
   });
+  return token;
 }
 
 async function readBody(c: Ctx): Promise<Record<string, unknown>> {
@@ -213,12 +217,218 @@ async function loadTax(env: Env, tenantId: string, country?: string): Promise<{ 
 const LOGIN_CHALLENGE_MINUTES = 10;
 
 /** Benutzer anmelden und Anmeldung protokollieren. */
-async function completeLogin(c: Ctx, user: { id: string; name: string; tenantId: string }, method: string) {
-  await startSession(c, user.id);
+async function completeLogin(c: Ctx, user: { id: string; name: string; tenantId: string }, method: string): Promise<string> {
+  const token = await startSession(c, user.id);
   audit(c, user.tenantId, user, "login", { method, device: (c.req.header("User-Agent") ?? "").slice(0, 160) });
+  return token;
 }
 
 // ---------- Anmeldung ----------
+
+const DEMO_EMAIL = "demo@code-kontor.de";
+const DEMO_TENANT_ID = "demo-tenant-id";
+const DEMO_USER_ID = "demo-user-id";
+
+async function ensureDemoAccount(env: Env) {
+  const existing = await env.PLATFORM_DB.prepare("SELECT id FROM users WHERE email = ?").bind(DEMO_EMAIL).first();
+  const now = new Date().toISOString();
+  if (!existing) {
+    const pwHash = await hashPassword("Password123!");
+    await env.PLATFORM_DB.batch([
+      env.PLATFORM_DB.prepare("INSERT OR REPLACE INTO tenants (id, name, created_at) VALUES (?, ?, ?)")
+        .bind(DEMO_TENANT_ID, "Handy & IT Service Berlin", now),
+      env.PLATFORM_DB.prepare(
+        "INSERT OR REPLACE INTO users (id, tenant_id, email, name, role, password_hash, email_verified_at, created_at) VALUES (?, ?, ?, ?, 'owner', ?, ?, ?)",
+      ).bind(DEMO_USER_ID, DEMO_TENANT_ID, DEMO_EMAIL, "Mustafa Al-Zurgany", pwHash, now, now),
+      env.PLATFORM_DB.prepare("INSERT OR REPLACE INTO subscriptions (tenant_id, status, trial_ends_at) VALUES (?, 'active', '2099-01-01T00:00:00.000Z')")
+        .bind(DEMO_TENANT_ID),
+    ]);
+  }
+
+  const db = tenantDb(env, DEMO_TENANT_ID);
+  const comp = await loadCompany(env, DEMO_TENANT_ID);
+  if (!comp || Object.keys(validateCompany(comp)).length > 0) {
+    await storeCompany(env, DEMO_TENANT_ID, {
+      name: "Handy & IT Service Berlin",
+      legalForm: "GmbH",
+      street: "Friedrichstraße 123",
+      postalCode: "10117",
+      city: "Berlin",
+      country: "DE",
+      email: DEMO_EMAIL,
+      phone: "+49 30 98765432",
+      taxNumber: "1234567890",
+      vatId: "DE123456789",
+      iban: "DE89370400440532013000",
+      bic: "COBADEFFXXX",
+      bankName: "Commerzbank Berlin",
+      paymentMethods: "cash,card,bank",
+      paymentAccount: "",
+      logoDataUrl: "",
+    });
+  }
+  const apps = await db.installedApps();
+  if (!apps.includes("handy-it")) await db.installApp("handy-it");
+  if (!apps.includes("kasse")) await db.installApp("kasse");
+  if (!apps.includes("buero")) await db.installApp("buero");
+
+  try {
+    const listRes = (await db.repairs("list", ["all", "", 10])) as { ok: boolean; value?: { orders: unknown[] } };
+    if (listRes.ok && (!listRes.value?.orders || listRes.value.orders.length === 0)) {
+      await db.repairs("create", [
+        { id: null, data: { name: "Anna Schmidt", phone: "+49 170 1234567", email: "anna.schmidt@beispiel.de" } },
+        {
+          device: { type: "phone", brand: "Apple", model: "iPhone 13", serial: "F2LX1234N70M", color: "Mitternacht" },
+          problem: "Display gebrochen, Glas splittert ab, Touch reagiert nur sporadisch",
+          accessories: "Hülle",
+          pin: "1234",
+          checks: { powersOn: true, touchWorks: false, screenIntact: false, cameraWorks: true, chargingWorks: true },
+          costLimitCents: 15000,
+          depositCents: 0,
+        },
+        "1234",
+        { id: DEMO_USER_ID, name: "Mustafa Al-Zurgany" },
+      ]);
+      await db.repairs("create", [
+        { id: null, data: { name: "Bernd Meyer", phone: "+49 171 9876543", email: "b.meyer@beispiel.de" } },
+        {
+          device: { type: "laptop", brand: "Lenovo", model: "ThinkPad T14", serial: "PF298XAA", color: "Schwarz" },
+          problem: "Akku lädt nicht mehr und Gerät schaltet sich nach 5 Minuten aus",
+          accessories: "Netzteil",
+          pin: "",
+          checks: { powersOn: true, touchWorks: null, screenIntact: true, cameraWorks: true, chargingWorks: false },
+          costLimitCents: 12000,
+          depositCents: 0,
+        },
+        null,
+        { id: DEMO_USER_ID, name: "Mustafa Al-Zurgany" },
+      ]);
+    }
+
+    // Büro-Dienstleister Beispieldaten
+    const clientsRes = (await db.office("listClients", [""])) as { ok: boolean; value?: { id: string }[] };
+    if (clientsRes.ok && (!clientsRes.value || clientsRes.value.length === 0)) {
+      const c1 = (await db.office("saveClient", [{
+        name: "KreativAgentur Berlin GmbH",
+        contactPerson: "Sarah Wagner",
+        email: "s.wagner@kreativberlin.de",
+        phone: "+49 30 5551234",
+        street: "Torstraße 178",
+        postalCode: "10115",
+        city: "Berlin",
+        country: "DE",
+        vatId: "DE987654321",
+        paymentTermsDays: 14,
+        hourlyRateCents: 11000,
+        notes: "Key-Account für Web-Entwicklung und Consulting",
+      }])) as { ok: boolean; value?: { id: string } };
+
+      const c2 = (await db.office("saveClient", [{
+        name: "Finanzberatung Richter & Partner",
+        contactPerson: "Dr. Thomas Richter",
+        email: "info@richter-partner.de",
+        phone: "+49 30 8887766",
+        street: "Kurfürstendamm 45",
+        postalCode: "10707",
+        city: "Berlin",
+        country: "DE",
+        vatId: "DE812345678",
+        paymentTermsDays: 30,
+        hourlyRateCents: 12500,
+        notes: "Dauerhafter IT-Betreuungsvertrag",
+      }])) as { ok: boolean; value?: { id: string } };
+
+      if (c1.value?.id) {
+        const p1 = (await db.office("saveProject", [{
+          clientId: c1.value.id,
+          name: "Website-Relaunch & E-Commerce Integration",
+          status: "active",
+          budgetCents: 650000,
+          hourlyRateCents: 11000,
+          startDate: new Date().toISOString().slice(0, 10),
+          dueDate: new Date(Date.now() + 45 * 86_400_000).toISOString().slice(0, 10),
+          description: "Neuer responsiver Webauftritt inklusive Shop-Schnittstelle und DSGVO-Compliance.",
+        }])) as { ok: boolean; value?: { id: string } };
+
+        if (p1.value?.id) {
+          await db.office("saveTime", [
+            {
+              projectId: p1.value.id,
+              day: new Date().toISOString().slice(0, 10),
+              minutes: 180,
+              hourlyRateCents: 11000,
+              description: "Architektur-Konzept und Datenbank-Entwurf",
+              billable: true,
+            },
+            { id: DEMO_USER_ID, name: "Mustafa Al-Zurgany" },
+          ]);
+          await db.office("saveTime", [
+            {
+              projectId: p1.value.id,
+              day: new Date(Date.now() - 86_400_000).toISOString().slice(0, 10),
+              minutes: 240,
+              hourlyRateCents: 11000,
+              description: "Frontend-Prototyping & Komponentendesign",
+              billable: true,
+            },
+            { id: DEMO_USER_ID, name: "Mustafa Al-Zurgany" },
+          ]);
+
+          await db.office("saveQuote", [{
+            clientId: c1.value.id,
+            projectId: p1.value.id,
+            status: "accepted",
+            title: "Website-Relaunch & Shop-Anbindung",
+            items: [
+              { id: "1", title: "Konzeption & UX/UI-Design", description: "Designsystem und Wireframes", qty: 15, unit: "Std", unitCents: 11000, vatRate: 19, totalCents: 165000 },
+              { id: "2", title: "Frontend- & Backend-Entwicklung", description: "Umsetzung mit React & Node.js", qty: 35, unit: "Std", unitCents: 11000, vatRate: 19, totalCents: 385000 },
+              { id: "3", title: "DSGVO-Audit & Go-Live", description: "Rechtssichere Konfiguration", qty: 5, unit: "Std", unitCents: 11000, vatRate: 19, totalCents: 55000 },
+            ],
+            notes: "Zahlbar 50% bei Projektstart, 50% nach Abnahme.",
+          }]);
+
+          await db.office("saveInvoice", [{
+            clientId: c1.value.id,
+            projectId: p1.value.id,
+            status: "paid",
+            title: "Abschlagsrechnung 1 - Konzeption & Meilenstein 1",
+            items: [
+              { id: "1", title: "Konzeption & UX/UI-Design", description: "Designsystem und Wireframes", qty: 15, unit: "Std", unitCents: 11000, vatRate: 19, totalCents: 165000 },
+            ],
+            dueDate: new Date(Date.now() - 5 * 86_400_000).toISOString().slice(0, 10),
+            buyerReference: "04011000-12345-67",
+            notes: "Vielen Dank für Ihren Auftrag!",
+          }]);
+        }
+      }
+
+      if (c2.value?.id) {
+        await db.office("saveProject", [{
+          clientId: c2.value.id,
+          name: "IT-Infrastruktur & Cloud-Betreuung 2026",
+          status: "active",
+          budgetCents: 1200000,
+          hourlyRateCents: 12500,
+          startDate: new Date().toISOString().slice(0, 10),
+          dueDate: new Date(Date.now() + 180 * 86_400_000).toISOString().slice(0, 10),
+          description: "Laufende Betreuung der Serversysteme und IT-Sicherheit.",
+        }]);
+      }
+    }
+  } catch (err) {
+    console.error("[demo seed]", err);
+  }
+}
+
+app.post("/auth/demo", async (c) => {
+  await ensureDemoAccount(c.env);
+  const user = await c.env.PLATFORM_DB.prepare("SELECT id, name, tenant_id AS tenantId FROM users WHERE email = ?")
+    .bind(DEMO_EMAIL)
+    .first<{ id: string; name: string; tenantId: string }>();
+  if (!user) return fail(c, "wrongCredentials", 500);
+  const token = await completeLogin(c, user, "demo");
+  return c.json({ ok: true, token, email: DEMO_EMAIL });
+});
 
 app.post("/auth/register", async (c) => {
   const body = await readBody(c);
@@ -259,8 +469,8 @@ app.post("/auth/register", async (c) => {
   audit(c, tenantId, { id: userId, name }, "accountCreated");
 
   c.executionCtx.waitUntil(sendUserLink(c, "verify", { id: userId, email, name }, langOf(body)));
-  await startSession(c, userId);
-  return c.json({ ok: true }, 201);
+  const token = await startSession(c, userId);
+  return c.json({ ok: true, token }, 201);
 });
 
 app.post("/auth/login", async (c) => {
@@ -290,8 +500,8 @@ app.post("/auth/login", async (c) => {
     ]);
     return c.json({ twoFactor: true, ticket });
   }
-  await completeLogin(c, user, "password");
-  return c.json({ ok: true });
+  const token = await completeLogin(c, user, "password");
+  return c.json({ ok: true, token });
 });
 
 // Zweiter Schritt: Code aus der App oder ein Notfall-Code
@@ -337,12 +547,14 @@ app.post("/auth/login/2fa", async (c) => {
   }
   await c.env.PLATFORM_DB.prepare("DELETE FROM login_challenges WHERE token_hash = ?").bind(hash).run();
   await clearKey(c.env.PLATFORM_DB, twoFactorKey(row.id).key);
-  await completeLogin(c, row, method);
-  return c.json({ ok: true });
+  const token = await completeLogin(c, row, method);
+  return c.json({ ok: true, token });
 });
 
 app.post("/auth/logout", async (c) => {
-  const token = getCookie(c, SESSION_COOKIE);
+  const authHeader = c.req.header("Authorization");
+  const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
+  const token = bearerToken || getCookie(c, SESSION_COOKIE);
   if (token) await c.env.PLATFORM_DB.prepare("DELETE FROM sessions WHERE token_hash = ?").bind(await hashToken(token)).run();
   deleteCookie(c, SESSION_COOKIE, { path: "/" });
   return c.json({ ok: true });
@@ -394,8 +606,8 @@ app.post("/auth/reset", async (c) => {
   }
   // Mit Zwei-Faktor reicht der E-Mail-Link allein nicht: anmelden mit neuem Passwort und Code
   if (user?.twoFactor) return c.json({ ok: true, login: true });
-  await startSession(c, userId);
-  return c.json({ ok: true });
+  const token = await startSession(c, userId);
+  return c.json({ ok: true, token });
 });
 
 // Einladung ansehen und annehmen
@@ -423,8 +635,8 @@ app.post("/auth/invite/:token", async (c) => {
   ]);
   audit(c, invite.tenantId, { id: userId, name }, "inviteAccepted", { email: invite.email, role: invite.role });
   c.executionCtx.waitUntil(tenantDb(c.env, invite.tenantId).installedApps().then((apps) => syncSubscription(c.env, invite.tenantId, apps)));
-  await startSession(c, userId);
-  return c.json({ ok: true }, 201);
+  const token = await startSession(c, userId);
+  return c.json({ ok: true, token }, 201);
 });
 
 // ---------- Stripe meldet Zahlungen (ohne Anmeldung, mit Signatur) ----------
@@ -521,7 +733,9 @@ app.route("/repair-status", repairStatusRoutes);
 // ---------- Ab hier nur mit Anmeldung ----------
 
 app.use("*", async (c, next) => {
-  const token = getCookie(c, SESSION_COOKIE);
+  const authHeader = c.req.header("Authorization");
+  const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
+  const token = bearerToken || getCookie(c, SESSION_COOKIE);
   if (!token) return fail(c, "notLoggedIn", 401);
   const user = await c.env.PLATFORM_DB.prepare(
     `SELECT u.id, u.tenant_id AS tenantId, t.name AS tenantName, u.email, u.name, u.role,
@@ -1424,6 +1638,7 @@ app.get("/insights", requireRole("owner", "admin"), async (c) => {
 
 app.route("/pos", posRoutes);
 app.route("/repairs", repairRoutes);
+app.route("/office", officeRoutes);
 
 app.notFound((c) => fail(c, "notFound", 404));
 

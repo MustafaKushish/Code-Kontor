@@ -1,0 +1,7 @@
+{
+  "name": "Code Kontor",
+  "description": "Code Kontor: fertige Systeme für jedes Geschäft, monatlich mietbar.",
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

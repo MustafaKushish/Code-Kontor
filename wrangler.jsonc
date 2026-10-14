@@ -6,6 +6,9 @@
   "workers_dev": true,
   // Protokolle im Cloudflare-Dashboard (Worker → Logs), hilft bei Fehlersuche
   "observability": { "enabled": true },
+  "vars": {
+    "LOCAL_NO_JURISDICTION": "1"
+  },
   "assets": {
     "directory": "./dist",
     "not_found_handling": "single-page-application",

@@ -117,7 +117,7 @@ export const CATALOG: CatalogApp[] = [
     icon: "briefcase",
     hue: 45,
     priceMonthly: 29,
-    status: "preview",
+    status: "ready",
     features: ["Kunden & Projekte", "Zeiterfassung", "Angebote", "E-Rechnungen", "DATEV-Export"],
   },
 ];

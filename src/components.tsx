@@ -12,10 +12,13 @@ export function Logo({ compact }: { compact?: boolean }) {
   );
 }
 
-export function Field(props: { label: string; error?: string; hint?: string; children: ReactNode; wide?: boolean }) {
+export function Field(props: { label: string; error?: string; hint?: string; children: ReactNode; wide?: boolean; required?: boolean }) {
   return (
     <label className={props.wide ? "field wide" : "field"}>
-      <span className="field-label">{props.label}</span>
+      <span className="field-label">
+        {props.label}
+        {props.required && <span className="muted" style={{ marginLeft: "4px" }}>*</span>}
+      </span>
       {props.children}
       {props.error ? <small className="error">{props.error}</small> : props.hint && <small className="muted">{props.hint}</small>}
     </label>

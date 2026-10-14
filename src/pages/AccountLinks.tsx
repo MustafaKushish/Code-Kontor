@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { CheckCircle2 } from "lucide-react";
-import { api, type Role } from "../api";
+import { api, setStoredToken, type Role } from "../api";
 import { Field } from "../components";
 import { useI18n } from "../i18n";
 import { navigate } from "../router";
@@ -40,7 +40,8 @@ export function InvitePage({ token, onDone }: { token: string; onDone: () => voi
     setBusy(true);
     setError("");
     try {
-      await api(`/auth/invite/${token}`, { method: "POST", body: { name, password } });
+      const r = await api<{ token?: string }>(`/auth/invite/${token}`, { method: "POST", body: { name, password } });
+      if (r.token) setStoredToken(r.token);
       navigate("/");
       onDone();
     } catch (err) {
@@ -82,7 +83,8 @@ export function ResetPage({ token, onDone }: { token: string; onDone: () => void
     setBusy(true);
     setError("");
     try {
-      await api("/auth/reset", { method: "POST", body: { token, password } });
+      const r = await api<{ token?: string }>("/auth/reset", { method: "POST", body: { token, password } });
+      if (r.token) setStoredToken(r.token);
       navigate("/");
       onDone();
     } catch (err) {

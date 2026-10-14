@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
-import { api, ApiError, type Me } from "./api";
+import { api, ApiError, setStoredToken, type Me } from "./api";
 import { usePath, navigate } from "./router";
 import { Shell } from "./layout/Shell";
 import { AuthPage } from "./pages/AuthPage";
@@ -24,6 +24,7 @@ import { POS_APP_ID } from "../shared/pos";
 const RepairsApp = lazy(() => import("./modules/repairs/RepairsApp"));
 const RepairStatusPage = lazy(() => import("./modules/repairs/StatusPage"));
 const RepairBookingPage = lazy(() => import("./modules/repairs/BookingPage"));
+const OfficeApp = lazy(() => import("./modules/office/OfficeApp"));
 // Die Kasse gehört zur Plattform (eine für alle Systeme), wird aber auch erst bei Bedarf geladen
 const PosApp = lazy(() => import("./pos/PosApp"));
 const PosKiosk = lazy(() => import("./pos/PosApp").then((m) => ({ default: m.Kiosk })));
@@ -41,6 +42,7 @@ export function App() {
       setMe(next);
     } catch (error) {
       if (!(error instanceof ApiError && error.status === 401)) console.error(error);
+      if (error instanceof ApiError && error.status === 401) setStoredToken(null);
       setMe(null);
     } finally {
       setLoading(false);
@@ -53,6 +55,7 @@ export function App() {
 
   const logout = async () => {
     await api("/auth/logout", { method: "POST" });
+    setStoredToken(null);
     setMe(null);
     navigate("/");
   };
@@ -107,6 +110,8 @@ export function App() {
     page = <Catalog me={me} />;
   } else if (section === "app" && id === "handy-it" && me.installedApps.includes(id)) {
     page = <Suspense fallback={null}><RepairsApp me={me} path={path} /></Suspense>;
+  } else if (section === "app" && id === "buero" && me.installedApps.includes(id)) {
+    page = <Suspense fallback={null}><OfficeApp me={me} path={path} /></Suspense>;
   } else if (section === "app" && id === POS_APP_ID && hasPos) {
     page = <Suspense fallback={null}><PosApp me={me} path="/kasse" /></Suspense>;
   } else if (section === "app" && id && findApp(id) && me.installedApps.includes(id)) {

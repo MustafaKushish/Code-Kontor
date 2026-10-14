@@ -1,0 +1,223 @@
+/* ==========================================================================
+   Code Kontor – Modul „Büro & Dienstleister“ (buero)
+   Farbton: Warmes Bernstein / Gold (Hue 45)
+   ========================================================================== */
+
+.office {
+  --hue: 45;
+  --accent: hsl(var(--hue) 90% 42%);
+  --accent-soft: hsl(var(--hue) 80% 92%);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .office {
+    --accent: hsl(var(--hue) 90% 55%);
+    --accent-soft: hsl(var(--hue) 40% 16%);
+  }
+}
+:root[data-theme="dark"] .office {
+  --accent: hsl(var(--hue) 90% 55%);
+  --accent-soft: hsl(var(--hue) 40% 16%);
+}
+
+.office-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px;
+}
+
+.office-stat-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  display: grid;
+  gap: 6px;
+  box-shadow: var(--shadow-sm);
+}
+
+.office-stat-card .label {
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.office-stat-card .value {
+  font-family: var(--display);
+  font-size: 1.6rem;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+}
+
+.office-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 18px;
+}
+
+.office-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 20px;
+  display: grid;
+  gap: 14px;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.office-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+}
+
+.office-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.office-progress-bar {
+  height: 8px;
+  background: var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.office-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.office-progress-fill.overbudget {
+  background: var(--error);
+}
+
+.office-table-wrap {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.office-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.92rem;
+}
+
+.office-table th {
+  background: var(--panel-2);
+  padding: 12px 16px;
+  font-weight: 600;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+}
+
+.office-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+.office-table tr:last-child td {
+  border-bottom: none;
+}
+
+.office-table tr:hover td {
+  background: color-mix(in srgb, var(--panel-2) 40%, transparent);
+}
+
+.office-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 11, 16, 0.6);
+  backdrop-filter: blur(4px);
+  display: grid;
+  place-items: center;
+  z-index: 1000;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.office-modal {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  width: 100%;
+  max-width: 640px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-lift);
+  display: grid;
+  gap: 18px;
+  padding: 24px;
+}
+
+.office-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.office-line-items {
+  display: grid;
+  gap: 10px;
+}
+
+.office-line-item-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+@media (max-width: 640px) {
+  .office-line-item-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(0.97); }
+}
+
+.office-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+@media (max-width: 768px) {
+  .office-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+
+.print-items {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+  font-size: 0.9rem;
+}
+
+.print-items th {
+  border-bottom: 2px solid var(--text);
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.print-items td {
+  border-bottom: 1px solid var(--line);
+  padding: 10px;
+  vertical-align: top;
+}
+
