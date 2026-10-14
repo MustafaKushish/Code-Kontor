@@ -10,7 +10,7 @@ import { sanitizeCompany, validateCompany } from "../shared/company";
 import { findApp } from "../shared/apps";
 import { fail } from "./errors";
 import { cityForPostalCode, suggestAddresses } from "./geo";
-import { askAssistant, DAILY_QUESTION_LIMIT, parseConversation } from "./assistant";
+import { askAssistant, DAILY_QUESTION_LIMIT, parseConversation, type AssistantContext } from "./assistant";
 import { mailEnabled, renderMail, renderReportMail, sendMail, type MailKind } from "./mail";
 import {
   employedInMonth, isValidMonth, monthReportCsv, sanitizeAdvisor, sanitizeEmployee, sanitizeMonthEntry, SENSITIVE_EMPLOYEE_FIELDS,
@@ -1341,13 +1341,23 @@ app.post("/assistant", async (c) => {
   const db = tenantDb(c.env, user.tenantId);
   if (!(await db.countAssistantQuestion(user.id, DAILY_QUESTION_LIMIT))) return fail(c, "assistantLimit", 429);
 
-  const context = {
+  const installedApps = await db.installedApps();
+  const context: AssistantContext = {
     companyName: user.tenantName,
     userName: user.name,
     role: user.role,
-    installedApps: await db.installedApps(),
+    installedApps,
     lang: typeof body.lang === "string" ? body.lang : "de",
   };
+  // Aus der Auswertung gefragt: Zahlen des Zeitraums mitgeben, aber nur für Inhaber und Admins (wie die Auswertung selbst)
+  if (body.insights && typeof body.insights === "object" && user.role !== "staff") {
+    const today = localDay(new Date().toISOString());
+    const range = sanitizeRange(body.insights as { from?: unknown; to?: unknown }, today);
+    if (range) {
+      const [data, tax, profile] = await Promise.all([db.insights(range, installedApps.includes(REPAIR_APP_ID), today), db.getTaxSettings(), db.getCompany()]);
+      context.insights = { data, currency: tax?.currency ?? defaultTaxSettings(profile?.country ?? "DE").currency, today };
+    }
+  }
 
   // Antwort als Zeilen mit je einem JSON-Ereignis, damit der Text sofort erscheint.
   const encoder = new TextEncoder();

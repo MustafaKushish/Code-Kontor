@@ -607,6 +607,8 @@ export const ar: Dict = {
     everywhere: "يعمل على Windows وmacOS وLinux وChromeOS وAndroid وiPhone وiPad. بياناتك محفوظة بأمان في السحابة ومتطابقة على جميع أجهزتك.",
   },
   insights: {
+    aiTips: "نصائح الذكاء الاصطناعي للشهر القادم",
+    aiQuestion: "انظر إلى أرقامي لـ {period}. ما الذي يمكنني تحسينه بشكل ملموس في الشهر القادم؟",
     title: "التحليلات",
     subtitle: "كل الأنظمة في لمحة: المبيعات والصندوق والطلبات ووقت العمل.",
     periods: { day: "يوم", week: "أسبوع", month: "شهر", year: "سنة" },

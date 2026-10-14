@@ -608,6 +608,8 @@ export const de = {
     everywhere: "Funktioniert auf Windows, macOS, Linux, ChromeOS, Android, iPhone und iPad. Deine Daten liegen sicher in der Cloud und sind auf allen Geräten gleich.",
   },
   insights: {
+    aiTips: "KI-Tipps für nächsten Monat",
+    aiQuestion: "Schau dir meine Zahlen für {period} an. Was kann ich nächsten Monat konkret besser machen?",
     title: "Auswertung",
     subtitle: "Alle Systeme auf einen Blick: Umsatz, Kasse, Aufträge und Arbeitszeit.",
     periods: { day: "Tag", week: "Woche", month: "Monat", year: "Jahr" },

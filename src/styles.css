@@ -1025,6 +1025,11 @@ input[aria-invalid="true"] { border-color: var(--error); }
 }
 
 /* ---------- Auswertung über alle Systeme ---------- */
+.button.ai-button {
+  color: #fff; border: none; background: linear-gradient(135deg, #0d9488, #6366f1 60%, #f59e0b); background-size: 180% 180%;
+  animation: shimmer 8s ease-in-out infinite; box-shadow: 0 12px 26px -12px rgb(79 70 229 / 0.7), inset 0 1px 0 rgb(255 255 255 / 0.3);
+}
+.button.ai-button:hover { filter: brightness(1.08); }
 .insights-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
 .segmented.four { grid-template-columns: repeat(4, 1fr); min-width: min(100%, 380px); }
 .insights-nav { display: flex; align-items: center; gap: 6px; }

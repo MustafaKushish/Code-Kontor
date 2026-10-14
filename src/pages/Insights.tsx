@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import { ArrowDownRight, ArrowRight, ArrowUpRight, Banknote, ChevronLeft, ChevronRight, Clock, CreditCard, Gift, Landmark, Receipt, RotateCcw, ShoppingCart, Users } from "lucide-react";
+import { ArrowDownRight, ArrowRight, ArrowUpRight, Banknote, ChevronLeft, ChevronRight, Clock, CreditCard, Gift, Landmark, Receipt, RotateCcw, ShoppingCart, Sparkles, Users } from "lucide-react";
 import { api, type Me } from "../api";
 import { AppIcon, appStyle, Link } from "../components";
 import { useI18n } from "../i18n";
+import { askAssistant } from "../layout/Assistant";
 import { formatMoney } from "../money";
 import { findApp } from "../../shared/apps";
 import { PAY_METHODS, POS_APP_ID, type PayMethod } from "../../shared/pos";
@@ -89,6 +90,9 @@ export function InsightsPage({ me }: { me: Me }) {
           <h1 className="display">{t("insights.title")}</h1>
           <p className="muted">{t("insights.subtitle")}</p>
         </div>
+        <button className="button ai-button" onClick={() => askAssistant({ question: t("insights.aiQuestion", { period: label }), insights: range })}>
+          <Sparkles size={18} /> {t("insights.aiTips")}
+        </button>
       </header>
 
       <div className="insights-bar">

@@ -607,6 +607,8 @@ export const tr: Dict = {
     everywhere: "Windows, macOS, Linux, ChromeOS, Android, iPhone ve iPad'de çalışır. Verilerin bulutta güvenle saklanır ve tüm cihazlarında aynıdır.",
   },
   insights: {
+    aiTips: "Gelecek ay için yapay zekâ önerileri",
+    aiQuestion: "{period} rakamlarıma bak. Gelecek ay somut olarak neyi daha iyi yapabilirim?",
     title: "Analiz",
     subtitle: "Tüm sistemler tek bakışta: ciro, kasa, siparişler ve çalışma süresi.",
     periods: { day: "Gün", week: "Hafta", month: "Ay", year: "Yıl" },
