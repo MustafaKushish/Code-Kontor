@@ -54,26 +54,36 @@ export function AuthPage({ onDone }: { onDone: () => void }) {
   const [ticket, setTicket] = useState("");
   const [code, setCode] = useState("");
   const { t, errorText, lang } = useI18n();
-  const set = (key: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [key]: e.target.value });
+  // Immer vom neuesten Stand ausgehen: Beim automatischen Ausfüllen kommen E-Mail und Passwort im selben Moment.
+  const set = (key: keyof typeof form) => (e: { target: { value: string } }) => {
+    const value = e.target.value;
+    setForm((f) => ({ ...f, [key]: value }));
+  };
   const switchTo = (next: typeof mode) => {
     setMode(next);
     setError("");
     setForgotSent(false);
   };
 
-  const submit = async (event: FormEvent) => {
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    // Manche Browser füllen Felder aus, ohne das Formular zu benachrichtigen: Werte direkt aus den Feldern lesen
+    const fields = event.currentTarget;
+    const filled = {
+      email: fields.querySelector<HTMLInputElement>("input[type=email]")?.value ?? form.email,
+      password: fields.querySelector<HTMLInputElement>("input[type=password]")?.value ?? form.password,
+    };
     setBusy(true);
     setError("");
     try {
       if (mode === "forgot") {
-        await api("/auth/forgot", { method: "POST", body: { email: form.email, lang } });
+        await api("/auth/forgot", { method: "POST", body: { email: filled.email, lang } });
         setForgotSent(true);
       } else if (ticket) {
         await api("/auth/login/2fa", { method: "POST", body: { ticket, code } });
         onDone();
       } else {
-        const r = await api<{ twoFactor?: boolean; ticket?: string }>(`/auth/${mode}`, { method: "POST", body: { ...form, lang } });
+        const r = await api<{ twoFactor?: boolean; ticket?: string }>(`/auth/${mode}`, { method: "POST", body: { ...form, ...filled, lang } });
         if (r.twoFactor && r.ticket) setTicket(r.ticket);
         else onDone();
       }
@@ -117,8 +127,8 @@ export function AuthPage({ onDone }: { onDone: () => void }) {
         {forgotSent ? (
           <p className="notice success" role="status">{t("auth.forgotSent")}</p>
         ) : (
-          <form onSubmit={submit} className="stack">
-            <Field label={t("auth.email")}><input type="email" value={form.email} onChange={set("email")} autoComplete="email" required /></Field>
+          <form onSubmit={submit} className="stack" noValidate>
+            <Field label={t("auth.email")}><input type="email" name="email" defaultValue={form.email} onChange={set("email")} autoComplete="email" autoCapitalize="none" /></Field>
             {error && <p className="error" role="alert">{error}</p>}
             <button className="button primary block" disabled={busy}>{busy ? t("common.wait") : t("auth.forgotSubmit")}</button>
           </form>
@@ -140,7 +150,8 @@ export function AuthPage({ onDone }: { onDone: () => void }) {
               {register ? t("auth.registerText") : t("auth.loginText")}
             </p>
           </div>
-          <form onSubmit={submit} className="stack">
+          {/* Ohne Browser-Prüfung: Safari auf dem iPhone blockiert sonst still, wenn das automatische Ausfüllen nicht gemeldet wird. Der Server prüft alles und antwortet mit einer Meldung. */}
+          <form onSubmit={submit} className="stack" noValidate>
             {register && (
               <>
                 <Field label={t("auth.companyName")}><input value={form.companyName} onChange={set("companyName")} autoComplete="organization" required /></Field>
@@ -157,15 +168,14 @@ export function AuthPage({ onDone }: { onDone: () => void }) {
                 </p>
               </>
             )}
-            <Field label={t("auth.email")}><input type="email" value={form.email} onChange={set("email")} autoComplete="email" required /></Field>
+            <Field label={t("auth.email")}><input type="email" name="email" defaultValue={form.email} onChange={set("email")} autoComplete="email" autoCapitalize="none" /></Field>
             <Field label={t("auth.password")} hint={register ? t("auth.passwordHint") : undefined}>
               <input
                 type="password"
-                value={form.password}
+                name="password"
+                defaultValue={form.password}
                 onChange={set("password")}
                 autoComplete={register ? "new-password" : "current-password"}
-                minLength={register ? 10 : undefined}
-                required
               />
             </Field>
             {error && <p className="error" role="alert">{error}</p>}

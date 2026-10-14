@@ -86,10 +86,10 @@ export function AccountCard({ me }: { me: Me }) {
         <h3 className="card-subtitle"><KeyRound size={17} /> {t("account.changePassword")}</h3>
         <input type="email" value={me.user.email} autoComplete="username" readOnly hidden />
         <Field label={t("account.currentPassword")}>
-          <input type="password" value={form.currentPassword} onChange={(e) => setForm({ ...form, currentPassword: e.target.value })} autoComplete="current-password" required />
+          <input type="password" value={form.currentPassword} onChange={(e) => { const v = e.target.value; setForm((f) => ({ ...f, currentPassword: v })); }} autoComplete="current-password" required />
         </Field>
         <Field label={t("account.newPassword")} hint={t("auth.passwordHint")}>
-          <input type="password" value={form.newPassword} onChange={(e) => setForm({ ...form, newPassword: e.target.value })} autoComplete="new-password" minLength={10} required />
+          <input type="password" value={form.newPassword} onChange={(e) => { const v = e.target.value; setForm((f) => ({ ...f, newPassword: v })); }} autoComplete="new-password" minLength={10} required />
         </Field>
         {message && <p className={message.ok ? "success-text" : "error"} role={message.ok ? "status" : "alert"}>{message.text}</p>}
         <div><button className="button" disabled={busy}>{busy ? t("common.wait") : t("account.save")}</button></div>
@@ -341,11 +341,11 @@ export function DataCard({ me }: { me: Me }) {
         {deleting ? (
           <form className="stack" onSubmit={remove}>
             <Field label={t("security.deleteConfirmName", { company: me.user.tenantName })}>
-              <input value={form.companyName} onChange={(e) => setForm({ ...form, companyName: e.target.value })} autoComplete="off" required />
+              <input value={form.companyName} onChange={(e) => { const v = e.target.value; setForm((f) => ({ ...f, companyName: v })); }} autoComplete="off" required />
             </Field>
             <input type="email" value={me.user.email} autoComplete="username" readOnly hidden />
             <Field label={t("account.currentPassword")}>
-              <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} autoComplete="current-password" required />
+              <input type="password" value={form.password} onChange={(e) => { const v = e.target.value; setForm((f) => ({ ...f, password: v })); }} autoComplete="current-password" required />
             </Field>
             {error && <p className="error" role="alert">{error}</p>}
             <div className="row">
