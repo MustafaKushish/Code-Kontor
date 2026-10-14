@@ -7,6 +7,7 @@ export const tr: PosDict = {
   methods: { cash: "Nakit", card: "Kart", transfer: "Havale", voucher: "Hediye çeki" },
   tse: {
     notice: "Not: Almanya'da nakit kabul eden bir kasa için TSE gerekir (KassenSichV). Bağlantı sıradaki adım; o zamana kadar kasayı gerçek nakit işlemleri için kullanma.",
+    short: "TSE yok: yalnızca test",
     title: "TSE (teknik güvenlik cihazı)",
     status: "Henüz TSE bağlı değil",
     text: "Almanya'da nakit alan kasalar için zorunlu. Bir bulut TSE (ör. fiskaly) planlanıyor: her fiş imzalanır, QR kod fişe basılır ve kasa vergi dairesine bildirilir. Diğer ülkelerde kendi kuralları geçerlidir.",
@@ -43,7 +44,9 @@ export const tr: PosDict = {
     voidConfirm: "Açık fiş silinsin mi?",
     voidLast: "Son fişi iptal et",
     bon: "Fiş",
-    printLast: "Son fişi yazdır",
+    autoBon: "Ödemeden sonra fişi otomatik yazdır (açık/kapalı). Tekrar yazdırma Fişler altında.",
+    bonOn: "Fiş açık",
+    bonOff: "Fiş kapalı",
     recent: "Fişler",
     recentTitle: "Son fişler",
     recentHint: "Müşteri fişini unuttu mu? Fişe dokun ve yeniden yazdır.",

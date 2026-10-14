@@ -7,6 +7,7 @@ export const en: PosDict = {
   methods: { cash: "Cash", card: "Card", transfer: "Bank transfer", voucher: "Voucher" },
   tse: {
     notice: "Note: in Germany a till that accepts cash needs a TSE (KassenSichV). The connection is coming next; until then, don't use the till for real cash business.",
+    short: "No TSE: test use only",
     title: "TSE (technical security device)",
     status: "No TSE connected yet",
     text: "Required in Germany for tills that take cash. A cloud TSE (e.g. fiskaly) is planned: every receipt is then signed, the QR code is printed on the receipt and the till is registered with the tax office. Other countries have their own rules.",
@@ -43,7 +44,9 @@ export const en: PosDict = {
     voidConfirm: "Discard the open receipt?",
     voidLast: "Void last receipt",
     bon: "Receipt",
-    printLast: "Print last receipt",
+    autoBon: "Print the receipt automatically after payment (on/off). Reprint under Receipts.",
+    bonOn: "Print on",
+    bonOff: "Print off",
     recent: "Receipts",
     recentTitle: "Recent receipts",
     recentHint: "Customer forgot the receipt? Tap a receipt to print it again.",

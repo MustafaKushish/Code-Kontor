@@ -7,6 +7,7 @@ export const de = {
   methods: { cash: "Bar", card: "Karte", transfer: "Überweisung", voucher: "Gutschein" },
   tse: {
     notice: "Hinweis: In Deutschland braucht eine Kasse, die Bargeld annimmt, eine TSE (KassenSichV). Die Anbindung kommt als Nächstes; bis dahin die Kasse nicht für den echten Barbetrieb nutzen.",
+    short: "Ohne TSE: nur Testbetrieb",
     title: "TSE (Technische Sicherheitseinrichtung)",
     status: "Noch keine TSE verbunden",
     text: "Pflicht in Deutschland für Kassen mit Bargeld. Geplant ist eine Cloud-TSE (z. B. fiskaly): Jeder Beleg wird dann signiert, der QR-Code steht auf dem Bon, und die Kasse wird beim Finanzamt gemeldet. In anderen Ländern gelten eigene Regeln.",
@@ -43,7 +44,9 @@ export const de = {
     voidConfirm: "Den offenen Bon verwerfen?",
     voidLast: "Letzten Beleg stornieren",
     bon: "Bon",
-    printLast: "Letzten Beleg als Bon drucken",
+    autoBon: "Bon nach dem Bezahlen automatisch drucken (an/aus). Nachdrucken unter Belege.",
+    bonOn: "Bon an",
+    bonOff: "Bon aus",
     recent: "Belege",
     recentTitle: "Letzte Belege",
     recentHint: "Kunde hat den Kassenzettel vergessen? Beleg antippen und nochmal drucken.",
