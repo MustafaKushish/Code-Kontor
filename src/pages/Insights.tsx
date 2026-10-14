@@ -242,7 +242,7 @@ export function InsightsPage({ me }: { me: Me }) {
     };
     const tips: AssistantTips = {
       title: t("insights.tipsTitle", { month: monthLabel }),
-      intro: t("insights.tipsIntro", { period: label }),
+      intro: me.privacy?.assistant ? t("insights.tipsIntro", { period: label }) : t("insights.tipsIntroLocal", { period: label }),
       tips: adviceFor(fresh, me.installedApps, today()).map(text),
       followUps: [
         { label: t("insights.askMore"), question },

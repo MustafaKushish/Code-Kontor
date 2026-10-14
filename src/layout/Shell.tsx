@@ -148,7 +148,8 @@ export function Shell({ me, path, onLogout, children }: { me: Me; path: string; 
       </nav>
 
       <CommandPalette me={me} open={paletteOpen} onClose={() => setPaletteOpen(false)} />
-      {me.privacy?.assistant && <Assistant me={me} />}
+      {/* Ohne Freigabe nur die fertigen Vorschläge der Auswertung, nichts geht an die KI */}
+      <Assistant me={me} ai={!!me.privacy?.assistant} />
     </div>
   );
 }

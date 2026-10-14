@@ -610,6 +610,7 @@ export const en: Dict = {
   insights: {
     tipsTitle: "Suggestions for {month}",
     tipsIntro: "Based on your figures for {period}. Ask more below, the AI knows your figures.",
+    tipsIntroLocal: "Based on your figures for {period}.",
     askMore: "More ideas from the AI",
     askCustomers: "How do I get more customers?",
     askBasket: "How do I sell more per customer?",
@@ -765,6 +766,8 @@ export const en: Dict = {
     close: "Close",
     newChat: "New conversation",
     scrollDown: "Scroll down",
+    aiOff: "Questions to the AI are turned off. You can turn them on under {place}.",
+    aiOffLink: "Open settings",
     thinking: "Thinking …",
     disclaimer: "AI can make mistakes. Please check important details.",
     suggestion1: "How do I set up my first system?",

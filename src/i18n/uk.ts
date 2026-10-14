@@ -610,6 +610,7 @@ export const uk: Dict = {
   insights: {
     tipsTitle: "Пропозиції на {month}",
     tipsIntro: "За твоїми цифрами за {period}. Питай далі внизу, ШІ знає твої цифри.",
+    tipsIntroLocal: "За твоїми цифрами за {period}.",
     askMore: "Більше ідей від ШІ",
     askCustomers: "Як залучити більше клієнтів?",
     askBasket: "Як продавати більше одному клієнту?",
@@ -765,6 +766,8 @@ export const uk: Dict = {
     close: "Закрити",
     newChat: "Нова розмова",
     scrollDown: "Донизу",
+    aiOff: "Запитання до ШІ вимкнено. Увімкнути їх можна в розділі {place}.",
+    aiOffLink: "Відкрити налаштування",
     thinking: "Думаю …",
     disclaimer: "ШІ може помилятися. Перевіряйте важливі дані.",
     suggestion1: "Як налаштувати першу систему?",

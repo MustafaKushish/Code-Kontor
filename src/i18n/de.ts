@@ -611,6 +611,7 @@ export const de = {
   insights: {
     tipsTitle: "Vorschläge für {month}",
     tipsIntro: "Aus deinen Zahlen für {period}. Frag unten weiter, die KI kennt deine Zahlen.",
+    tipsIntroLocal: "Aus deinen Zahlen für {period}.",
     askMore: "Mehr Ideen von der KI",
     askCustomers: "Wie bekomme ich mehr Kunden?",
     askBasket: "Wie verkaufe ich pro Kunde mehr?",
@@ -766,6 +767,8 @@ export const de = {
     close: "Schließen",
     newChat: "Neues Gespräch",
     scrollDown: "Nach unten",
+    aiOff: "Fragen an die KI sind ausgeschaltet. Einschalten kannst du sie unter {place}.",
+    aiOffLink: "Einstellungen öffnen",
     thinking: "Denkt nach …",
     disclaimer: "KI kann Fehler machen. Wichtige Angaben bitte prüfen.",
     suggestion1: "Wie richte ich mein erstes System ein?",
