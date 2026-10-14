@@ -3,7 +3,7 @@ import { ArrowDownRight, ArrowRight, ArrowUpRight, Banknote, ChevronLeft, Chevro
 import { api, type Me } from "../api";
 import { AppIcon, appStyle, Link } from "../components";
 import { useI18n } from "../i18n";
-import { askAssistant, type AssistantTips } from "../layout/Assistant";
+import { askAssistant, setAssistantContext, type AssistantTips } from "../layout/Assistant";
 import { formatMoney } from "../money";
 import { findApp } from "../../shared/apps";
 import { PAY_METHODS, POS_APP_ID, type PayMethod } from "../../shared/pos";
@@ -83,6 +83,14 @@ export function InsightsPage({ me }: { me: Me }) {
   const sales = fresh?.sales;
   const hasSales = !!sales && (sales.receipts > 0 || sales.cancels > 0 || sales.revenueCents !== 0);
   const includesToday = range.from <= today() && today() <= range.to;
+
+  // Solange die Auswertung offen ist, zeigt ein neues Gespräch im Assistenten ihre Vorschläge statt der allgemeinen Beispiele
+  const aiOn = !!me.privacy?.assistant;
+  useEffect(() => {
+    const tips = buildTips();
+    setAssistantContext(tips ? { tips, insights: { from: range.from, to: range.to } } : null);
+  }, [fresh, lang, aiOn]);
+  useEffect(() => () => setAssistantContext(null), []);
 
   return (
     <div className="stack insights">
@@ -224,8 +232,14 @@ export function InsightsPage({ me }: { me: Me }) {
 
   /** KI-Tipps: fertige Vorschläge aus den Zahlen sofort zeigen, weitere Fragen gehen an die KI. */
   function showTips() {
+    const tips = buildTips();
+    if (tips) askAssistant({ insights: range, tips });
+    else askAssistant({ question: t("insights.aiQuestion", { period: label }), insights: range });
+  }
+
+  function buildTips(): AssistantTips | null {
+    if (!fresh) return null;
     const question = t("insights.aiQuestion", { period: label });
-    if (!fresh) return askAssistant({ question, insights: range });
     const month = nextMonthOf(today());
     const monthLabel = dayLabel(`${month}-15`, { month: "long", year: "numeric" });
     const percent = (n: number) => (n / 100).toLocaleString(lang, { style: "percent", maximumFractionDigits: 0 });
@@ -240,7 +254,7 @@ export function InsightsPage({ me }: { me: Me }) {
       if (tip.vars.season) vars.seasonText = t(`insights.seasons.${tip.vars.season}`);
       return { tone: tip.tone, title: t(`insights.tips.${tip.id}.title`, vars), text: t(`insights.tips.${tip.id}.text`, vars) };
     };
-    const tips: AssistantTips = {
+    return {
       title: t("insights.tipsTitle", { month: monthLabel }),
       intro: me.privacy?.assistant ? t("insights.tipsIntro", { period: label }) : t("insights.tipsIntroLocal", { period: label }),
       tips: adviceFor(fresh, me.installedApps, today()).map(text),
@@ -250,7 +264,6 @@ export function InsightsPage({ me }: { me: Me }) {
         { label: t("insights.askBasket"), question: t("insights.askBasket") },
       ],
     };
-    askAssistant({ insights: range, tips });
   }
 
   function groupLabel(group: string): string {
