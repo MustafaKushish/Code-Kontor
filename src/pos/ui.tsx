@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { methodLabels } from "../../shared/payments";
 import { createPortal } from "react-dom";
 import { Printer, X } from "lucide-react";
 import { parseAmount, type ReceiptCompany } from "../../shared/pos";
@@ -93,6 +94,7 @@ export function CompanyFoot({ company }: { company: ReceiptCompany }) {
       {company.taxNumber && <span>{p("print.taxNumber")}: {company.taxNumber}</span>}
       {company.vatId && <span>{p("print.vatId")}: {company.vatId}</span>}
       {company.iban && <span>{p("print.bank")}: {[company.bankName, company.iban, company.bic].filter(Boolean).join(" · ")}</span>}
+          {company.paymentMethods && <span>{p("print.payWith")}: {[methodLabels(company.paymentMethods, { cash: p("print.payCash"), transfer: p("print.payTransfer") }), company.paymentAccount].filter(Boolean).join(" · ")}</span>}
     </footer>
   );
 }

@@ -1,5 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from "react";
-import { guessCountry, sortedCountries } from "../../shared/countries";
+import { countryTax, guessCountry, sortedCountries } from "../../shared/countries";
+import { countryMethods, PAYMENT_METHOD_NAMES } from "../../shared/payments";
 import { MonitorSmartphone, ShieldCheck, Sparkles } from "lucide-react";
 import { api, ApiError } from "../api";
 import { AppIcon, Field, Logo } from "../components";
@@ -149,6 +150,11 @@ export function AuthPage({ onDone }: { onDone: () => void }) {
                     {sortedCountries(lang).map(([code, name]) => <option key={code} value={code}>{name}</option>)}
                   </select>
                 </Field>
+                <p className="country-facts small" aria-live="polite">
+                  <span>{t("auth.factCurrency")}: <strong>{countryTax(form.country).currency}</strong></span>
+                  <span>{t("auth.factBank")}: <strong>{t(countryTax(form.country).iban ? "auth.bankIban" : "auth.bankLocal")}</strong></span>
+                  <span>{t("auth.factPay")}: <strong>{countryMethods(form.country).map((id) => PAYMENT_METHOD_NAMES[id]).join(", ")}</strong></span>
+                </p>
               </>
             )}
             <Field label={t("auth.email")}><input type="email" value={form.email} onChange={set("email")} autoComplete="email" required /></Field>

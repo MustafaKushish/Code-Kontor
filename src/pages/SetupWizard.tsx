@@ -5,12 +5,13 @@ import { LanguageSwitch } from "../layout/LanguageSwitch";
 import { AddressInput } from "./AddressInput";
 import { Field, Logo } from "../components";
 import { COUNTRY_CODES, countryTax, sortedCountries } from "../../shared/countries";
+import { BASIC_METHODS, countryMethods, defaultMethods, parseMethods, PAYMENT_METHOD_NAMES } from "../../shared/payments";
 import { emptyCompanyProfile, validateCompany, type CompanyErrors, type CompanyProfile } from "../../shared/company";
 
 const STEPS: { key: "step1" | "step2" | "step3"; fields: (keyof CompanyProfile)[] }[] = [
   { key: "step1", fields: ["name", "legalForm", "street", "postalCode", "city", "country", "email", "phone"] },
   { key: "step2", fields: ["taxNumber", "vatId"] },
-  { key: "step3", fields: ["iban", "bic", "bankName", "logoDataUrl"] },
+  { key: "step3", fields: ["iban", "bic", "bankName", "paymentMethods", "paymentAccount", "logoDataUrl"] },
 ];
 
 
@@ -39,12 +40,29 @@ export function SetupWizard(props: {
 
   useEffect(() => {
     api<{ company: CompanyProfile | null }>("/company").then(({ company }) => {
-      if (company) setCompany({ ...emptyCompanyProfile, ...company });
+      if (company) setCompany({ ...emptyCompanyProfile, ...company, paymentMethods: company.paymentMethods || defaultMethods(company.country).join(",") });
     });
   }, []);
 
   const set = (key: keyof CompanyProfile) => (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setCompany({ ...company, [key]: e.target.value });
+
+  // Neues Land: Zahlarten neu vorschlagen, solange noch die Vorschläge des alten Landes gewählt sind
+  const changeCountry = (country: string) =>
+    setCompany((c) => {
+      const untouched = !c.paymentMethods || c.paymentMethods === defaultMethods(c.country).join(",");
+      return { ...c, country, paymentMethods: untouched ? defaultMethods(country).join(",") : c.paymentMethods };
+    });
+
+  const methods = parseMethods(company.paymentMethods);
+  const toggleMethod = (id: string) =>
+    setCompany((c) => {
+      const current = parseMethods(c.paymentMethods);
+      return { ...c, paymentMethods: (current.includes(id) ? current.filter((m) => m !== id) : [...current, id]).join(",") };
+    });
+  const methodName = (id: string) => PAYMENT_METHOD_NAMES[id] ?? t(`payments.${id}`);
+  const offered = [...new Set([...BASIC_METHODS, ...countryMethods(company.country), ...methods])];
+  const usesIban = countryTax(company.country).iban;
 
   // PLZ eingegeben: Ort automatisch eintragen, solange er leer ist oder selbst eingetragen wurde.
   const autoCity = useRef("");
@@ -138,7 +156,7 @@ export function SetupWizard(props: {
                 <input value={company.legalForm} onChange={set("legalForm")} />
               </Field>
               <Field label={t("wizard.country")} error={err("country")}>
-                <select value={company.country} onChange={set("country")}>
+                <select value={company.country} onChange={(e) => changeCountry(e.target.value)}>
                   {!COUNTRY_CODES.includes(company.country) && <option value={company.country}>{countryName(company.country)}</option>}
                   {sortedCountries(lang).map(([code, name]) => (
                     <option key={code} value={code}>{name}</option>
@@ -159,6 +177,10 @@ export function SetupWizard(props: {
                       postalCode: a.postalCode || c.postalCode,
                       city: a.city || c.city,
                       country: COUNTRY_CODES.includes(a.country) ? a.country : c.country,
+                      paymentMethods:
+                        COUNTRY_CODES.includes(a.country) && a.country !== c.country && (!c.paymentMethods || c.paymentMethods === defaultMethods(c.country).join(","))
+                          ? defaultMethods(a.country).join(",")
+                          : c.paymentMethods,
                     }))
                   }
                 />
@@ -191,14 +213,28 @@ export function SetupWizard(props: {
 
           {step === 2 && (
             <>
-              <Field label={countryTax(company.country).iban ? t("wizard.iban") : t("wizard.accountNumber")} error={err("iban")} wide>
-                <input value={company.iban} onChange={set("iban")} placeholder={countryTax(company.country).iban ? `${company.country}00 0000 0000 0000 0000 00` : ""} />
+              {!usesIban && <p className="notice wide">{t("wizard.noIban", { country: countryName(company.country) })}</p>}
+              <Field label={usesIban ? t("wizard.iban") : t("wizard.accountNumber")} error={err("iban")} hint={usesIban ? undefined : t("wizard.accountNumberHint")} wide>
+                <input value={company.iban} onChange={set("iban")} placeholder={usesIban ? `${company.country}00 0000 0000 0000 0000 00` : ""} />
               </Field>
-              <Field label={t("wizard.bic")} error={err("bic")}>
+              <Field label={usesIban ? t("wizard.bic") : t("wizard.swift")} error={err("bic")}>
                 <input value={company.bic} onChange={set("bic")} />
               </Field>
               <Field label={t("wizard.bankName")}>
                 <input value={company.bankName} onChange={set("bankName")} />
+              </Field>
+              <div className="field wide" role="group" aria-labelledby="pay-methods">
+                <span className="field-label" id="pay-methods">{t("wizard.paymentMethods")}</span>
+                <div className="chips wrap">
+                  {offered.map((id) => {
+                    const on = methods.includes(id);
+                    return <button type="button" key={id} aria-pressed={on} className={on ? "chip active" : "chip"} onClick={() => toggleMethod(id)}>{methodName(id)}</button>;
+                  })}
+                </div>
+                <small className="muted">{t("wizard.paymentMethodsHint")}</small>
+              </div>
+              <Field label={t("wizard.paymentAccount")} error={err("paymentAccount")} hint={t("wizard.paymentAccountHint")} wide>
+                <input value={company.paymentAccount} onChange={set("paymentAccount")} autoComplete="off" />
               </Field>
               <Field label={t("wizard.logo")} error={err("logoDataUrl")} hint={t("wizard.logoHint")} wide>
                 <input type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" onChange={pickLogo} />

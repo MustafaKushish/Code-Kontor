@@ -50,6 +50,7 @@ export async function companyForReceipt(env: Env, tenantId: string): Promise<Rec
     phone: company?.phone ?? "", email: company?.email ?? "", taxNumber: company?.taxNumber ?? "", vatId: company?.vatId ?? "",
     iban: await decryptField(env.DATA_KEY, company?.iban ?? ""), bic: await decryptField(env.DATA_KEY, company?.bic ?? ""),
     bankName: company?.bankName ?? "", logoDataUrl: company?.logoDataUrl ?? "",
+    paymentMethods: company?.paymentMethods ?? "", paymentAccount: await decryptField(env.DATA_KEY, company?.paymentAccount ?? ""),
   };
 }
 

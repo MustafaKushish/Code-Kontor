@@ -7,6 +7,7 @@ import { hashPassword, hashToken, newSessionToken, passwordProblem, verifyPasswo
 import { attemptKeys, clearFailures, clearKey, isLocked, recordFailure, registerKey, twoFactorKey } from "./throttle";
 import { TenantDatabase, tenantStub } from "./tenant";
 import { sanitizeCompany, validateCompany } from "../shared/company";
+import { defaultMethods } from "../shared/payments";
 import { findApp } from "../shared/apps";
 import { fail } from "./errors";
 import { cityForPostalCode, suggestAddresses } from "./geo";
@@ -175,9 +176,9 @@ function audit(c: Ctx, tenantId: string, who: { id: string; name: string } | nul
   c.executionCtx.waitUntil(done);
 }
 
-const SENSITIVE_COMPANY_FIELDS = ["iban", "bic"] as const;
+const SENSITIVE_COMPANY_FIELDS = ["iban", "bic", "paymentAccount"] as const;
 
-/** Firmendaten lesen; IBAN und BIC werden entschlüsselt. Alte, noch offene Werte werden dabei verschlüsselt. */
+/** Firmendaten lesen; IBAN, BIC und Zahlungs-Empfänger werden entschlüsselt. Alte, noch offene Werte werden dabei verschlüsselt. */
 async function loadCompany(env: Env, tenantId: string): Promise<CompanyProfile | null> {
   const db = tenantDb(env, tenantId);
   const stored = await db.getCompany();
@@ -253,7 +254,7 @@ app.post("/auth/register", async (c) => {
 
   // Eigene Datenbank des Kunden anlegen und mit dem Firmennamen vorbelegen
   const db = tenantDb(c.env, tenantId);
-  await storeCompany(c.env, tenantId, sanitizeCompany({ name: companyName, email, country }));
+  await storeCompany(c.env, tenantId, sanitizeCompany({ name: companyName, email, country, paymentMethods: defaultMethods(country).join(",") }));
   audit(c, tenantId, { id: userId, name }, "accountCreated");
 
   c.executionCtx.waitUntil(sendUserLink(c, "verify", { id: userId, email, name }, langOf(body)));

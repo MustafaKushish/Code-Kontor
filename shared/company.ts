@@ -2,6 +2,7 @@
 // Wird im Browser (Formular) und im Worker (Speichern) gleich geprüft.
 
 import { countryTax } from "./countries";
+import { containsCardNumber, parseMethods } from "./payments";
 
 export interface CompanyProfile {
   name: string;
@@ -17,6 +18,10 @@ export interface CompanyProfile {
   iban: string;
   bic: string;
   bankName: string;
+  /** Angenommene Zahlarten, z. B. "cash,qi,zaincash" (siehe shared/payments.ts) */
+  paymentMethods: string;
+  /** Empfänger für Zahlungen per App, z. B. "ZainCash 0770 123 4567". Nie eine Kartennummer. */
+  paymentAccount: string;
   logoDataUrl: string;
 }
 
@@ -34,6 +39,8 @@ export const emptyCompanyProfile: CompanyProfile = {
   iban: "",
   bic: "",
   bankName: "",
+  paymentMethods: "",
+  paymentAccount: "",
   logoDataUrl: "",
 };
 
@@ -41,7 +48,8 @@ export const emptyCompanyProfile: CompanyProfile = {
 export type ValidationCode =
   | "companyNameRequired" | "streetRequired" | "postalCodeRequired" | "postalCodeDe" | "cityRequired"
   | "countryRequired" | "emailInvalid" | "taxRequired" | "taxNumberInvalid" | "vatIdInvalid"
-  | "ibanRequired" | "ibanInvalid" | "bicInvalid" | "logoType" | "logoSize";
+  | "ibanRequired" | "ibanInvalid" | "bicInvalid" | "logoType" | "logoSize"
+  | "paymentAccountInvalid" | "cardNumberNotAllowed";
 
 export type CompanyErrors = Partial<Record<keyof CompanyProfile, ValidationCode>>;
 
@@ -107,6 +115,9 @@ export function validateCompany(profile: CompanyProfile): CompanyErrors {
     else if (!isValidIban(profile.iban)) errors.iban = "ibanInvalid";
   } else if (profile.iban.length > 40) errors.iban = "ibanInvalid";
   if (profile.bic.trim() && !isValidBic(profile.bic)) errors.bic = "bicInvalid";
+  // Nur Empfänger-Nummer (Telefon, Händler-ID), keine Kartendaten
+  if (containsCardNumber(profile.paymentAccount)) errors.paymentAccount = "cardNumberNotAllowed";
+  else if (profile.paymentAccount.length > 80) errors.paymentAccount = "paymentAccountInvalid";
   if (profile.logoDataUrl) {
     if (!/^data:image\/(png|jpeg|svg\+xml|webp);base64,/.test(profile.logoDataUrl))
       errors.logoDataUrl = "logoType";
@@ -128,5 +139,6 @@ export function sanitizeCompany(input: unknown): CompanyProfile {
   profile.bic = profile.bic.replace(/\s+/g, "").toUpperCase();
   profile.vatId = profile.vatId.replace(/\s+/g, "").toUpperCase();
   profile.country = profile.country.toUpperCase();
+  profile.paymentMethods = parseMethods(profile.paymentMethods).join(",");
   return profile;
 }

@@ -149,7 +149,7 @@ export const PAYMENT_METHODS = ["cash", "card", "transfer"] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
 export interface InvoiceSnapshot {
-  company: { name: string; street: string; postalCode: string; city: string; phone: string; email: string; taxNumber: string; vatId: string; iban: string; bic: string; bankName: string; logoDataUrl: string };
+  company: { name: string; street: string; postalCode: string; city: string; phone: string; email: string; taxNumber: string; vatId: string; iban: string; bic: string; bankName: string; logoDataUrl: string; paymentMethods?: string; paymentAccount?: string };
   customer: { name: string; phone: string; email: string; address?: string };
   /** Auftragsnummer; null bei einem Verkauf */
   orderNumber: number | null;

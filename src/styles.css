@@ -373,6 +373,7 @@ a.tile:hover { transform: translateY(-3px); box-shadow: var(--shadow-lift); }
 .chip { flex: none; padding: 9px 18px; border-radius: 999px; border: 1px solid var(--line-strong); background: transparent; font-weight: 600; font-size: 0.9rem; color: var(--muted); transition: all 0.15s; }
 .chip:hover { color: var(--ink); border-color: var(--ink); }
 .chip.active { background: var(--primary-bg); border-color: var(--primary-bg); color: var(--primary-fg); }
+.chips.wrap { flex-wrap: wrap; overflow: visible; }
 
 .catalog-grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); }
 .catalog-card {
@@ -1176,3 +1177,7 @@ input[aria-invalid="true"] { border-color: var(--error); }
   .segmented.four { width: 100%; }
   .insights-stat strong { font-size: 1.35rem; }
 }
+
+/* Registrierung: was das gewählte Land bedeutet */
+.country-facts { display: grid; gap: 4px; margin: -6px 0 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; color: var(--muted); font-size: 0.86rem; }
+.country-facts strong { color: var(--ink); font-weight: 600; }

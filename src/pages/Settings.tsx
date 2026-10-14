@@ -5,7 +5,8 @@ import { LanguageSwitch } from "../layout/LanguageSwitch";
 import { useI18n } from "../i18n";
 import { api, type Me } from "../api";
 import { emptyCompanyProfile, type CompanyProfile } from "../../shared/company";
-import { COUNTRY_TAX, type TaxSettings } from "../../shared/countries";
+import { COUNTRY_TAX, countryTax, type TaxSettings } from "../../shared/countries";
+import { methodLabels } from "../../shared/payments";
 import { formatRate } from "../money";
 
 type TaxInfo = TaxSettings & { country: string; custom: boolean };
@@ -154,7 +155,7 @@ export function Settings({ me, onEdit, onTaxChanged }: { me: Me; onEdit: () => v
   }, []);
 
   const c = company;
-  const maskedIban = c?.iban ? `${c.iban.slice(0, 4)} •••• •••• ${c.iban.slice(-4)}` : "–";
+  const maskedIban = !c?.iban ? "–" : c.iban.length > 10 ? `${c.iban.slice(0, 4)} •••• •••• ${c.iban.slice(-4)}` : `•••• ${c.iban.slice(-4)}`;
   return (
     <div className="stack-lg">
       <header className="page-head">
@@ -186,9 +187,11 @@ export function Settings({ me, onEdit, onTaxChanged }: { me: Me; onEdit: () => v
           <section className="card">
             <h2 className="card-title"><Landmark size={20} /> {t("settings.bank")}</h2>
             <dl className="facts">
-              <dt>{t("settings.iban")}</dt><dd>{maskedIban}</dd>
-              <dt>{t("settings.bic")}</dt><dd>{c.bic || "–"}</dd>
+              <dt>{countryTax(c.country).iban ? t("settings.iban") : t("settings.accountNumber")}</dt><dd>{maskedIban}</dd>
+              <dt>{countryTax(c.country).iban ? t("settings.bic") : "SWIFT"}</dt><dd>{c.bic || "–"}</dd>
               <dt>{t("settings.bankName")}</dt><dd>{c.bankName || "–"}</dd>
+              <dt>{t("settings.paymentMethods")}</dt><dd>{methodLabels(c.paymentMethods, { cash: t("payments.cash"), transfer: t("payments.transfer") }) || "–"}</dd>
+              {c.paymentAccount && <><dt>{t("settings.paymentAccount")}</dt><dd>{c.paymentAccount}</dd></>}
             </dl>
           </section>
           <section className="card stack">
