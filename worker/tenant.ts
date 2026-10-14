@@ -1,3 +1,4 @@
+import { DEFAULT_PRIVACY, sanitizePrivacy, type PrivacySettings } from "../shared/privacy";
 import { DurableObject } from "cloudflare:workers";
 import type { CompanyProfile } from "../shared/company";
 import type { TaxSettings } from "../shared/countries";
@@ -364,6 +365,19 @@ export class TenantDatabase extends DurableObject<Record<string, never>> {
   }
 
   /** Eigene Steuer-Einstellungen; null, solange die Vorgaben des Landes gelten. */
+  async getPrivacy(): Promise<PrivacySettings> {
+    const rows = this.sql.exec<{ value: string }>("SELECT value FROM settings WHERE key = 'privacy'").toArray();
+    return rows[0] ? sanitizePrivacy(JSON.parse(rows[0].value)) : { ...DEFAULT_PRIVACY };
+  }
+
+  async savePrivacy(settings: PrivacySettings): Promise<void> {
+    this.sql.exec(
+      `INSERT INTO settings (key, value) VALUES ('privacy', ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`,
+      JSON.stringify(sanitizePrivacy(settings)),
+    );
+  }
+
   async getTaxSettings(): Promise<TaxSettings | null> {
     const rows = this.sql.exec<{ value: string }>("SELECT value FROM settings WHERE key = 'tax'").toArray();
     return rows.length ? (JSON.parse(rows[0]!.value) as TaxSettings) : null;

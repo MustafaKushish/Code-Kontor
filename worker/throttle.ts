@@ -44,5 +44,15 @@ export async function recordFailure(db: D1Database, keys: { key: string }[], now
 
 /** Nach erfolgreicher Anmeldung zählen die Fehlversuche für diese E-Mail nicht mehr. */
 export async function clearFailures(db: D1Database, email: string): Promise<void> {
-  await db.prepare("DELETE FROM login_attempts WHERE key = ?").bind(`email:${email}`).run();
+  await clearKey(db, `email:${email}`);
 }
+
+export async function clearKey(db: D1Database, key: string): Promise<void> {
+  await db.prepare("DELETE FROM login_attempts WHERE key = ?").bind(key).run();
+}
+
+/** Fehlversuche beim Zwei-Faktor-Code je Benutzer, über alle Anmeldeversuche hinweg. */
+export const twoFactorKey = (userId: string) => ({ key: `2fa:${userId}`, limit: 10 });
+
+/** Neue Firmen je IP-Adresse, gegen massenhaft angelegte Konten und E-Mails an fremde Adressen. */
+export const registerKey = (ip: string) => ({ key: `register-ip:${ip}`, limit: 5 });

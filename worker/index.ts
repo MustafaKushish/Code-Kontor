@@ -4,7 +4,7 @@ import { csrf } from "hono/csrf";
 import { secureHeaders } from "hono/secure-headers";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { hashPassword, hashToken, newSessionToken, passwordProblem, verifyPassword, DUMMY_PASSWORD_HASH } from "./auth";
-import { attemptKeys, clearFailures, isLocked, recordFailure } from "./throttle";
+import { attemptKeys, clearFailures, clearKey, isLocked, recordFailure, registerKey, twoFactorKey } from "./throttle";
 import { TenantDatabase, tenantStub } from "./tenant";
 import { sanitizeCompany, validateCompany } from "../shared/company";
 import { findApp } from "../shared/apps";
@@ -27,6 +27,7 @@ import {
 } from "../shared/time";
 import { newRecoveryCodes, newTotpSecret, normalizeRecoveryCode, otpauthUrl, verifyTotp } from "./totp";
 import type { CompanyProfile } from "../shared/company";
+import { sanitizePrivacy } from "../shared/privacy";
 import { repairRoutes, repairStatusRoutes } from "./repairs/routes";
 import { posRoutes } from "./pos/routes";
 import { sanitizeRange } from "../shared/insights";
@@ -231,10 +232,15 @@ app.post("/auth/register", async (c) => {
   if (!name) return fail(c, "nameRequired", 400);
   if (!EMAIL_PATTERN.test(email)) return fail(c, "emailInvalid", 400);
   if (problem) return fail(c, problem, 400);
+  const ip = c.req.header("CF-Connecting-IP");
+  const ipKeys = ip ? [registerKey(ip)] : [];
+  if (await isLocked(c.env.PLATFORM_DB, ipKeys)) return fail(c, "tooManyAttempts", 429);
 
   const exists = await c.env.PLATFORM_DB.prepare("SELECT 1 FROM users WHERE email = ?").bind(email).first();
   if (exists) return fail(c, "emailTaken", 409);
 
+  // Jede neue Firma zählt, nicht nur Fehlversuche
+  if (ipKeys.length) await recordFailure(c.env.PLATFORM_DB, ipKeys);
   const tenantId = crypto.randomUUID();
   const userId = crypto.randomUUID();
   await c.env.PLATFORM_DB.batch([
@@ -305,6 +311,9 @@ app.post("/auth/login/2fa", async (c) => {
     await c.env.PLATFORM_DB.prepare("DELETE FROM login_challenges WHERE token_hash = ?").bind(hash).run();
     return fail(c, "loginExpired", 400);
   }
+  // Auch über neue Anmeldungen hinweg nur begrenzt viele Codes probieren
+  const userKeys = [twoFactorKey(row.id)];
+  if (await isLocked(c.env.PLATFORM_DB, userKeys)) return fail(c, "tooManyAttempts", 429);
 
   let method = "";
   if (await verifyTotp(await decryptField(c.env.DATA_KEY, row.totp_secret), code)) method = "2fa";
@@ -320,10 +329,12 @@ app.post("/auth/login/2fa", async (c) => {
   }
   if (!method) {
     await c.env.PLATFORM_DB.prepare("UPDATE login_challenges SET attempts = attempts + 1 WHERE token_hash = ?").bind(hash).run();
+    await recordFailure(c.env.PLATFORM_DB, userKeys);
     audit(c, row.tenantId, row, "loginFailed", { step: "2fa" });
     return fail(c, "codeWrong", 400);
   }
   await c.env.PLATFORM_DB.prepare("DELETE FROM login_challenges WHERE token_hash = ?").bind(hash).run();
+  await clearKey(c.env.PLATFORM_DB, twoFactorKey(row.id).key);
   await completeLogin(c, row, method);
   return c.json({ ok: true });
 });
@@ -366,9 +377,9 @@ app.post("/auth/reset", async (c) => {
   if (problem) return fail(c, problem, 400);
   const userId = await useUserToken(c, "reset", text(body.token));
   if (!userId) return fail(c, "linkInvalid", 400);
-  const user = await c.env.PLATFORM_DB.prepare("SELECT id, email, name, tenant_id AS tenantId FROM users WHERE id = ?")
+  const user = await c.env.PLATFORM_DB.prepare("SELECT id, email, name, tenant_id AS tenantId, totp_secret IS NOT NULL AS twoFactor FROM users WHERE id = ?")
     .bind(userId)
-    .first<{ id: string; email: string; name: string; tenantId: string }>();
+    .first<{ id: string; email: string; name: string; tenantId: string; twoFactor: number }>();
   await c.env.PLATFORM_DB.batch([
     // Wer den Link aus der E-Mail nutzt, hat die Adresse damit auch bestätigt
     c.env.PLATFORM_DB.prepare("UPDATE users SET password_hash = ?, email_verified_at = COALESCE(email_verified_at, ?) WHERE id = ?")
@@ -379,6 +390,8 @@ app.post("/auth/reset", async (c) => {
     await clearFailures(c.env.PLATFORM_DB, user.email);
     audit(c, user.tenantId, user, "passwordReset");
   }
+  // Mit Zwei-Faktor reicht der E-Mail-Link allein nicht: anmelden mit neuem Passwort und Code
+  if (user?.twoFactor) return c.json({ ok: true, login: true });
   await startSession(c, userId);
   return c.json({ ok: true });
 });
@@ -565,12 +578,13 @@ app.get("/me", async (c) => {
   const db = tenantDb(c.env, user.tenantId);
   const company = await loadCompany(c.env, user.tenantId);
   const setupComplete = !!company && Object.keys(validateCompany(company)).length === 0;
-  const [installedApps, timeRequests, tax] = await Promise.all([
+  const [installedApps, timeRequests, tax, privacy] = await Promise.all([
     db.installedApps(),
     user.role === "staff" ? 0 : db.pendingRequestCount(),
     loadTax(c.env, user.tenantId, company?.country ?? "DE"),
+    db.getPrivacy(),
   ]);
-  return c.json({ user, setupComplete, installedApps, mailEnabled: mailEnabled(c.env), billing: await billingSummary(c), timeRequests, tax });
+  return c.json({ user, setupComplete, installedApps, mailEnabled: mailEnabled(c.env), billing: await billingSummary(c), timeRequests, tax, privacy });
 });
 
 // ---------- Eigenes Konto ----------
@@ -652,14 +666,18 @@ app.post("/account/2fa/disable", async (c) => {
   const row = await c.env.PLATFORM_DB.prepare("SELECT password_hash FROM users WHERE id = ?").bind(user.id).first<{ password_hash: string }>();
   if (!row || !(await verifyPassword(typeof body.password === "string" ? body.password : "", row.password_hash)))
     return fail(c, "currentPasswordWrong", 400);
-  await c.env.PLATFORM_DB.prepare("UPDATE users SET totp_secret = NULL, recovery_codes = NULL WHERE id = ?").bind(user.id).run();
+  await c.env.PLATFORM_DB.batch([
+    c.env.PLATFORM_DB.prepare("UPDATE users SET totp_secret = NULL, recovery_codes = NULL WHERE id = ?").bind(user.id),
+    // Wie beim Einschalten: alle anderen Geräte abmelden
+    c.env.PLATFORM_DB.prepare("DELETE FROM sessions WHERE user_id = ? AND token_hash != ?").bind(user.id, c.get("sessionHash")),
+  ]);
   audit(c, user.tenantId, user, "twoFactorOff");
   return c.json({ ok: true });
 });
 
 // Protokoll der Firma
 app.get("/audit", requireRole("owner", "admin"), async (c) => {
-  const entries = await tenantDb(c.env, c.get("user").tenantId).auditLog(Number(c.req.query("limit") ?? 100));
+  const entries = await tenantDb(c.env, c.get("user").tenantId).auditLog(Number(c.req.query("limit")) || 100);
   return c.json({ entries });
 });
 
@@ -764,6 +782,20 @@ app.put("/tax", requireRole("owner", "admin"), async (c) => {
   audit(c, user.tenantId, user, "taxChanged", settings ? { currency: settings.currency, vatRates: settings.vatRates } : { reset: true });
   const tax = await loadTax(c.env, user.tenantId, country);
   return c.json({ tax, defaults: defaultTaxSettings(country) });
+});
+
+// ---------- Daten an fremde Dienste ----------
+
+app.get("/privacy", async (c) => {
+  return c.json({ privacy: await tenantDb(c.env, c.get("user").tenantId).getPrivacy() });
+});
+
+app.put("/privacy", requireRole("owner", "admin"), async (c) => {
+  const user = c.get("user");
+  const privacy = sanitizePrivacy(await readBody(c));
+  await tenantDb(c.env, user.tenantId).savePrivacy(privacy);
+  audit(c, user.tenantId, user, "privacyChanged", { ...privacy });
+  return c.json({ privacy });
 });
 
 // ---------- App-Katalog ----------
@@ -1306,9 +1338,12 @@ app.get("/accounting/month/:month/from-time", accounting, async (c) => {
 
 // ---------- Adressvorschläge ----------
 
+/** Adressvorschläge senden Eingaben an fremde Dienste, daher nur, wenn die Firma das erlaubt. */
+const addressLookupAllowed = async (c: Ctx) => (await tenantDb(c.env, c.get("user").tenantId).getPrivacy()).addressLookup;
+
 app.get("/geo/address", async (c) => {
   const q = (c.req.query("q") ?? "").trim();
-  if (q.length < 3 || q.length > 120) return c.json({ suggestions: [] });
+  if (q.length < 3 || q.length > 120 || !(await addressLookupAllowed(c))) return c.json({ suggestions: [] });
   try {
     const suggestions = await suggestAddresses(q, { lang: c.req.query("lang"), country: c.req.query("country") });
     return c.json({ suggestions });
@@ -1319,6 +1354,7 @@ app.get("/geo/address", async (c) => {
 });
 
 app.get("/geo/postal", async (c) => {
+  if (!(await addressLookupAllowed(c))) return c.json({ city: null });
   try {
     const city = await cityForPostalCode(c.req.query("country") ?? "", c.req.query("code") ?? "");
     return c.json({ city }, 200, { "Cache-Control": "private, max-age=86400" });
@@ -1335,10 +1371,10 @@ app.post("/assistant", async (c) => {
   const body = await readBody(c);
   const messages = parseConversation(body.messages);
   if (!messages) return fail(c, "messageInvalid", 400);
+  const db = tenantDb(c.env, user.tenantId);
+  if (!(await db.getPrivacy()).assistant) return fail(c, "assistantDisabled", 403);
   const apiKey = c.env.GEMINI_API_KEY;
   if (!apiKey) return fail(c, "assistantNotConfigured", 503);
-
-  const db = tenantDb(c.env, user.tenantId);
   if (!(await db.countAssistantQuestion(user.id, DAILY_QUESTION_LIMIT))) return fail(c, "assistantLimit", 429);
 
   const installedApps = await db.installedApps();

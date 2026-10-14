@@ -83,6 +83,7 @@ export function App() {
     return (
       <SetupWizard
         firstRun={!me.setupComplete}
+        addressLookup={!!me.privacy?.addressLookup}
         onDone={async () => {
           setEditingCompany(false);
           await refresh();

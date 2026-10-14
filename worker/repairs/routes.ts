@@ -621,8 +621,14 @@ export const repairStatusRoutes = new Hono<{ Bindings: Env }>();
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
+/** Nur echte Firmen: sonst würde jede ausgedachte ID eine neue, leere Firmen-Datenbank anlegen. */
+async function knownTenant(env: Env, tenantId: string) {
+  if (!UUID.test(tenantId)) return false;
+  return !!(await env.PLATFORM_DB.prepare("SELECT 1 FROM tenants WHERE id = ?").bind(tenantId).first());
+}
+
 async function publicOrder(env: Env, tenantId: string, token: string) {
-  if (!UUID.test(tenantId) || !/^[0-9a-f]{36}$/.test(token)) return null;
+  if (!/^[0-9a-f]{36}$/.test(token) || !(await knownTenant(env, tenantId))) return null;
   const db = tenantStub(env, tenantId);
   if (!(await db.installedApps()).includes(REPAIR_APP_ID)) return null;
   const result = await store(env, tenantId).byToken(token);
@@ -661,7 +667,7 @@ async function publicView(env: Env, tenantId: string, order: RepairOrder) {
 // Vor der Statusseite registriert, weil /booking/:tenantId sonst als /:tenantId/:token gelesen würde.
 
 async function bookingSetup(env: Env, tenantId: string) {
-  if (!UUID.test(tenantId)) return null;
+  if (!(await knownTenant(env, tenantId))) return null;
   if (!(await tenantStub(env, tenantId).installedApps()).includes(REPAIR_APP_ID)) return null;
   const settings = await store(env, tenantId).settings();
   if (!settings.ok || !settings.value.booking.enabled) return null;
@@ -731,7 +737,7 @@ repairStatusRoutes.post("/booking/:tenantId", async (c) => {
 });
 
 async function publicBooking(env: Env, tenantId: string, token: string) {
-  if (!UUID.test(tenantId) || !/^[0-9a-f]{40}$/.test(token)) return null;
+  if (!/^[0-9a-f]{40}$/.test(token) || !(await knownTenant(env, tenantId))) return null;
   if (!(await tenantStub(env, tenantId).installedApps()).includes(REPAIR_APP_ID)) return null;
   const result = await store(env, tenantId).bookingByToken(token);
   return result.ok ? result.value : null;
