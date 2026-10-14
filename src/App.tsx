@@ -13,6 +13,7 @@ import { Settings } from "./pages/Settings";
 import { AccountPage } from "./pages/Account";
 import { AccountingPage } from "./pages/Accounting";
 import { TimePage } from "./pages/Time";
+import { InsightsPage } from "./pages/Insights";
 import { setTaxSettings } from "./money";
 import { TerminalPage } from "./pages/Terminal";
 import { ImprintPage, PrivacyPage } from "./pages/Legal";
@@ -116,6 +117,8 @@ export function App() {
     page = <AppDetail app={findApp(POS_APP_ID)!} me={me} onAppsChanged={setInstalledApps} />;
   } else if (section === "team" && isManager) {
     page = <Team me={me} />;
+  } else if (section === "auswertung" && isManager) {
+    page = <InsightsPage me={me} />;
   } else if (section === "buchhaltung" && isManager) {
     page = <AccountingPage me={me} />;
   } else if (section === "zeiten") {

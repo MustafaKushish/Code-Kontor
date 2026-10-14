@@ -29,6 +29,8 @@ import { newRecoveryCodes, newTotpSecret, normalizeRecoveryCode, otpauthUrl, ver
 import type { CompanyProfile } from "../shared/company";
 import { repairRoutes, repairStatusRoutes } from "./repairs/routes";
 import { posRoutes } from "./pos/routes";
+import { sanitizeRange } from "../shared/insights";
+import { REPAIR_APP_ID } from "../shared/repairs";
 
 export { TenantDatabase };
 
@@ -1356,6 +1358,18 @@ app.post("/assistant", async (c) => {
     },
   });
   return new Response(stream, { headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store" } });
+});
+
+// ---------- Auswertung über alle Systeme ----------
+
+app.get("/insights", requireRole("owner", "admin"), async (c) => {
+  const user = c.get("user");
+  const today = localDay(new Date().toISOString());
+  const range = sanitizeRange({ from: c.req.query("from"), to: c.req.query("to") }, today);
+  if (!range) return fail(c, "checkFields", 400);
+  const db = tenantStub(c.env, user.tenantId);
+  const installed = await db.installedApps();
+  return c.json(await db.insights(range, installed.includes(REPAIR_APP_ID), today));
 });
 
 // ---------- Branchen-Systeme ----------

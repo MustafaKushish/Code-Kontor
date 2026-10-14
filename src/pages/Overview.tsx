@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowRight, ArrowUpRight, CircleCheck, Clock, MonitorSmartphone, Plus, ShieldCheck, Store, Users } from "lucide-react";
+import { ArrowRight, ArrowUpRight, ChartColumn, CircleCheck, Clock, MonitorSmartphone, Plus, ShieldCheck, Store, Users } from "lucide-react";
 import { api, type Me } from "../api";
 import { AppIcon, appStyle, Link } from "../components";
 import { CATALOG, findApp } from "../../shared/apps";
@@ -54,6 +54,7 @@ export function Overview({ me }: { me: Me }) {
           </p>
           <div className="hero-actions">
             <Link to="/katalog" className="button light"><Store size={18} /> {t("nav.catalog")}</Link>
+            {isManager && <Link to="/auswertung" className="button glass"><ChartColumn size={18} /> {t("nav.insights")}</Link>}
             {installPrompt && (
               <button className="button glass" onClick={() => installPrompt.prompt().then(() => setInstallPrompt(null))}>
                 <MonitorSmartphone size={18} /> {t("overview.installApp")}

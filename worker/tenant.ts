@@ -5,6 +5,7 @@ import { emptyEmployee, type Advisor, type Employee, type MonthEntry } from "../
 import { localDay, type Absence, type RequestStatus, type TimeEntry, type TimeRequest, type TimeRequestData, type TimeSettings } from "../shared/time";
 import { REPAIR_MIGRATIONS, RepairError, RepairStore } from "./repairs/store";
 import { POS_MIGRATIONS, POS_MODULE_MIGRATIONS, PosError, PosStore } from "./pos/store";
+import { bucketOf, comparisonRange, workTime, type Insights, type Range } from "../shared/insights";
 
 // Die eigene Datenbank eines Kunden. Jede Firma bekommt bei der Anmeldung
 // ein eigenes Durable Object mit eigener SQLite-Datenbank, getrennt von allen anderen.
@@ -240,6 +241,23 @@ export class TenantDatabase extends DurableObject<Record<string, never>> {
       ? this.sql.exec<Record<string, string>>("SELECT * FROM time_entries WHERE employee_id = ? AND at >= ? AND at < ? ORDER BY at", employeeId, from, to)
       : this.sql.exec<Record<string, string>>("SELECT * FROM time_entries WHERE at >= ? AND at < ? ORDER BY at", from, to);
     return rows.toArray().map((r) => ({ id: r.id!, employeeId: r.employee_id!, kind: r.kind as TimeEntry["kind"], at: r.at!, source: r.source as TimeEntry["source"], note: r.note ?? "" }));
+  }
+
+  /** Zentrale Auswertung: Kasse, Handy- & IT-Service (falls gebucht) und Arbeitszeit, alles aus dieser einen Datenbank. */
+  async insights(range: Range, withRepairs: boolean, today: string): Promise<Insights> {
+    const { pos, repairs } = this.stores();
+    const bucket = bucketOf(range);
+    const prev = comparisonRange(range, today);
+    const before = pos.salesStats(prev, bucketOf(prev));
+    const from = new Date(Date.parse(`${range.from}T00:00:00Z`) - 86_400_000).toISOString();
+    const to = new Date(Date.parse(`${range.to}T00:00:00Z`) + 2 * 86_400_000).toISOString();
+    return {
+      ...range, bucket,
+      sales: pos.salesStats(range, bucket),
+      previous: { ...prev, revenueCents: before.revenueCents, receipts: before.receipts },
+      repairs: withRepairs ? repairs.pipeline(range) : null,
+      time: workTime(await this.timeEntries(null, from, to), range),
+    };
   }
 
   async lastTimeEntry(employeeId: string): Promise<TimeEntry | null> {
