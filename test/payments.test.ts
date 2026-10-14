@@ -40,3 +40,11 @@ describe("Keine Kartennummern", () => {
     expect(validateCompany({ ...base, country: "IQ", paymentAccount: "ZainCash 0770 123 4567" })).toEqual({});
   });
 });
+
+describe("Ältere Firmen ohne Zahlungsfelder", () => {
+  it("prüft Firmendaten von vor den Zahlarten ohne Absturz", () => {
+    const { paymentMethods: _m, paymentAccount: _a, ...old } = { ...base, country: "IQ" };
+    expect(() => validateCompany(old as typeof base)).not.toThrow();
+    expect(validateCompany(old as typeof base)).toEqual({});
+  });
+});

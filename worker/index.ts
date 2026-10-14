@@ -6,7 +6,7 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { hashPassword, hashToken, newSessionToken, passwordProblem, verifyPassword, DUMMY_PASSWORD_HASH } from "./auth";
 import { attemptKeys, clearFailures, clearKey, isLocked, recordFailure, registerKey, twoFactorKey } from "./throttle";
 import { TenantDatabase, tenantStub } from "./tenant";
-import { sanitizeCompany, validateCompany } from "../shared/company";
+import { emptyCompanyProfile, sanitizeCompany, validateCompany } from "../shared/company";
 import { defaultMethods } from "../shared/payments";
 import { findApp } from "../shared/apps";
 import { fail } from "./errors";
@@ -183,7 +183,8 @@ async function loadCompany(env: Env, tenantId: string): Promise<CompanyProfile |
   const db = tenantDb(env, tenantId);
   const stored = await db.getCompany();
   if (!stored) return null;
-  const company = { ...stored };
+  // Ältere Firmen haben neue Felder (z. B. Zahlarten) noch nicht: mit leeren Werten ergänzen
+  const company: CompanyProfile = { ...emptyCompanyProfile, ...stored };
   let needsUpgrade = false;
   for (const field of SENSITIVE_COMPANY_FIELDS) {
     const value = company[field];
