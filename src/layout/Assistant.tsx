@@ -30,6 +30,15 @@ const NEAR_BOTTOM = 80;
 export const ASK_ASSISTANT_EVENT = "ck-ask-assistant";
 export const askAssistant = (detail: AskAssistantDetail) => window.dispatchEvent(new CustomEvent<AskAssistantDetail>(ASK_ASSISTANT_EVENT, { detail }));
 
+/** Vorschläge der aktuellen Seite: ein leeres oder neues Gespräch zeigt sie statt der allgemeinen Beispiele. */
+export type AssistantContext = { tips: AssistantTips; insights: { from: string; to: string } } | null;
+export const ASSISTANT_CONTEXT_EVENT = "ck-assistant-context";
+let pageContext: AssistantContext = null;
+export function setAssistantContext(detail: AssistantContext) {
+  pageContext = detail;
+  window.dispatchEvent(new CustomEvent<AssistantContext>(ASSISTANT_CONTEXT_EVENT, { detail }));
+}
+
 type StreamEvent = { type: "text"; text: string } | { type: "reset" } | { type: "done" } | { type: "error"; code: string };
 
 /** Fett (**text**) und kursiv (*text*) innerhalb einer Zeile; einzelne Sternchen fallen weg. */
@@ -84,6 +93,8 @@ export function Assistant({ me, ai }: { me: Me; ai: boolean }) {
   const [tips, setTips] = useState<AssistantTips>();
   const tipsRef = useRef(tips);
   tipsRef.current = tips;
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
   // Mitlaufen nur, solange man unten ist; wer hochscrollt, um zu lesen, wird nicht wieder nach unten gezogen.
   const stickRef = useRef(true);
   const lastTopRef = useRef(0);
@@ -123,8 +134,8 @@ export function Assistant({ me, ai }: { me: Me; ai: boolean }) {
   useEffect(() => () => abortRef.current?.abort(), []);
   useEffect(() => {
     setMessages([]);
-    setInsights(undefined);
-    setTips(undefined);
+    setInsights(pageContext?.insights);
+    setTips(pageContext?.tips);
   }, [me.user.id]);
 
   const ask = async (question: string, fresh?: { insights?: AskAssistantDetail["insights"] }) => {
@@ -217,8 +228,19 @@ export function Assistant({ me, ai }: { me: Me; ai: boolean }) {
         requestAnimationFrame(() => listRef.current?.scrollTo({ top: 0 }));
       } else if (question && aiRef.current) askRef.current(question, { insights: range });
     };
+    // Seite wechselt ihre Vorschläge: ohne laufendes Gespräch gleich übernehmen
+    const onContext = (e: Event) => {
+      const context = (e as CustomEvent<AssistantContext>).detail;
+      if (messagesRef.current.length) return;
+      setTips(context?.tips);
+      setInsights(context?.insights);
+    };
     window.addEventListener(ASK_ASSISTANT_EVENT, onAsk);
-    return () => window.removeEventListener(ASK_ASSISTANT_EVENT, onAsk);
+    window.addEventListener(ASSISTANT_CONTEXT_EVENT, onContext);
+    return () => {
+      window.removeEventListener(ASK_ASSISTANT_EVENT, onAsk);
+      window.removeEventListener(ASSISTANT_CONTEXT_EVENT, onContext);
+    };
   }, []);
 
   const submit = (e: FormEvent) => {
@@ -229,10 +251,13 @@ export function Assistant({ me, ai }: { me: Me; ai: boolean }) {
   const reset = () => {
     abortRef.current?.abort();
     setMessages([]);
-    setInsights(undefined);
-    setTips(undefined);
+    // Zurück zu den Vorschlägen der Seite, sonst zu den allgemeinen Beispielen
+    setInsights(pageContext?.insights);
+    setTips(pageContext?.tips);
     setError("");
     setDraft("");
+    stickRef.current = false;
+    requestAnimationFrame(() => listRef.current?.scrollTo({ top: 0 }));
     inputRef.current?.focus();
   };
 
@@ -253,7 +278,7 @@ export function Assistant({ me, ai }: { me: Me; ai: boolean }) {
               <strong>{t("assistant.title")}</strong>
               <small>{t("assistant.subtitle")}</small>
             </div>
-            {(messages.length > 0 || tips) && (
+            {messages.length > 0 && (
               <button className="assistant-tool" onClick={reset} aria-label={t("assistant.newChat")} title={t("assistant.newChat")}>
                 <RotateCcw size={18} />
               </button>
