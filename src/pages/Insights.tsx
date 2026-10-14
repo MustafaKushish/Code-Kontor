@@ -3,11 +3,12 @@ import { ArrowDownRight, ArrowRight, ArrowUpRight, Banknote, ChevronLeft, Chevro
 import { api, type Me } from "../api";
 import { AppIcon, appStyle, Link } from "../components";
 import { useI18n } from "../i18n";
-import { askAssistant } from "../layout/Assistant";
+import { askAssistant, type AssistantTips } from "../layout/Assistant";
 import { formatMoney } from "../money";
 import { findApp } from "../../shared/apps";
 import { PAY_METHODS, POS_APP_ID, type PayMethod } from "../../shared/pos";
 import { REPAIR_APP_ID } from "../../shared/repairs";
+import { adviceFor, nextMonthOf, type Tip } from "../../shared/advice";
 import { INSIGHT_PERIODS, periodRange, type InsightPeriod, type Insights } from "../../shared/insights";
 
 // Zentrale Auswertung für Inhaber und Admins: Zahlen aus allen Systemen der Firma für einen Zeitraum.
@@ -90,7 +91,7 @@ export function InsightsPage({ me }: { me: Me }) {
           <h1 className="display">{t("insights.title")}</h1>
           <p className="muted">{t("insights.subtitle")}</p>
         </div>
-        <button className="button ai-button" onClick={() => askAssistant({ question: t("insights.aiQuestion", { period: label }), insights: range })}>
+        <button className="button ai-button" onClick={showTips}>
           <Sparkles size={18} /> {t("insights.aiTips")}
         </button>
       </header>
@@ -220,6 +221,37 @@ export function InsightsPage({ me }: { me: Me }) {
       </div>
     </div>
   );
+
+  /** KI-Tipps: fertige Vorschläge aus den Zahlen sofort zeigen, weitere Fragen gehen an die KI. */
+  function showTips() {
+    const question = t("insights.aiQuestion", { period: label });
+    if (!fresh) return askAssistant({ question, insights: range });
+    const month = nextMonthOf(today());
+    const monthLabel = dayLabel(`${month}-15`, { month: "long", year: "numeric" });
+    const percent = (n: number) => (n / 100).toLocaleString(lang, { style: "percent", maximumFractionDigits: 0 });
+    const text = (tip: Tip) => {
+      const vars: Record<string, string> = {};
+      for (const [k, v] of Object.entries(tip.vars)) {
+        if (typeof v === "number") vars[k] = k.endsWith("Cents") ? money(v) : k.endsWith("Pct") ? percent(v) : num(v);
+        else vars[k] = k === "group" ? groupLabel(v) : v;
+      }
+      if (tip.vars.month) vars.month = monthLabel;
+      if (tip.vars.industry) vars.addon = t(`insights.addons.${tip.vars.industry}`);
+      if (tip.vars.season) vars.seasonText = t(`insights.seasons.${tip.vars.season}`);
+      return { tone: tip.tone, title: t(`insights.tips.${tip.id}.title`, vars), text: t(`insights.tips.${tip.id}.text`, vars) };
+    };
+    const tips: AssistantTips = {
+      title: t("insights.tipsTitle", { month: monthLabel }),
+      intro: t("insights.tipsIntro", { period: label }),
+      tips: adviceFor(fresh, me.installedApps, today()).map(text),
+      followUps: [
+        { label: t("insights.askMore"), question },
+        { label: t("insights.askCustomers"), question: t("insights.askCustomers") },
+        { label: t("insights.askBasket"), question: t("insights.askBasket") },
+      ],
+    };
+    askAssistant({ insights: range, tips });
+  }
 
   function groupLabel(group: string): string {
     if (!group) return t("insights.noGroup");
