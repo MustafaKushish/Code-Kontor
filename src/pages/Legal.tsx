@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Code2, EyeOff, Headset, Lock, Server, ShieldCheck } from "lucide-react";
 import { Link, Logo } from "../components";
 import { useI18n } from "../i18n";
 import { LEGAL_UPDATED, OPERATOR } from "../../shared/legal";
@@ -48,9 +48,45 @@ const Address = () => (
   </p>
 );
 
+/** Siegel „Made in Germany“ und Vertrauens-Stempel. Nur Aussagen, die auch die Datenschutzerklärung belegt. */
+const SEALS = [
+  { icon: Server, title: "Daten in der EU", text: "Nur EU-Rechenzentren" },
+  { icon: ShieldCheck, title: "DSGVO", text: "Datenschutz nach EU-Recht" },
+  { icon: Lock, title: "Verschlüsselt", text: "HTTPS und geschützte Felder" },
+  { icon: EyeOff, title: "Kein Tracking", text: "Keine Werbe-Cookies" },
+  { icon: Headset, title: "Support auf Deutsch", text: "Fester Ansprechpartner" },
+];
+
+function MadeInGermany() {
+  return (
+    <section className="seals" aria-label="Made in Germany">
+      <div className="seal-main">
+        <span className="seal-flag" aria-hidden="true"><i /><i /><i /></span>
+        <Code2 size={22} aria-hidden="true" />
+        <strong>Made in Germany</strong>
+        <span>Entwickelt in {OPERATOR.city.replace(" in der Oberpfalz", " i. d. OPf.")}</span>
+      </div>
+      <ul className="seal-list">
+        {SEALS.map(({ icon: Icon, title, text }) => (
+          <li key={title} className="seal">
+            <Icon size={20} aria-hidden="true" />
+            <strong>{title}</strong>
+            <span>{text}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="seal-note">
+        Code Kontor wird in Deutschland entwickelt und betreut. Ein fester Ansprechpartner, Daten nur in der EU und laufende
+        Weiterentwicklung: darauf kannst du dich auch in Zukunft verlassen.
+      </p>
+    </section>
+  );
+}
+
 export function ImprintPage() {
   return (
     <LegalLayout title="Impressum">
+      <MadeInGermany />
       <h2>Angaben gemäß § 5 DDG</h2>
       <Address />
       <h2>Kontakt</h2>
