@@ -7,6 +7,7 @@ export const it: PosDict = {
   methods: { cash: "Contanti", card: "Carta", transfer: "Bonifico", voucher: "Buono" },
   tse: {
     notice: "Nota: in Germania una cassa che accetta contanti necessita di una TSE (KassenSichV). Il collegamento è il prossimo passo; fino ad allora non usare la cassa per incassi reali in contanti.",
+    short: "Senza TSE: solo prova",
     title: "TSE (dispositivo tecnico di sicurezza)",
     status: "Nessuna TSE collegata",
     text: "Obbligatoria in Germania per le casse con contanti. È prevista una TSE cloud (es. fiskaly): ogni scontrino viene firmato, il QR code stampato e la cassa registrata presso il fisco. Gli altri paesi hanno regole proprie.",
@@ -43,7 +44,9 @@ export const it: PosDict = {
     voidConfirm: "Annullare lo scontrino aperto?",
     voidLast: "Storna ultimo scontrino",
     bon: "Scontr.",
-    printLast: "Stampa ultimo scontrino",
+    autoBon: "Stampa lo scontrino automaticamente dopo il pagamento (sì/no). Ristampa in Scontrini.",
+    bonOn: "Scontrino sì",
+    bonOff: "Scontrino no",
     recent: "Scontrini",
     recentTitle: "Ultimi scontrini",
     recentHint: "Il cliente ha dimenticato lo scontrino? Tocca lo scontrino e ristampalo.",

@@ -7,6 +7,7 @@ export const pl: PosDict = {
   methods: { cash: "Gotówka", card: "Karta", transfer: "Przelew", voucher: "Bon" },
   tse: {
     notice: "Uwaga: w Niemczech kasa przyjmująca gotówkę wymaga TSE (KassenSichV). Podłączenie to kolejny krok; do tego czasu nie używaj kasy do prawdziwych płatności gotówką.",
+    short: "Bez TSE: tylko test",
     title: "TSE (techniczne zabezpieczenie)",
     status: "Brak podłączonego TSE",
     text: "Obowiązkowe w Niemczech dla kas z gotówką. Planowane jest TSE w chmurze (np. fiskaly): każdy paragon jest podpisywany, kod QR drukowany, a kasa zgłaszana do urzędu skarbowego. Inne kraje mają własne zasady.",
@@ -43,7 +44,9 @@ export const pl: PosDict = {
     voidConfirm: "Odrzucić otwarty paragon?",
     voidLast: "Stornuj ostatni paragon",
     bon: "Paragon",
-    printLast: "Drukuj ostatni paragon",
+    autoBon: "Drukuj paragon automatycznie po zapłacie (wł./wył.). Ponowny wydruk w Paragonach.",
+    bonOn: "Paragon wł.",
+    bonOff: "Paragon wył.",
     recent: "Paragony",
     recentTitle: "Ostatnie paragony",
     recentHint: "Klient zapomniał paragonu? Dotknij paragonu i wydrukuj go ponownie.",

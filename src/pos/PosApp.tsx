@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Barcode, BookOpen, LayoutDashboard, Maximize, Menu, Minimize, Monitor, Receipt, Settings2, ShoppingCart, X } from "lucide-react";
+import { Barcode, BookOpen, LayoutDashboard, Maximize, Menu, Minimize, Monitor, Receipt, Settings2, ShieldAlert, ShoppingCart, X } from "lucide-react";
+import { Avatar } from "../components";
 import type { Me } from "../api";
 import { navigate } from "../router";
 import { usePosI18n } from "./i18n";
@@ -118,9 +119,14 @@ export function Kiosk({ me }: { me: Me }) {
   return (
     <div className="pos pos-kiosk">
       <header className="pos-kiosk-bar">
-        <strong>{me.user.tenantName}</strong>
-        <span className="muted">{me.user.name}</span>
+        <img className="pos-kiosk-logo" src="/icon.svg" alt="" width={36} height={36} />
+        <span className="pos-kiosk-title">
+          <strong>{me.user.tenantName}</strong>
+          <small><Avatar name={me.user.name} /> {me.user.name}</small>
+        </span>
         <span className="row gap-sm push-end">
+          {(me.tax?.country ?? "DE") === "DE" && <span className="pos-tse-chip" title={p("tse.notice")}><ShieldAlert size={15} aria-hidden /> <span>{p("tse.short")}</span></span>}
+          <Clock />
           <RegisterSelect />
           {document.fullscreenEnabled && (
             <button className="button icon-only" onClick={toggleFull} aria-label={full ? p("kiosk.leaveFullscreen") : p("kiosk.fullscreen")} title={full ? p("kiosk.leaveFullscreen") : p("kiosk.fullscreen")}>
@@ -139,8 +145,23 @@ export function Kiosk({ me }: { me: Me }) {
           </span>
         </span>
       </header>
-      {(me.tax?.country ?? "DE") === "DE" && <p className="notice small pos-tse">{p("tse.notice")}</p>}
       <Register isManager={isManager} kiosk />
     </div>
+  );
+}
+
+/** Uhrzeit und Datum an der Theke; die Kasse bleibt den ganzen Tag offen. */
+function Clock() {
+  const { lang } = usePosI18n();
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 15_000);
+    return () => clearInterval(timer);
+  }, []);
+  return (
+    <span className="pos-clock">
+      <strong>{now.toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" })}</strong>
+      <small>{now.toLocaleDateString(lang, { weekday: "short", day: "numeric", month: "short" })}</small>
+    </span>
   );
 }

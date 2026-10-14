@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { Banknote, Camera, CheckCircle2, CreditCard, Delete, Ellipsis, History, NotebookPen, PlusCircle, Printer, ScanBarcode, Search, Undo2, UserRound } from "lucide-react";
 import { api } from "../api";
 import { Field } from "../components";
@@ -26,6 +26,7 @@ type PadMode = "qty" | "discount" | "price";
 
 const EMPTY_CUSTOMER: PosCustomer = { id: null, name: "", address: "", phone: "", email: "" };
 const CART_KEY = "ck-pos-cart";
+const BON_KEY = "ck-pos-autobon";
 const ALL = "";
 const TILES = "*";
 
@@ -40,6 +41,19 @@ function loadCart(): CartLine[] {
 const lineTotal = (l: { qty: number; unitCents: number }) => Math.round(l.qty * l.unitCents);
 /** Zahl aus dem Ziffernblock, z. B. „1,5“ → 1.5 */
 const padNumber = (text: string) => Number(text.replace(",", ".")) || 0;
+
+/** Jede Warengruppe bekommt ihren Farbton wie die Systeme auf der Übersicht; nach Reihenfolge, damit sich Nachbarn unterscheiden. */
+const HUES = [168, 245, 28, 330, 200, 140, 280, 52, 350, 190];
+
+/** Bon nach dem Bezahlen drucken: pro Gerät an oder aus, ohne Wahl gilt die Einstellung der Kasse. */
+function loadAutoBon(): boolean | null {
+  try {
+    const v = localStorage.getItem(BON_KEY);
+    return v === null ? null : v === "1";
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Verkaufen wie an einer Ladenkasse: Warengruppen oben, Artikel zum Antippen, rechts der Bon
@@ -62,6 +76,7 @@ export function Register({ isManager, kiosk }: { isManager: boolean; kiosk?: boo
   const [last, setLast] = useState<Receipt | null>(null);
   const [opened, setOpened] = useState<string | null>(null);
   const [paying, setPaying] = useState(false);
+  const [autoBon, setAutoBon] = useState(loadAutoBon);
   const [creating, setCreating] = useState<string | null>(null);
   const [loanerBack, setLoanerBack] = useState(false);
   const [done, setDone] = useState<{ receipt: Receipt | null } | null>(null);
@@ -111,6 +126,7 @@ export function Register({ isManager, kiosk }: { isManager: boolean; kiosk?: boo
     return seen;
   }, [catalog]);
   const hasTiles = catalog.some((a) => a.tile);
+  const hueStyle = (g: string) => ({ "--hue": HUES[Math.max(groups.indexOf(g), 0) % HUES.length] }) as CSSProperties;
   const groupLabel = (g: string) => (g.startsWith("@") ? p(`moduleGroups.${g.slice(1)}`) : g || p("sell.noGroup"));
   const shown = results ?? (group === ALL ? catalog : group === TILES ? catalog.filter((a) => a.tile) : catalog.filter((a) => (a.group ?? "") === group));
 
@@ -267,7 +283,7 @@ export function Register({ isManager, kiosk }: { isManager: boolean; kiosk?: boo
     if (receipt) setLast(receipt);
     setView("order");
     loadCatalog();
-    if (receipt && settings?.print !== "ask") setPrinting(settings?.print ?? null);
+    if (receipt && bonOn) setPrinting(settings?.print === "a4" ? "a4" : "bon");
   };
 
   /** Ein Tipp: genau passend bar oder mit Karte (nach „Zahlung erfolgt“ am Terminal). */
@@ -285,6 +301,15 @@ export function Register({ isManager, kiosk }: { isManager: boolean; kiosk?: boo
     }
   };
   const cardOn = settings?.methods.includes("card") ?? false;
+  const bonOn = autoBon ?? (settings ? settings.print !== "ask" : false);
+  const toggleBon = () => {
+    setAutoBon(!bonOn);
+    try {
+      localStorage.setItem(BON_KEY, bonOn ? "0" : "1");
+    } catch {
+      // ohne Speicher gilt der Schalter nur bis zum Neuladen
+    }
+  };
 
   /** Storno: offenen Bon leeren, sonst den gerade gebuchten Beleg öffnen (dort mit Gegenbeleg stornieren). */
   const storno = () => {
@@ -317,7 +342,8 @@ export function Register({ isManager, kiosk }: { isManager: boolean; kiosk?: boo
         {!query && (groups.length > 1 || hasTiles) && (
           <div className="pos-groups" role="tablist" aria-label={p("sell.groupsLabel")}>
             {[ALL, ...(hasTiles ? [TILES] : []), ...groups].map((g) => (
-              <button key={g || "all"} role="tab" aria-selected={group === g} className={group === g ? "active" : ""} onClick={() => setGroup(g)}>
+              <button key={g || "all"} role="tab" aria-selected={group === g} className={group === g ? "active" : ""} style={g === ALL || g === TILES ? undefined : hueStyle(g)} onClick={() => setGroup(g)}>
+                {g !== ALL && g !== TILES && <i className="pos-dot" aria-hidden />}
                 {g === ALL ? p("sell.all") : g === TILES ? p("sell.groups.tile") : groupLabel(g)}
               </button>
             ))}
@@ -335,7 +361,8 @@ export function Register({ isManager, kiosk }: { isManager: boolean; kiosk?: boo
         {shown.length === 0 && <p className="card empty muted">{query ? p("sell.noMatch") : p("sell.nothingYet")}</p>}
         <div className="pos-grid">
           {shown.map((a) => (
-            <button key={`${a.source}-${a.kind}-${a.refId ?? a.name}`} className={`pos-product ${a.kind}`} onClick={() => add(a)} disabled={inCart(a)}>
+            <button key={`${a.source}-${a.kind}-${a.refId ?? a.name}`} className={`pos-product ${a.kind}`} style={hueStyle(a.group ?? "")} onClick={() => add(a)} disabled={inCart(a)}>
+              <span className="pos-product-mark" aria-hidden>{a.name.trim().charAt(0).toUpperCase()}</span>
               <strong className="pos-product-name">{a.kind === "order" ? p("sell.orderLine", { label: a.name }) : a.name}</strong>
               <small className={a.stock !== undefined && a.stock <= 0 ? "error" : "muted"}>
                 {[a.kind === "order" ? a.detail : a.code ? `${p("sell.nr")} ${a.code}` : "", a.stock !== undefined ? p("sell.stock", { n: a.stock }) : "", a.loaner ? p("sell.loaner", { name: a.loaner }) : ""].filter(Boolean).join(" · ")}
@@ -347,6 +374,11 @@ export function Register({ isManager, kiosk }: { isManager: boolean; kiosk?: boo
       </section>
 
       <section className="pos-order" aria-label={p("sell.order")}>
+        <header className="pos-order-head">
+          <strong>{p("sell.order")}</strong>
+          {count > 0 && <span className="pos-count">{p("items.count", { n: count })}</span>}
+          {customer.name && <span className="pos-order-customer"><UserRound size={14} aria-hidden /> {customer.name}</span>}
+        </header>
         <div className="pos-order-lines">
           {done && (
             <div className="pos-done">
@@ -392,7 +424,9 @@ export function Register({ isManager, kiosk }: { isManager: boolean; kiosk?: boo
           <button className={`button ${customer.name ? "set" : ""}`} onClick={() => setDialog("customer")} title={customer.name || p("sell.customer")}><UserRound size={17} /> <span>{customer.name || p("sell.customer")}</span></button>
           <button className={`button ${note ? "set" : ""}`} onClick={() => setDialog("note")} title={p("sell.noteTitle")}><NotebookPen size={17} /> <span>{p("sell.note")}</span></button>
           <button className="button" onClick={storno} disabled={!cart.length && !last} title={cart.length ? p("sell.voidCart") : p("sell.voidLast")}><Undo2 size={17} /> <span>{p("sell.void")}</span></button>
-          <button className="button" onClick={() => last && setPrinting("bon")} disabled={!last} title={p("sell.printLast")}><Printer size={17} /> <span>{p("sell.bon")}</span></button>
+          <button className={`button pos-toggle ${bonOn ? "on" : ""}`} aria-pressed={bonOn} onClick={toggleBon} title={p("sell.autoBon")}>
+            <Printer size={17} /> <span>{bonOn ? p("sell.bonOn") : p("sell.bonOff")}</span>
+          </button>
           <button className="button" onClick={() => setDialog("recent")} title={p("sell.recentTitle")}><History size={17} /> <span>{p("sell.recent")}</span></button>
         </div>
 

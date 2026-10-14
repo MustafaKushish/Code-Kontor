@@ -7,6 +7,7 @@ export const es: PosDict = {
   methods: { cash: "Efectivo", card: "Tarjeta", transfer: "Transferencia", voucher: "Vale" },
   tse: {
     notice: "Nota: en Alemania una caja que acepta efectivo necesita una TSE (KassenSichV). La conexión es el siguiente paso; hasta entonces, no uses la caja para cobros reales en efectivo.",
+    short: "Sin TSE: solo pruebas",
     title: "TSE (dispositivo técnico de seguridad)",
     status: "Todavía no hay TSE conectada",
     text: "Obligatoria en Alemania para cajas con efectivo. Está prevista una TSE en la nube (p. ej. fiskaly): cada ticket se firma, el código QR se imprime y la caja se registra en Hacienda. Otros países tienen sus propias normas.",
@@ -43,7 +44,9 @@ export const es: PosDict = {
     voidConfirm: "¿Descartar el ticket abierto?",
     voidLast: "Anular último ticket",
     bon: "Ticket",
-    printLast: "Imprimir último ticket",
+    autoBon: "Imprimir el ticket automáticamente tras el pago (sí/no). Reimprimir en Tickets.",
+    bonOn: "Ticket sí",
+    bonOff: "Ticket no",
     recent: "Tickets",
     recentTitle: "Últimos tickets",
     recentHint: "¿El cliente olvidó el ticket? Toca el ticket y vuelve a imprimirlo.",
