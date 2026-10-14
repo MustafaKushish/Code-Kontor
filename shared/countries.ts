@@ -67,12 +67,14 @@ export const COUNTRY_TAX: Record<string, CountryTax> = {
   KW: c("KWD", [], true),
   BH: c("BHD", [10], true),
   OM: c("OMR", [5], true),
-  IQ: c("IQD", [], true),
+  // Irak: IBAN gibt es auf dem Papier, im Alltag zahlt man mit Qi Card, ZainCash & Co.
+  IQ: c("IQD", []),
   JO: c("JOD", [16], true),
   LB: c("LBP", [11], true),
   IL: c("ILS", [18], true),
   EG: c("EGP", [14], true),
-  MA: c("MAD", [20, 10, 7], true),
+  // Marokko: Bankverbindung als RIB (24 Ziffern), keine IBAN
+  MA: c("MAD", [20, 10, 7]),
   TN: c("TND", [19, 13, 7], true),
   // Amerika, Asien, Ozeanien
   US: c("USD", []),

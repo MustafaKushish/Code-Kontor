@@ -272,7 +272,7 @@ interface AuditEntry {
 const FIELD_LABELS: Record<string, string> = {
   name: "settings.name", legalForm: "settings.name", street: "settings.address", postalCode: "settings.address", city: "settings.address",
   country: "settings.address", email: "settings.email", phone: "settings.phone", taxNumber: "settings.taxNumber", vatId: "settings.vatId",
-  iban: "settings.iban", bic: "settings.bic", bankName: "settings.bankName", logoDataUrl: "settings.logoAlt",
+  iban: "settings.iban", bic: "settings.bic", bankName: "settings.bankName", paymentMethods: "settings.paymentMethods", paymentAccount: "settings.paymentAccount", logoDataUrl: "settings.logoAlt",
 };
 
 export function AuditCard() {

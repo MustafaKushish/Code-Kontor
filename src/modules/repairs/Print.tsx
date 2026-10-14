@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { methodLabels } from "../../../shared/payments";
 import { createPortal } from "react-dom";
 import { Printer, X } from "lucide-react";
 import { api } from "../../api";
@@ -48,6 +49,7 @@ export function PrintFrame({ title, meta, company: given, onClose, children }: {
           {company?.taxNumber && <span>{r("print.taxNumber")}: {company.taxNumber}</span>}
           {company?.vatId && <span>{r("print.vatId")}: {company.vatId}</span>}
           {company?.iban && <span>{r("print.bank")}: {[company.bankName, company.iban, company.bic].filter(Boolean).join(" · ")}</span>}
+          {company?.paymentMethods && <span>{r("print.payWith")}: {[methodLabels(company.paymentMethods, { cash: r("print.payCash"), transfer: r("print.payTransfer") }), company.paymentAccount].filter(Boolean).join(" · ")}</span>}
         </footer>
       </article>
     </div>,

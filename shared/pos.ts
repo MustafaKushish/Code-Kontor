@@ -63,6 +63,7 @@ export type ReceiptKind = "sale" | "deposit" | "cancel";
 export interface ReceiptCompany {
   name: string; street: string; postalCode: string; city: string; phone: string; email: string;
   taxNumber: string; vatId: string; iban: string; bic: string; bankName: string; logoDataUrl: string;
+  paymentMethods?: string; paymentAccount?: string;
 }
 
 export interface Receipt {
