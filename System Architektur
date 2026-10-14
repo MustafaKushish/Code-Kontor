@@ -1,0 +1,60 @@
+1. Das Drei-Schichten-Modell
+code
+Code
+┌────────────────────────────────────────────────────────┐
+│                      src/ (Frontend)                   │
+│   React 19 SPA, Vite, Modular Lazy-Loading, i18n, CSS  │
+└───────────────────────────┬────────────────────────────┘
+                            │ /api/* (Fetch, Bearer/Cookie)
+┌───────────────────────────▼────────────────────────────┐
+│                      shared/ (Gemeinsam)               │
+│   Typen, Validierung, Berechnungen, Steuerregeln       │
+├────────────────────────────────────────────────────────┤
+│                      worker/ (Backend)                 │
+│   Cloudflare Worker + Hono API-Router, Auth, Krypto    │
+└───────────────┬────────────────────────┬───────────────┘
+                │                        │
+┌───────────────▼──────────┐  ┌──────────▼───────────────┐
+│     Cloudflare D1        │  │ Durable Objects (SQLite) │
+│  (Plattform-Datenbank)   │  │  (Mandanten-Datenbanken) │
+│  - Tenants, User, Logins │  │  - Jede Firma = 1 SQLite │
+│  - Sessions, Stripe Abos │  │  - Aufträge, Kasse, Team │
+└──────────────────────────┘  └──────────────────────────┘
+2. Die Datenbank-Architektur (Dual-Layer Multi-Tenancy)
+Das Herzstück ist die strikte Trennung zwischen Plattform und Kundendaten:
+Plattform-Ebene (Cloudflare D1 – migrations/):
+Globale Tabellen: Firmen-IDs (tenants), Benutzer (users), Anmeldeversuche (login_attempts), Sitzungen (sessions), Stempeluhr-Geräte (terminals) und Stripe-Abonnements (subscriptions).
+Mandanten-Ebene (Cloudflare Durable Objects mit SQLite – worker/tenant.ts):
+Jede Firma hat eine eigene, physikalisch isolierte SQLite-Datenbank!
+Garantiert 100 % DSGVO-Konformität und Mandantentrennung (EU-Jurisdiktion).
+Beinhaltet: Firmeneinstellungen, Buchhaltung/Mitarbeiter (employees, payroll_entries), Zeiterfassung (time_entries, absences), Audit-Log und installierte Module.
+3. Modulare Branchen-Apps (src/modules/ & worker/*/)
+Die Plattform ist wie ein Betriebssystem für Fachgeschäfte aufgebaut:
+Plattform-Kern (src/pages/):
+Übersicht (Dashboard), Team-Verwaltung, Zeiterfassung (Stempeluhr), Buchhaltung (Lohnabrechnungen/Export), Auswertungen und Abo/Billing.
+Handy- & IT-Service (src/modules/repairs/ & worker/repairs/):
+Auftragsannahme mit Fehler-Checkliste, Kostenvoranschlag und digitaler Unterschrift.
+Ersatzteillager mit Mindestbeständen und Einkaufspreisen.
+Kunden-Tracking (/status/:tenant/:token – Endkunden sehen Reparaturstatus ohne Login).
+Online-Terminbuchung (/termin/:tenant).
+Gebrauchtgeräte-Ankauf (Differenzbesteuerung §25a UStG) & Leihgeräte-Verwaltung.
+Kasse / POS (src/pos/ & worker/pos/):
+Plattformweite Kasse, die für alle Module funktioniert.
+Kiosk-Modus (/kasse/modus): Vollbild für Thekentablets mit dauerhaftem Barcode-Scanner.
+GoBD- und TSE-konformes Kassenbuch mit Z-Abschlüssen und Bar-/Kartentrennung.
+4. Das gemeinsame Daten- und Logik-Paket (shared/)
+Eine der größten Stärken des Projekts: Der Ordner shared/ wird von Frontend und Backend identisch importiert:
+shared/company.ts: Validierung von IBAN (Modulo 97 Prüfziffer), Steuernummern und USt-IdNr.
+shared/countries.ts: Steuersätze, Währungen und Rundungsregeln für DE, AT, CH und internationale Länder.
+shared/repairs.ts & shared/pos.ts: Status-Zustandsmaschinen (Status-Gruppen open, waiting, pickup, done).
+5. Frontend & UI-Design
+Kein Bootstrap / Tailwind / UI-Baukasten: Eigenes, elegantes CSS-Designsystem (src/styles.css) mit dem Motto „warmes Papier, tiefe Tinte, Aurora-Glanz“.
+Typografie: Schriften liegen DSGVO-konform lokal auf dem eigenen Server (Bricolage Grotesque für Displays, Inter für UI).
+Internationalisierung (i18n):
+11 Sprachen unterstützt (de, en, ar, es, fr, it, pl, ru, tr, uk).
+Volle Unterstützung für RTL (Right-to-Left) bei Arabisch inklusive angepasster Formular-Felder.
+Performance: Große Module werden erst mit React.lazy() nachgeladen, wenn der Nutzer sie anklickt.
+6. Sicherheit & Datenschutz
+Kryptografie (worker/crypto.ts): Sensible Felder (IBAN, BIC, TOTP-Geheimnisse) werden zusätzlich mit AES-256-GCM verschlüsselt gespeichert.
+Authentifizierung: Sichere Session-Hashes, Brute-Force-Sperren nach Fehlversuchen, TOTP-Zwei-Faktor-Authentifizierung mit Notfallcodes.
+Datensouveränität: Ein Klick auf Datenexport generiert einen vollständigen JSON-Export aller jemals gespeicherten Daten der Firma.
