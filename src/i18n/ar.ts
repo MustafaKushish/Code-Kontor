@@ -610,6 +610,7 @@ export const ar: Dict = {
   insights: {
     tipsTitle: "اقتراحات لشهر {month}",
     tipsIntro: "بناءً على أرقامك لـ {period}. اسأل المزيد في الأسفل، فالذكاء الاصطناعي يعرف أرقامك.",
+    tipsIntroLocal: "بناءً على أرقامك لـ {period}.",
     askMore: "أفكار أكثر من الذكاء الاصطناعي",
     askCustomers: "كيف أحصل على زبائن أكثر؟",
     askBasket: "كيف أبيع أكثر لكل زبون؟",
@@ -765,6 +766,8 @@ export const ar: Dict = {
     close: "إغلاق",
     newChat: "محادثة جديدة",
     scrollDown: "إلى الأسفل",
+    aiOff: "الأسئلة للذكاء الاصطناعي متوقفة. يمكنك تشغيلها من {place}.",
+    aiOffLink: "فتح الإعدادات",
     thinking: "يفكّر …",
     disclaimer: "قد يخطئ الذكاء الاصطناعي. يرجى التحقق من المعلومات المهمة.",
     suggestion1: "كيف أُعِدّ نظامي الأول؟",

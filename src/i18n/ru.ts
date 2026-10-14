@@ -610,6 +610,7 @@ export const ru: Dict = {
   insights: {
     tipsTitle: "Предложения на {month}",
     tipsIntro: "По твоим цифрам за {period}. Спрашивай дальше внизу, ИИ знает твои цифры.",
+    tipsIntroLocal: "По твоим цифрам за {period}.",
     askMore: "Больше идей от ИИ",
     askCustomers: "Как привлечь больше клиентов?",
     askBasket: "Как продавать больше одному клиенту?",
@@ -765,6 +766,8 @@ export const ru: Dict = {
     close: "Закрыть",
     newChat: "Новый разговор",
     scrollDown: "Вниз",
+    aiOff: "Вопросы к ИИ выключены. Включить их можно в разделе {place}.",
+    aiOffLink: "Открыть настройки",
     thinking: "Думаю …",
     disclaimer: "ИИ может ошибаться. Проверяйте важные сведения.",
     suggestion1: "Как настроить первую систему?",

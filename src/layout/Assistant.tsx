@@ -2,6 +2,7 @@ import { Fragment, useEffect, useRef, useState, type FormEvent, type ReactNode }
 import { AlertTriangle, ArrowDown, ArrowUp, Lightbulb, RotateCcw, Sparkles, ThumbsUp, X } from "lucide-react";
 import type { Me } from "../api";
 import { useI18n } from "../i18n";
+import { Link } from "../components";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -68,7 +69,7 @@ function RichText({ text }: { text: string }) {
   return <>{blocks}</>;
 }
 
-export function Assistant({ me }: { me: Me }) {
+export function Assistant({ me, ai }: { me: Me; ai: boolean }) {
   const { t, lang } = useI18n();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -194,11 +195,14 @@ export function Assistant({ me }: { me: Me }) {
     }
   };
 
+  const aiRef = useRef(ai);
+  aiRef.current = ai;
   const askRef = useRef(ask);
   askRef.current = ask;
   useEffect(() => {
     const onAsk = (e: Event) => {
       const { question, insights: range, tips: list } = (e as CustomEvent<AskAssistantDetail>).detail;
+      if (!list && !aiRef.current) return;
       setOpen(true);
       if (list) {
         // Vorschläge sofort zeigen, die KI erst auf Nachfrage
@@ -211,7 +215,7 @@ export function Assistant({ me }: { me: Me }) {
         setTips(list);
         stickRef.current = false;
         requestAnimationFrame(() => listRef.current?.scrollTo({ top: 0 }));
-      } else if (question) askRef.current(question, { insights: range });
+      } else if (question && aiRef.current) askRef.current(question, { insights: range });
     };
     window.addEventListener(ASK_ASSISTANT_EVENT, onAsk);
     return () => window.removeEventListener(ASK_ASSISTANT_EVENT, onAsk);
@@ -237,11 +241,11 @@ export function Assistant({ me }: { me: Me }) {
 
   return (
     <>
-      <button className={open ? "assistant-fab hidden" : "assistant-fab"} onClick={() => setOpen(true)} aria-label={t("assistant.open")} title={t("assistant.open")}>
+      {ai && <button className={open ? "assistant-fab hidden" : "assistant-fab"} onClick={() => setOpen(true)} aria-label={t("assistant.open")} title={t("assistant.open")}>
         <Sparkles size={22} />
-      </button>
+      </button>}
 
-      {open && (
+      {open && (ai || tips) && (
         <section className="assistant" role="dialog" aria-label={t("assistant.title")}>
           <header className="assistant-head">
             <span className="assistant-mark" aria-hidden><Sparkles size={18} /></span>
@@ -278,7 +282,7 @@ export function Assistant({ me }: { me: Me }) {
                     </article>
                   );
                 })}
-                {messages.length === 0 && (
+                {ai && messages.length === 0 && (
                   <div className="assistant-suggestions">
                     {tips.followUps.map((f) => (
                       <button key={f.label} onClick={() => ask(f.question)}>
@@ -313,13 +317,15 @@ export function Assistant({ me }: { me: Me }) {
               )
             )}
             {error && <p className="assistant-error" role="alert">{error}</p>}
+            {!atBottom && (
+              <button className="assistant-down" onClick={() => { stickRef.current = true; toBottom(); }} aria-label={t("assistant.scrollDown")} title={t("assistant.scrollDown")}>
+                <ArrowDown size={18} />
+              </button>
+            )}
           </div>
-          {!atBottom && (
-            <button className="assistant-down" onClick={() => { stickRef.current = true; toBottom(); }} aria-label={t("assistant.scrollDown")} title={t("assistant.scrollDown")}>
-              <ArrowDown size={18} />
-            </button>
-          )}
 
+          {ai ? (
+          <>
           <form className="assistant-input" onSubmit={submit}>
             <textarea
               ref={inputRef}
@@ -340,6 +346,15 @@ export function Assistant({ me }: { me: Me }) {
             </button>
           </form>
           <p className="assistant-note">{t("assistant.disclaimer")}</p>
+          </>
+          ) : (
+            <div className="assistant-off">
+              <p>{t("assistant.aiOff", { place: `${t("nav.company")} → ${t("settings.privacyTitle")}` })}</p>
+              {me.user.role !== "staff" && (
+                <Link to="/einstellungen" className="button" onClick={() => setOpen(false)}>{t("assistant.aiOffLink")}</Link>
+              )}
+            </div>
+          )}
         </section>
       )}
     </>

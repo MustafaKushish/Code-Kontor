@@ -610,6 +610,7 @@ export const tr: Dict = {
   insights: {
     tipsTitle: "{month} için öneriler",
     tipsIntro: "{period} rakamlarına göre. Aşağıdan sormaya devam et, yapay zekâ rakamlarını biliyor.",
+    tipsIntroLocal: "{period} rakamlarına göre.",
     askMore: "Yapay zekâdan daha fazla fikir",
     askCustomers: "Nasıl daha fazla müşteri kazanırım?",
     askBasket: "Müşteri başına nasıl daha fazla satarım?",
@@ -765,6 +766,8 @@ export const tr: Dict = {
     close: "Kapat",
     newChat: "Yeni sohbet",
     scrollDown: "Aşağı kaydır",
+    aiOff: "Yapay zekâya sorular kapalı. {place} bölümünden açabilirsin.",
+    aiOffLink: "Ayarları aç",
     thinking: "Düşünüyor …",
     disclaimer: "Yapay zekâ hata yapabilir. Önemli bilgileri kontrol et.",
     suggestion1: "İlk sistemimi nasıl kurarım?",

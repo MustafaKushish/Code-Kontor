@@ -29,6 +29,7 @@ export function Link({ to, ...rest }: { to: string } & AnchorHTMLAttributes<HTML
       href={to}
       {...rest}
       onClick={(e) => {
+        rest.onClick?.(e);
         if (e.metaKey || e.ctrlKey || e.shiftKey) return;
         e.preventDefault();
         navigate(to);
