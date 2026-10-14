@@ -116,8 +116,9 @@ export function validateCompany(profile: CompanyProfile): CompanyErrors {
   } else if (profile.iban.length > 40) errors.iban = "ibanInvalid";
   if (profile.bic.trim() && !isValidBic(profile.bic)) errors.bic = "bicInvalid";
   // Nur Empfänger-Nummer (Telefon, Händler-ID), keine Kartendaten
-  if (containsCardNumber(profile.paymentAccount)) errors.paymentAccount = "cardNumberNotAllowed";
-  else if (profile.paymentAccount.length > 80) errors.paymentAccount = "paymentAccountInvalid";
+  const paymentAccount = profile.paymentAccount ?? "";
+  if (containsCardNumber(paymentAccount)) errors.paymentAccount = "cardNumberNotAllowed";
+  else if (paymentAccount.length > 80) errors.paymentAccount = "paymentAccountInvalid";
   if (profile.logoDataUrl) {
     if (!/^data:image\/(png|jpeg|svg\+xml|webp);base64,/.test(profile.logoDataUrl))
       errors.logoDataUrl = "logoType";
