@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { ArrowUp, RotateCcw, Sparkles, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, Lightbulb, RotateCcw, Sparkles, ThumbsUp, X } from "lucide-react";
 import type { Me } from "../api";
 import { useI18n } from "../i18n";
 
@@ -8,11 +8,24 @@ interface ChatMessage {
   content: string;
 }
 
-/** Andere Seiten öffnen den Assistenten mit einer Frage, z. B. die Auswertung mit ihrem Zeitraum. */
-export interface AskAssistantDetail {
-  question: string;
-  insights?: { from: string; to: string };
+/** Fertige Vorschläge, die sofort erscheinen (ohne KI); darunter kann man weiter fragen. */
+export interface AssistantTips {
+  title: string;
+  intro: string;
+  tips: { tone: "warn" | "idea" | "good"; title: string; text: string }[];
+  followUps: { label: string; question: string }[];
 }
+
+/** Andere Seiten öffnen den Assistenten mit einer Frage oder mit Vorschlägen, z. B. die Auswertung mit ihrem Zeitraum. */
+export interface AskAssistantDetail {
+  question?: string;
+  insights?: { from: string; to: string };
+  tips?: AssistantTips;
+}
+
+const TONE_ICONS = { warn: AlertTriangle, idea: Lightbulb, good: ThumbsUp };
+/** So nah am Ende gilt man als „unten“; dann läuft die Antwort mit. */
+const NEAR_BOTTOM = 80;
 export const ASK_ASSISTANT_EVENT = "ck-ask-assistant";
 export const askAssistant = (detail: AskAssistantDetail) => window.dispatchEvent(new CustomEvent<AskAssistantDetail>(ASK_ASSISTANT_EVENT, { detail }));
 
@@ -67,14 +80,39 @@ export function Assistant({ me }: { me: Me }) {
   const abortRef = useRef<AbortController | null>(null);
   // Zeitraum der Auswertung, solange das Gespräch dazu läuft: jede Folgefrage bekommt die Zahlen mit
   const [insights, setInsights] = useState<AskAssistantDetail["insights"]>();
+  const [tips, setTips] = useState<AssistantTips>();
+  const tipsRef = useRef(tips);
+  tipsRef.current = tips;
+  // Mitlaufen nur, solange man unten ist; wer hochscrollt, um zu lesen, wird nicht wieder nach unten gezogen.
+  const stickRef = useRef(true);
+  const lastTopRef = useRef(0);
+  const [atBottom, setAtBottom] = useState(true);
+
+  const toBottom = () => {
+    const el = listRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  };
+  const onScroll = () => {
+    const el = listRef.current;
+    if (!el) return;
+    const near = el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM;
+    // Nur echtes Hochscrollen löst das Mitlaufen; wachsender Text allein nicht.
+    if (near) stickRef.current = true;
+    else if (el.scrollTop < lastTopRef.current - 2) stickRef.current = false;
+    lastTopRef.current = el.scrollTop;
+    setAtBottom(near);
+  };
 
   useEffect(() => {
-    listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
+    if (stickRef.current) toBottom();
+    onScroll();
   }, [messages, busy, error]);
 
   useEffect(() => {
     if (!open) return;
-    requestAnimationFrame(() => inputRef.current?.focus());
+    // Am Handy würde die Tastatur die Vorschläge verdecken
+    const touch = window.matchMedia?.("(pointer: coarse)").matches;
+    requestAnimationFrame(() => !(touch && tipsRef.current) && inputRef.current?.focus());
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -85,6 +123,7 @@ export function Assistant({ me }: { me: Me }) {
   useEffect(() => {
     setMessages([]);
     setInsights(undefined);
+    setTips(undefined);
   }, [me.user.id]);
 
   const ask = async (question: string, fresh?: { insights?: AskAssistantDetail["insights"] }) => {
@@ -95,7 +134,9 @@ export function Assistant({ me }: { me: Me }) {
     if (fresh) {
       abortRef.current?.abort();
       setInsights(fresh.insights);
+      setTips(undefined);
     }
+    stickRef.current = true;
     const history: ChatMessage[] = [...before, { role: "user", content: text }];
     setMessages([...history, { role: "assistant", content: "" }]);
     setDraft("");
@@ -157,9 +198,20 @@ export function Assistant({ me }: { me: Me }) {
   askRef.current = ask;
   useEffect(() => {
     const onAsk = (e: Event) => {
-      const { question, insights: range } = (e as CustomEvent<AskAssistantDetail>).detail;
+      const { question, insights: range, tips: list } = (e as CustomEvent<AskAssistantDetail>).detail;
       setOpen(true);
-      askRef.current(question, { insights: range });
+      if (list) {
+        // Vorschläge sofort zeigen, die KI erst auf Nachfrage
+        abortRef.current?.abort();
+        abortRef.current = null;
+        setBusy(false);
+        setMessages([]);
+        setError("");
+        setInsights(range);
+        setTips(list);
+        stickRef.current = false;
+        requestAnimationFrame(() => listRef.current?.scrollTo({ top: 0 }));
+      } else if (question) askRef.current(question, { insights: range });
     };
     window.addEventListener(ASK_ASSISTANT_EVENT, onAsk);
     return () => window.removeEventListener(ASK_ASSISTANT_EVENT, onAsk);
@@ -174,6 +226,7 @@ export function Assistant({ me }: { me: Me }) {
     abortRef.current?.abort();
     setMessages([]);
     setInsights(undefined);
+    setTips(undefined);
     setError("");
     setDraft("");
     inputRef.current?.focus();
@@ -196,7 +249,7 @@ export function Assistant({ me }: { me: Me }) {
               <strong>{t("assistant.title")}</strong>
               <small>{t("assistant.subtitle")}</small>
             </div>
-            {messages.length > 0 && (
+            {(messages.length > 0 || tips) && (
               <button className="assistant-tool" onClick={reset} aria-label={t("assistant.newChat")} title={t("assistant.newChat")}>
                 <RotateCcw size={18} />
               </button>
@@ -206,9 +259,38 @@ export function Assistant({ me }: { me: Me }) {
             </button>
           </header>
 
-          <div className="assistant-body" ref={listRef} aria-live="polite">
+          <div className="assistant-body" ref={listRef} onScroll={onScroll} aria-live="polite">
+            {tips && (
+              <div className="assistant-tips">
+                <div className="assistant-tips-head">
+                  <strong className="display">{tips.title}</strong>
+                  <small>{tips.intro}</small>
+                </div>
+                {tips.tips.map((tip, i) => {
+                  const Icon = TONE_ICONS[tip.tone];
+                  return (
+                    <article key={i} className={`assistant-tip ${tip.tone}`}>
+                      <span className="assistant-tip-icon" aria-hidden><Icon size={16} /></span>
+                      <div>
+                        <strong>{tip.title}</strong>
+                        <p>{tip.text}</p>
+                      </div>
+                    </article>
+                  );
+                })}
+                {messages.length === 0 && (
+                  <div className="assistant-suggestions">
+                    {tips.followUps.map((f) => (
+                      <button key={f.label} onClick={() => ask(f.question)}>
+                        <Sparkles size={15} /> {f.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             {messages.length === 0 ? (
-              <div className="assistant-empty">
+              !tips && <div className="assistant-empty">
                 <p className="display">{t("overview.hello")}{lang === "ar" ? "،" : ","} {firstName}.</p>
                 <div className="assistant-suggestions">
                   {suggestions.map((s) => (
@@ -232,6 +314,11 @@ export function Assistant({ me }: { me: Me }) {
             )}
             {error && <p className="assistant-error" role="alert">{error}</p>}
           </div>
+          {!atBottom && (
+            <button className="assistant-down" onClick={() => { stickRef.current = true; toBottom(); }} aria-label={t("assistant.scrollDown")} title={t("assistant.scrollDown")}>
+              <ArrowDown size={18} />
+            </button>
+          )}
 
           <form className="assistant-input" onSubmit={submit}>
             <textarea
