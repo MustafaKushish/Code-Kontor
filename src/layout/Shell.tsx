@@ -147,7 +147,7 @@ export function Shell({ me, path, onLogout, children }: { me: Me; path: string; 
       </nav>
 
       <CommandPalette me={me} open={paletteOpen} onClose={() => setPaletteOpen(false)} />
-      <Assistant me={me} />
+      {me.privacy?.assistant && <Assistant me={me} />}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Building2, Landmark, Languages, Palette, Pencil, Receipt } from "lucide-react";
+import { Building2, Landmark, Languages, Palette, Pencil, Receipt, ShieldCheck } from "lucide-react";
 import { ThemeSwitch } from "../layout/Shell";
 import { LanguageSwitch } from "../layout/LanguageSwitch";
 import { useI18n } from "../i18n";
@@ -102,6 +102,48 @@ function TaxSettingsCard({ canEdit, onChanged, company }: { canEdit: boolean; on
   );
 }
 
+type Privacy = NonNullable<Me["privacy"]>;
+
+/** Ob KI-Assistent und Adressvorschläge Daten an fremde Dienste senden dürfen. */
+function PrivacyCard({ me, canEdit, onChanged }: { me: Me; canEdit: boolean; onChanged: () => void }) {
+  const { t, errorText } = useI18n();
+  const [privacy, setPrivacy] = useState<Privacy>(me.privacy ?? { assistant: false, addressLookup: false });
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const toggle = async (key: keyof Privacy, value: boolean) => {
+    const next = { ...privacy, [key]: value };
+    setBusy(true);
+    setError("");
+    try {
+      const r = await api<{ privacy: Privacy }>("/privacy", { method: "PUT", body: next });
+      setPrivacy(r.privacy);
+      onChanged();
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const option = (key: keyof Privacy, label: string, hint: string) => (
+    <label className="check">
+      <input type="checkbox" checked={privacy[key]} disabled={!canEdit || busy} onChange={(e) => toggle(key, e.target.checked)} />
+      <span>{label}<br /><span className="muted small">{hint}</span></span>
+    </label>
+  );
+
+  return (
+    <div className="stack-sm">
+      <p className="muted">{t("settings.privacyText")}</p>
+      {option("assistant", t("settings.privacyAssistant"), t("settings.privacyAssistantHint"))}
+      {option("addressLookup", t("settings.privacyAddress"), t("settings.privacyAddressHint"))}
+      {!canEdit && <p className="muted small">{t("settings.privacyStaff")}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
+    </div>
+  );
+}
+
 export function Settings({ me, onEdit, onTaxChanged }: { me: Me; onEdit: () => void; onTaxChanged: () => void }) {
   const [company, setCompany] = useState<CompanyProfile | null>(null);
   const canEdit = me.user.role !== "staff";
@@ -148,6 +190,10 @@ export function Settings({ me, onEdit, onTaxChanged }: { me: Me; onEdit: () => v
               <dt>{t("settings.bic")}</dt><dd>{c.bic || "–"}</dd>
               <dt>{t("settings.bankName")}</dt><dd>{c.bankName || "–"}</dd>
             </dl>
+          </section>
+          <section className="card stack">
+            <h2 className="card-title"><ShieldCheck size={20} /> {t("settings.privacyTitle")}</h2>
+            <PrivacyCard me={me} canEdit={canEdit} onChanged={onTaxChanged} />
           </section>
           <section className="card">
             <h2 className="card-title"><Palette size={20} /> {t("theme.label")}</h2>

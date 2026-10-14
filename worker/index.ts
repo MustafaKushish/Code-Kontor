@@ -27,6 +27,7 @@ import {
 } from "../shared/time";
 import { newRecoveryCodes, newTotpSecret, normalizeRecoveryCode, otpauthUrl, verifyTotp } from "./totp";
 import type { CompanyProfile } from "../shared/company";
+import { sanitizePrivacy } from "../shared/privacy";
 import { repairRoutes, repairStatusRoutes } from "./repairs/routes";
 import { posRoutes } from "./pos/routes";
 
@@ -575,12 +576,13 @@ app.get("/me", async (c) => {
   const db = tenantDb(c.env, user.tenantId);
   const company = await loadCompany(c.env, user.tenantId);
   const setupComplete = !!company && Object.keys(validateCompany(company)).length === 0;
-  const [installedApps, timeRequests, tax] = await Promise.all([
+  const [installedApps, timeRequests, tax, privacy] = await Promise.all([
     db.installedApps(),
     user.role === "staff" ? 0 : db.pendingRequestCount(),
     loadTax(c.env, user.tenantId, company?.country ?? "DE"),
+    db.getPrivacy(),
   ]);
-  return c.json({ user, setupComplete, installedApps, mailEnabled: mailEnabled(c.env), billing: await billingSummary(c), timeRequests, tax });
+  return c.json({ user, setupComplete, installedApps, mailEnabled: mailEnabled(c.env), billing: await billingSummary(c), timeRequests, tax, privacy });
 });
 
 // ---------- Eigenes Konto ----------
@@ -778,6 +780,20 @@ app.put("/tax", requireRole("owner", "admin"), async (c) => {
   audit(c, user.tenantId, user, "taxChanged", settings ? { currency: settings.currency, vatRates: settings.vatRates } : { reset: true });
   const tax = await loadTax(c.env, user.tenantId, country);
   return c.json({ tax, defaults: defaultTaxSettings(country) });
+});
+
+// ---------- Daten an fremde Dienste ----------
+
+app.get("/privacy", async (c) => {
+  return c.json({ privacy: await tenantDb(c.env, c.get("user").tenantId).getPrivacy() });
+});
+
+app.put("/privacy", requireRole("owner", "admin"), async (c) => {
+  const user = c.get("user");
+  const privacy = sanitizePrivacy(await readBody(c));
+  await tenantDb(c.env, user.tenantId).savePrivacy(privacy);
+  audit(c, user.tenantId, user, "privacyChanged", { ...privacy });
+  return c.json({ privacy });
 });
 
 // ---------- App-Katalog ----------
@@ -1320,9 +1336,12 @@ app.get("/accounting/month/:month/from-time", accounting, async (c) => {
 
 // ---------- Adressvorschläge ----------
 
+/** Adressvorschläge senden Eingaben an fremde Dienste, daher nur, wenn die Firma das erlaubt. */
+const addressLookupAllowed = async (c: Ctx) => (await tenantDb(c.env, c.get("user").tenantId).getPrivacy()).addressLookup;
+
 app.get("/geo/address", async (c) => {
   const q = (c.req.query("q") ?? "").trim();
-  if (q.length < 3 || q.length > 120) return c.json({ suggestions: [] });
+  if (q.length < 3 || q.length > 120 || !(await addressLookupAllowed(c))) return c.json({ suggestions: [] });
   try {
     const suggestions = await suggestAddresses(q, { lang: c.req.query("lang"), country: c.req.query("country") });
     return c.json({ suggestions });
@@ -1333,6 +1352,7 @@ app.get("/geo/address", async (c) => {
 });
 
 app.get("/geo/postal", async (c) => {
+  if (!(await addressLookupAllowed(c))) return c.json({ city: null });
   try {
     const city = await cityForPostalCode(c.req.query("country") ?? "", c.req.query("code") ?? "");
     return c.json({ city }, 200, { "Cache-Control": "private, max-age=86400" });
@@ -1353,6 +1373,7 @@ app.post("/assistant", async (c) => {
   if (!apiKey) return fail(c, "assistantNotConfigured", 503);
 
   const db = tenantDb(c.env, user.tenantId);
+  if (!(await db.getPrivacy()).assistant) return fail(c, "assistantDisabled", 403);
   if (!(await db.countAssistantQuestion(user.id, DAILY_QUESTION_LIMIT))) return fail(c, "assistantLimit", 429);
 
   const context = {

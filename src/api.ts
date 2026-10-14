@@ -48,4 +48,6 @@ export interface Me {
   timeRequests?: number;
   /** Land, Währung und Steuersätze der Firma */
   tax?: { country: string; custom: boolean; currency: string; vatRates: number[] };
+  /** Welche Hilfen Daten an fremde Dienste senden dürfen */
+  privacy?: { assistant: boolean; addressLookup: boolean };
 }

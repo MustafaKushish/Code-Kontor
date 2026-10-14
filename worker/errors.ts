@@ -41,6 +41,7 @@ export const ERROR_TEXT = {
   ownerOnlyRemoveAdmins: "Nur der Inhaber kann Admins entfernen.",
   notFound: "Nicht gefunden.",
   messageInvalid: "Bitte eine Frage eingeben.",
+  assistantDisabled: "Der KI-Assistent ist für diese Firma ausgeschaltet.",
   assistantNotConfigured: "Der KI-Assistent ist noch nicht eingerichtet.",
   assistantLimit: "Das Tageslimit für Fragen ist erreicht. Morgen geht es weiter.",
   assistantFailed: "Der Assistent konnte gerade nicht antworten. Bitte gleich noch einmal versuchen.",
