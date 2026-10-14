@@ -10,6 +10,7 @@ import {
 } from "../../shared/repairs";
 import { receiptNumber, type PayMethod, type PosArticle, type PosLine, type Receipt } from "../../shared/pos";
 import { PosError, type PosContext, type PosModule, type PosStore } from "../pos/store";
+import type { Range, RepairPipeline } from "../../shared/insights";
 
 // Daten des Systems „Handy- & IT-Service“ in der Datenbank der Firma.
 // Läuft im Durable Object der Firma; der Kern ruft alles über TenantDatabase.repairs() auf.
@@ -1012,6 +1013,25 @@ export class RepairStore {
   }
 
   // ---------- Auswertung ----------
+
+  /** Stand der Aufträge jetzt und Annahmen/Abholungen im Zeitraum (für die zentrale Auswertung). */
+  pipeline(range: Range): RepairPipeline {
+    const from = new Date(Date.parse(`${range.from}T00:00:00Z`) - 86_400_000).toISOString();
+    const to = new Date(Date.parse(`${range.to}T00:00:00Z`) + 2 * 86_400_000).toISOString();
+    const inRange = (iso: string) => {
+      const d = berlinDay(iso);
+      return d >= range.from && d <= range.to;
+    };
+    const count = (statuses: readonly string[]) =>
+      this.sql.exec<{ n: number }>(`SELECT COUNT(*) AS n FROM repair_orders WHERE status IN (${statuses.map(() => "?").join(", ")})`, ...statuses).one().n;
+    return {
+      open: count(STATUS_GROUPS.open),
+      waiting: count(STATUS_GROUPS.waiting),
+      pickup: count(STATUS_GROUPS.pickup),
+      received: this.sql.exec<Row>("SELECT created_at FROM repair_orders WHERE created_at >= ? AND created_at < ?", from, to).toArray().filter((r) => inRange(S(r.created_at))).length,
+      pickedUp: this.sql.exec<Row>("SELECT at FROM repair_events WHERE status = 'pickedUp' AND at >= ? AND at < ?", from, to).toArray().filter((r) => inRange(S(r.at))).length,
+    };
+  }
 
   /** Monatsauswertung. `month` = YYYY-MM, Tage nach deutscher Ortszeit. */
   stats(month: string): RepairStats {

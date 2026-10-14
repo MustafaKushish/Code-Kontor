@@ -3,6 +3,7 @@ import {
   type CashMove, type CashMoveKind, type CashState, type Closing, type PayMethod, type Payment, type PosArticle, type PosCustomer, type PosLine,
   type PosItem, type PosRef, type PosRegister, type PosSettings, type PosSource, type Receipt, type ReceiptCompany, type ReceiptKind, type ReceiptRow,
 } from "../../shared/pos";
+import { bucketKeys, type InsightBucket, type Range, type SalesStats } from "../../shared/insights";
 
 // Die Kasse der Firma: ein Nummernkreis, ein Kassenbuch, ein Tagesabschluss für alle Systeme.
 // Läuft im Durable Object der Firma; Module melden sich mit register() an und bekommen
@@ -419,6 +420,63 @@ export class PosStore {
     });
   }
 
+  // ---------- Auswertung ----------
+
+  /** Umsatz im Zeitraum (Tage nach deutscher Ortszeit) für die zentrale Auswertung. */
+  salesStats(range: Range, bucket: InsightBucket): SalesStats {
+    const from = new Date(Date.parse(`${range.from}T00:00:00Z`) - 86_400_000).toISOString();
+    const to = new Date(Date.parse(`${range.to}T00:00:00Z`) + 2 * 86_400_000).toISOString();
+    const itemGroups = new Map(this.sql.exec<Row>("SELECT id, item_group FROM pos_items").toArray().map((r) => [S(r.id), S(r.item_group)]));
+    const series = new Map(bucketKeys(range, bucket).map((k) => [k, 0]));
+    const hours = Array.from({ length: 24 }, () => 0);
+    const groups = new Map<string, { cents: number; qty: number }>();
+    const articles = new Map<string, { name: string; group: string; cents: number; qty: number }>();
+    const sources = new Map<PosSource, number>();
+    const byMethod = emptyByMethod();
+    const stats = { revenueCents: 0, receipts: 0, cancels: 0, cancelCents: 0 };
+
+    for (const r of this.sql.exec<Row>("SELECT issued_at, kind, data, canceled_by FROM pos_receipts WHERE issued_at >= ? AND issued_at < ?", from, to).toArray()) {
+      const at = S(r.issued_at);
+      const day = berlinDay(at);
+      if (day < range.from || day > range.to) continue;
+      const receipt = JSON.parse(S(r.data)) as Receipt;
+      for (const p of receipt.payments) byMethod[p.method] += p.cents;
+      if (receipt.kind === "deposit") continue;
+      if (receipt.kind === "cancel") {
+        stats.cancels++;
+        stats.cancelCents -= receipt.totals.grossCents;
+      } else if (r.canceled_by === null) stats.receipts++;
+      const gross = receipt.totals.grossCents;
+      stats.revenueCents += gross;
+      const hour = Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Berlin", hour: "2-digit", hourCycle: "h23" }).format(new Date(at)));
+      hours[hour] = (hours[hour] ?? 0) + gross;
+      const key = bucket === "hour" ? String(hour).padStart(2, "0") : bucket === "day" ? day : day.slice(0, 7);
+      series.set(key, (series.get(key) ?? 0) + gross);
+      for (const l of receipt.lines) {
+        const cents = Math.round(l.qty * l.unitCents);
+        const group = l.source === "pos" ? (l.refId ? itemGroups.get(l.refId) ?? "" : "") : moduleGroup(l);
+        const g = groups.get(group) ?? { cents: 0, qty: 0 };
+        g.cents += cents;
+        g.qty += l.qty;
+        groups.set(group, g);
+        const a = articles.get(`${group}\n${l.name}`) ?? { name: l.name, group, cents: 0, qty: 0 };
+        a.cents += cents;
+        a.qty += l.qty;
+        articles.set(`${group}\n${l.name}`, a);
+        sources.set(l.source, (sources.get(l.source) ?? 0) + cents);
+      }
+    }
+
+    const ranked = <T extends { cents: number }>(list: T[], n: number) => list.filter((x) => x.cents !== 0).sort((a, b) => b.cents - a.cents).slice(0, n);
+    return {
+      ...stats, byMethod, hours,
+      series: [...series.entries()].map(([key, cents]) => ({ key, cents })),
+      groups: ranked([...groups.entries()].map(([group, g]) => ({ group, ...g })), 8),
+      articles: ranked([...articles.values()], 8),
+      sources: ranked([...sources.entries()].map(([source, cents]) => ({ source, cents })), 10),
+    };
+  }
+
   // ---------- Kassenbuch ----------
 
   /** Bewegung ohne Beleg. Positiv = in die Kasse. */
@@ -529,6 +587,15 @@ export class PosStore {
         ref: S(r.ref), userName: r.user_name === null ? null : S(r.user_name), closing: r.closing === null ? null : Number(r.closing),
       }));
   }
+}
+
+/** Warengruppe eines Postens aus einem Modul, passend zu den Gruppen an der Kasse (z. B. „@repairs.part“). */
+function moduleGroup(l: PosLine): string {
+  if (l.source === "repairs") {
+    if (l.kind.startsWith("order")) return "@repairs.repair";
+    if (l.kind === "used" || l.kind === "part") return `@repairs.${l.kind}`;
+  }
+  return `@${l.source}.other`;
 }
 
 /** Tag nach deutscher Ortszeit, damit ein Verkauf um 0:30 Uhr zum richtigen Tag gehört. */

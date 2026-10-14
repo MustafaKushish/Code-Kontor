@@ -330,3 +330,36 @@ describe("Kasse: Kassenplätze, Artikelstamm und Scanner", () => {
     expect(sanitizeLine({ source: "repairs", kind: "part", refId: "x", name: "Teil", qty: -2, unitCents: 100, vatRate: 19 })!.qty).toBe(0.001);
   });
 });
+
+describe("Kasse: Zahlen für die Auswertung", () => {
+  it("rechnet Umsatz, Zahlarten, Warengruppen und Stornos im Zeitraum", () => {
+    const { pos, repairs } = database();
+    expect(repairs.pipeline({ from: "2026-10-01", to: "2026-10-31" })).toEqual({ open: 0, waiting: 0, pickup: 0, received: 0, pickedUp: 0 });
+    pos.saveSettings({ ...pos.settings(), methods: ["cash", "card"] });
+    const coffee = pos.saveItem(null, { name: "Kaffee", barcode: "", code: "", group: "Getränke", priceCents: 300, vatRate: 19, tile: true, stock: null });
+    const cake = pos.saveItem(null, { name: "Kuchen", barcode: "", code: "", group: "Backwaren", priceCents: 450, vatRate: 7, tile: true, stock: null });
+    const item = (i: typeof coffee, qty: number) => ({ source: "pos" as const, kind: "item", refId: i.id, name: i.name, qty, unitCents: i.priceCents, vatRate: i.vatRate });
+    pos.checkout({ lines: [item(coffee, 2), item(cake, 1)], payments: [{ method: "cash", cents: 1050 }], customer: null }, ctx());
+    pos.checkout({ lines: [item(coffee, 1)], payments: [{ method: "card", cents: 300 }], customer: null }, ctx());
+    const canceled = pos.checkout({ lines: [item(cake, 2)], payments: [{ method: "card", cents: 900 }], customer: null }, ctx())!;
+    pos.cancel(canceled.number, ctx());
+
+    const day = new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Berlin" });
+    const s = pos.salesStats({ from: day, to: day }, "hour");
+    expect(s.revenueCents).toBe(1350);
+    expect(s.receipts).toBe(2);
+    expect(s.cancels).toBe(1);
+    expect(s.cancelCents).toBe(900);
+    expect(s.byMethod).toEqual({ cash: 1050, card: 300, transfer: 0, voucher: 0 });
+    expect(s.groups).toEqual([{ group: "Getränke", cents: 900, qty: 3 }, { group: "Backwaren", cents: 450, qty: 1 }]);
+    expect(s.articles[0]).toEqual({ name: "Kaffee", group: "Getränke", cents: 900, qty: 3 });
+    expect(s.series).toHaveLength(24);
+    expect(s.series.reduce((sum, x) => sum + x.cents, 0)).toBe(1350);
+    expect(s.hours.reduce((sum, c) => sum + c, 0)).toBe(1350);
+    expect(s.sources).toEqual([{ source: "pos", cents: 1350 }]);
+
+    const empty = pos.salesStats({ from: "2020-01-01", to: "2020-01-31" }, "day");
+    expect(empty.revenueCents).toBe(0);
+    expect(empty.series).toHaveLength(31);
+  });
+});
