@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { askAssistant, parseConversation, systemPrompt, type GeminiOptions } from "../worker/assistant";
+import { askAssistant, insightsBrief, parseConversation, systemPrompt, type GeminiOptions } from "../worker/assistant";
+import type { Insights } from "../shared/insights";
 
 describe("KI-Assistent", () => {
   it("nimmt einen gültigen Verlauf an", () => {
@@ -104,5 +105,42 @@ describe("KI-Assistent: Antwortstrom", () => {
     expect(await collect(options)).toEqual([{ type: "text", text: "Hallo" }, { type: "done" }]);
     expect(urls[0]).toContain("gemini-flash-latest");
     expect(urls[1]).toContain("gemini-flash-lite-latest");
+  });
+});
+
+describe("KI-Assistent: Vorschläge aus der Auswertung", () => {
+  const insights: Insights = {
+    from: "2026-10-01", to: "2026-10-31", bucket: "day",
+    sales: {
+      revenueCents: 253180, receipts: 52, cancels: 2, cancelCents: 11850,
+      byMethod: { cash: 109980, card: 143200, transfer: 0, voucher: 0 },
+      series: [{ key: "2026-10-01", cents: 12000 }], hours: Array.from({ length: 24 }, (_, h) => (h >= 9 && h <= 18 ? h * 1000 : 0)),
+      groups: [{ group: "Zubehör", cents: 117110, qty: 69 }], articles: [{ name: "Panzerglas", group: "Zubehör", cents: 41720, qty: 28 }],
+      sources: [{ source: "pos", cents: 200680 }, { source: "repairs", cents: 52500 }],
+    },
+    previous: { from: "2026-09-01", to: "2026-09-14", revenueCents: 194020, receipts: 40 },
+    repairs: { open: 3, waiting: 1, pickup: 2, received: 7, pickedUp: 5 },
+    time: { minutes: 12270, people: 3, present: 2 },
+  };
+
+  it("fasst die Zahlen zusammen, ohne etwas zu erfinden", () => {
+    const brief = insightsBrief(insights, "EUR", "2026-10-14");
+    expect(brief).toContain("Revenue: 2531.80 EUR");
+    expect(brief).toContain("(+30 %)");
+    expect(brief).toContain("average per receipt 48.69 EUR");
+    expect(brief).toContain("Panzerglas");
+    expect(brief).toContain("1 waiting for customer approval");
+    expect(brief).toContain("(still running)");
+    expect(brief).toContain("204.5 h by 3 people");
+  });
+
+  it("gibt die Zahlen und Branchen-Hinweise nur mit, wenn sie da sind", () => {
+    const base = { companyName: "Handy Doktor", userName: "Mia", role: "owner" as const, installedApps: ["handy-it", "kasse"], lang: "de" };
+    expect(systemPrompt(base)).not.toContain("dashboard");
+    const prompt = systemPrompt({ ...base, insights: { data: insights, currency: "EUR", today: "2026-10-14" } });
+    expect(prompt).toContain("Revenue: 2531.80 EUR");
+    expect(prompt).toContain("Phone and IT repair shop");
+    expect(prompt).toContain("November 2026");
+    expect(prompt).toContain("Always answer in German");
   });
 });

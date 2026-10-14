@@ -607,6 +607,8 @@ export const it: Dict = {
     everywhere: "Funziona su Windows, macOS, Linux, ChromeOS, Android, iPhone e iPad. I tuoi dati sono al sicuro nel cloud e sono gli stessi su tutti i dispositivi.",
   },
   insights: {
+    aiTips: "Consigli IA per il prossimo mese",
+    aiQuestion: "Guarda i miei numeri di {period}. Cosa posso migliorare concretamente il prossimo mese?",
     title: "Analisi",
     subtitle: "Tutti i sistemi a colpo d'occhio: fatturato, cassa, ordini e ore di lavoro.",
     periods: { day: "Giorno", week: "Settimana", month: "Mese", year: "Anno" },

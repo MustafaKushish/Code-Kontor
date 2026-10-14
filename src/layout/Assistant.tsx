@@ -8,6 +8,14 @@ interface ChatMessage {
   content: string;
 }
 
+/** Andere Seiten öffnen den Assistenten mit einer Frage, z. B. die Auswertung mit ihrem Zeitraum. */
+export interface AskAssistantDetail {
+  question: string;
+  insights?: { from: string; to: string };
+}
+export const ASK_ASSISTANT_EVENT = "ck-ask-assistant";
+export const askAssistant = (detail: AskAssistantDetail) => window.dispatchEvent(new CustomEvent<AskAssistantDetail>(ASK_ASSISTANT_EVENT, { detail }));
+
 type StreamEvent = { type: "text"; text: string } | { type: "reset" } | { type: "done" } | { type: "error"; code: string };
 
 /** Fett (**text**) und kursiv (*text*) innerhalb einer Zeile; einzelne Sternchen fallen weg. */
@@ -57,6 +65,8 @@ export function Assistant({ me }: { me: Me }) {
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // Zeitraum der Auswertung, solange das Gespräch dazu läuft: jede Folgefrage bekommt die Zahlen mit
+  const [insights, setInsights] = useState<AskAssistantDetail["insights"]>();
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
@@ -72,12 +82,21 @@ export function Assistant({ me }: { me: Me }) {
 
   // Neues Konto oder Abmelden: Gespräch nicht mitnehmen.
   useEffect(() => () => abortRef.current?.abort(), []);
-  useEffect(() => setMessages([]), [me.user.id]);
+  useEffect(() => {
+    setMessages([]);
+    setInsights(undefined);
+  }, [me.user.id]);
 
-  const ask = async (question: string) => {
+  const ask = async (question: string, fresh?: { insights?: AskAssistantDetail["insights"] }) => {
     const text = question.trim();
-    if (!text || busy) return;
-    const history: ChatMessage[] = [...messages, { role: "user", content: text }];
+    if (!text || (busy && !fresh)) return;
+    const before = fresh ? [] : messages;
+    const range = fresh ? fresh.insights : insights;
+    if (fresh) {
+      abortRef.current?.abort();
+      setInsights(fresh.insights);
+    }
+    const history: ChatMessage[] = [...before, { role: "user", content: text }];
     setMessages([...history, { role: "assistant", content: "" }]);
     setDraft("");
     setError("");
@@ -91,7 +110,7 @@ export function Assistant({ me }: { me: Me }) {
     const failWith = (code: string) => {
       setError(t(code === "noConnection" ? "common.noConnection" : `errors.${code}`));
       // Frage ohne Antwort aus dem Verlauf nehmen, damit sie neu gestellt werden kann.
-      setMessages(messages);
+      setMessages(before);
       setDraft(text);
     };
 
@@ -99,7 +118,7 @@ export function Assistant({ me }: { me: Me }) {
       const response = await fetch("/api/assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: history, lang }),
+        body: JSON.stringify({ messages: history, lang, ...(range ? { insights: range } : {}) }),
         credentials: "same-origin",
         signal: controller.signal,
       });
@@ -127,10 +146,24 @@ export function Assistant({ me }: { me: Me }) {
     } catch (err) {
       if ((err as Error).name !== "AbortError") failWith("noConnection");
     } finally {
-      setBusy(false);
-      abortRef.current = null;
+      if (abortRef.current === controller) {
+        setBusy(false);
+        abortRef.current = null;
+      }
     }
   };
+
+  const askRef = useRef(ask);
+  askRef.current = ask;
+  useEffect(() => {
+    const onAsk = (e: Event) => {
+      const { question, insights: range } = (e as CustomEvent<AskAssistantDetail>).detail;
+      setOpen(true);
+      askRef.current(question, { insights: range });
+    };
+    window.addEventListener(ASK_ASSISTANT_EVENT, onAsk);
+    return () => window.removeEventListener(ASK_ASSISTANT_EVENT, onAsk);
+  }, []);
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -140,6 +173,7 @@ export function Assistant({ me }: { me: Me }) {
   const reset = () => {
     abortRef.current?.abort();
     setMessages([]);
+    setInsights(undefined);
     setError("");
     setDraft("");
     inputRef.current?.focus();
