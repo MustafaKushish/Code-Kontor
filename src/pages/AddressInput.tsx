@@ -15,6 +15,8 @@ export function AddressInput(props: {
   value: string;
   country: string;
   lang: string;
+  /** false: keine Vorschläge, nichts verlässt Code Kontor */
+  enabled: boolean;
   onChange: (value: string) => void;
   onPick: (suggestion: AddressSuggestion) => void;
 }) {
@@ -26,7 +28,7 @@ export function AddressInput(props: {
 
   useEffect(() => {
     const q = props.value.trim();
-    if (!typed.current || q.length < 3) {
+    if (!props.enabled || !typed.current || q.length < 3) {
       setSuggestions([]);
       return;
     }
@@ -46,7 +48,7 @@ export function AddressInput(props: {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [props.value, props.country, props.lang]);
+  }, [props.value, props.country, props.lang, props.enabled]);
 
   useEffect(() => {
     const onDown = (e: PointerEvent) => !box.current?.contains(e.target as Node) && setOpen(false);

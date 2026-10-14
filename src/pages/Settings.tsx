@@ -127,7 +127,7 @@ function PrivacyCard({ me, canEdit, onChanged }: { me: Me; canEdit: boolean; onC
   };
 
   const option = (key: keyof Privacy, label: string, hint: string) => (
-    <label className="check">
+    <label className="check" style={{ alignItems: "flex-start" }}>
       <input type="checkbox" checked={privacy[key]} disabled={!canEdit || busy} onChange={(e) => toggle(key, e.target.checked)} />
       <span>{label}<br /><span className="muted small">{hint}</span></span>
     </label>

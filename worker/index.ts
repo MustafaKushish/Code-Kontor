@@ -1369,11 +1369,10 @@ app.post("/assistant", async (c) => {
   const body = await readBody(c);
   const messages = parseConversation(body.messages);
   if (!messages) return fail(c, "messageInvalid", 400);
-  const apiKey = c.env.GEMINI_API_KEY;
-  if (!apiKey) return fail(c, "assistantNotConfigured", 503);
-
   const db = tenantDb(c.env, user.tenantId);
   if (!(await db.getPrivacy()).assistant) return fail(c, "assistantDisabled", 403);
+  const apiKey = c.env.GEMINI_API_KEY;
+  if (!apiKey) return fail(c, "assistantNotConfigured", 503);
   if (!(await db.countAssistantQuestion(user.id, DAILY_QUESTION_LIMIT))) return fail(c, "assistantLimit", 429);
 
   const context = {

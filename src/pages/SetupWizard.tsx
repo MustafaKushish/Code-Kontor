@@ -16,6 +16,8 @@ const STEPS: { key: "step1" | "step2" | "step3"; fields: (keyof CompanyProfile)[
 
 export function SetupWizard(props: {
   firstRun: boolean;
+  /** Adressvorschläge erlaubt (Datenschutz-Schalter der Firma) */
+  addressLookup: boolean;
   onDone: () => void;
   onCancel?: () => void;
   onLogout: () => void;
@@ -50,7 +52,7 @@ export function SetupWizard(props: {
     setCompany((c) => ({ ...c, postalCode }));
     const code = postalCode.trim();
     const complete = company.country === "DE" ? /^\d{5}$/.test(code) : code.length >= 4;
-    if (!complete || (company.city && company.city !== autoCity.current)) return;
+    if (!props.addressLookup || !complete || (company.city && company.city !== autoCity.current)) return;
     const params = new URLSearchParams({ country: company.country, code });
     api<{ city: string | null }>(`/geo/postal?${params}`)
       .then(({ city }) => {
@@ -143,11 +145,12 @@ export function SetupWizard(props: {
                   ))}
                 </select>
               </Field>
-              <Field label={t("wizard.street")} error={err("street")} hint={t("wizard.streetHint")} wide>
+              <Field label={t("wizard.street")} error={err("street")} hint={props.addressLookup ? t("wizard.streetHint") : undefined} wide>
                 <AddressInput
                   value={company.street}
                   country={company.country}
                   lang={lang}
+                  enabled={props.addressLookup}
                   onChange={(street) => setCompany((c) => ({ ...c, street }))}
                   onPick={(a) =>
                     setCompany((c) => ({
