@@ -1,0 +1,294 @@
+/* ==========================================================================
+   Code Kontor – Modul „Einzelhandel“ (einzelhandel)
+   Farbton: Frisches Smaragdgrün / Jade (Hue 160)
+   Vollständig an alle Geräte angepasst (Smartphones, Tablets, Touch, Desktop)
+   ========================================================================== */
+
+.retail {
+  --hue: 160;
+  --accent: hsl(var(--hue) 85% 38%);
+  --accent-soft: hsl(var(--hue) 85% 94%);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .retail {
+    --accent: hsl(var(--hue) 80% 55%);
+    --accent-soft: hsl(var(--hue) 45% 16%);
+  }
+}
+:root[data-theme="dark"] .retail {
+  --accent: hsl(var(--hue) 80% 55%);
+  --accent-soft: hsl(var(--hue) 45% 16%);
+}
+
+/* ---------- Horizontale Wisch-Tabs ---------- */
+.retail-tabs {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  scrollbar-width: none !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  gap: 6px !important;
+  padding: 4px !important;
+}
+
+.retail-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.retail-tabs button {
+  flex: 0 0 auto !important;
+  white-space: nowrap !important;
+  padding: 9px 16px !important;
+  font-size: 0.9rem !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+/* ---------- Kennzahlen / KPI-Karten ---------- */
+.retail-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+}
+
+.retail-stat-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  display: grid;
+  gap: 5px;
+  box-shadow: var(--shadow-sm);
+  min-width: 0;
+}
+
+.retail-stat-card .label {
+  font-size: 0.84rem;
+  color: var(--muted);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.retail-stat-card .value {
+  font-family: var(--display);
+  font-size: 1.6rem;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .retail-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .retail-stat-card {
+    padding: 12px 14px;
+  }
+  .retail-stat-card .value {
+    font-size: 1.3rem;
+  }
+}
+
+@media (max-width: 440px) {
+  .retail-stats {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------- Barcode Scanner Leiste ---------- */
+.retail-scanner-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--panel);
+  border: 2px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+  border-radius: var(--radius);
+  padding: 8px 14px;
+  box-shadow: 0 2px 8px -2px color-mix(in srgb, var(--accent) 15%, transparent);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.retail-scanner-bar:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.retail-scanner-bar input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--ink);
+  outline: none;
+  padding: 4px;
+}
+
+/* ---------- Raster & Produktkarten ---------- */
+.retail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 310px), 1fr));
+  gap: 16px;
+}
+
+.retail-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px;
+  display: grid;
+  gap: 12px;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  min-width: 0;
+}
+
+.retail-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+}
+
+.retail-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.retail-ean-badge {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  font-weight: 600;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  padding: 3px 6px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ---------- Stock Indicator Pills ---------- */
+.stock-pill {
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.stock-pill.ok {
+  background: color-mix(in srgb, var(--success) 14%, var(--panel));
+  color: var(--success);
+  border: 1px solid color-mix(in srgb, var(--success) 30%, transparent);
+}
+
+.stock-pill.low {
+  background: color-mix(in srgb, var(--danger) 14%, var(--panel));
+  color: var(--danger);
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
+}
+
+/* ---------- Preisschilder & Etikettendruck ---------- */
+.labels-sheet {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+  padding: 16px;
+}
+
+.retail-price-tag {
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: var(--panel);
+  display: grid;
+  gap: 6px;
+  text-align: center;
+}
+
+.retail-price-tag .tag-brand {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  color: var(--muted);
+  letter-spacing: 0.05em;
+  font-weight: 700;
+}
+
+.retail-price-tag .tag-name {
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.retail-price-tag .tag-price {
+  font-family: var(--display);
+  font-size: 1.4rem;
+  font-weight: 850;
+  color: var(--accent);
+}
+
+.retail-price-tag .tag-barcode {
+  font-family: "Libre Barcode 39", "Courier New", monospace;
+  font-size: 1.8rem;
+  letter-spacing: 2px;
+  margin-top: 4px;
+  line-height: 1;
+}
+
+/* ---------- Modale Dialoge ---------- */
+.retail-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 11, 16, 0.65);
+  backdrop-filter: blur(5px);
+  display: grid;
+  place-items: center;
+  z-index: 1000;
+  padding: 20px 16px;
+  overflow-y: auto;
+}
+
+.retail-modal {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  width: 100%;
+  max-width: 620px;
+  max-height: min(92vh, 92dvh);
+  overflow-y: auto;
+  box-shadow: var(--shadow-lift);
+  display: grid;
+  gap: 18px;
+  padding: 24px;
+}
+
+.retail-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+@media (max-width: 640px) {
+  .retail-modal-overlay {
+    padding: 10px;
+    align-items: flex-end;
+  }
+  .retail-modal {
+    padding: 20px 16px calc(24px + env(safe-area-inset-bottom));
+    border-radius: 24px 24px 14px 14px;
+    max-height: min(92vh, 92dvh);
+    gap: 14px;
+  }
+}

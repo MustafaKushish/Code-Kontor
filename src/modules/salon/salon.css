@@ -1,0 +1,353 @@
+/* ==========================================================================
+   Code Kontor – Modul „Friseur & Kosmetik“ (friseur)
+   Farbton: Edles Roségold / Beere / Magenta (Hue 330)
+   Vollständig an alle Geräte angepasst (Smartphones, Tablets, Touch, Desktop)
+   ========================================================================== */
+
+.salon {
+  --hue: 330;
+  --accent: hsl(var(--hue) 85% 50%);
+  --accent-soft: hsl(var(--hue) 85% 94%);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .salon {
+    --accent: hsl(var(--hue) 90% 65%);
+    --accent-soft: hsl(var(--hue) 45% 18%);
+  }
+}
+:root[data-theme="dark"] .salon {
+  --accent: hsl(var(--hue) 90% 65%);
+  --accent-soft: hsl(var(--hue) 45% 18%);
+}
+
+/* ---------- Tabs: flüssiges horizontales Swipen auf Touchscreens ---------- */
+.salon-tabs {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  scrollbar-width: none !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  gap: 6px !important;
+  padding: 4px !important;
+}
+
+.salon-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.salon-tabs button {
+  flex: 0 0 auto !important;
+  white-space: nowrap !important;
+  padding: 9px 16px !important;
+  font-size: 0.9rem !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+.salon-tabs button svg {
+  display: inline-block !important;
+  flex: none;
+}
+
+/* ---------- Kennzahlen / KPI-Karten ---------- */
+.salon-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+}
+
+.salon-stat-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  display: grid;
+  gap: 6px;
+  box-shadow: var(--shadow-sm);
+  min-width: 0;
+}
+
+.salon-stat-card .label {
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.salon-stat-card .value {
+  font-family: var(--display);
+  font-size: 1.6rem;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .salon-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .salon-stat-card {
+    padding: 14px 14px;
+    gap: 4px;
+  }
+  .salon-stat-card .value {
+    font-size: 1.3rem;
+  }
+  .salon-stat-card .label {
+    font-size: 0.78rem;
+  }
+}
+
+@media (max-width: 440px) {
+  .salon-stats {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------- Karten & Grids ---------- */
+.salon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 310px), 1fr));
+  gap: 16px;
+}
+
+.salon-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 20px;
+  display: grid;
+  gap: 14px;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  min-width: 0;
+}
+
+.salon-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+}
+
+.salon-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 640px) {
+  .salon-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .salon-card {
+    padding: 16px;
+    gap: 12px;
+  }
+}
+
+/* ---------- Interaktiver Terminkalender (Timeline & Day View) ---------- */
+.salon-calendar-wrap {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  box-shadow: var(--shadow-sm);
+}
+
+.salon-calendar {
+  display: grid;
+  min-width: 720px;
+  position: relative;
+}
+
+.salon-calendar-header {
+  display: grid;
+  background: var(--panel-2);
+  border-bottom: 2px solid var(--line);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.salon-calendar-col-header {
+  padding: 12px 14px;
+  font-weight: 700;
+  font-size: 0.92rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-inline-end: 1px solid var(--line);
+}
+
+.salon-calendar-body {
+  display: grid;
+  position: relative;
+}
+
+.salon-time-col {
+  width: 64px;
+  border-inline-end: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.salon-time-slot {
+  height: 52px;
+  padding: 4px 6px;
+  border-bottom: 1px dashed var(--line);
+  box-sizing: border-box;
+}
+
+.salon-staff-col {
+  position: relative;
+  border-inline-end: 1px solid var(--line);
+}
+
+.salon-slot-cell {
+  height: 52px;
+  border-bottom: 1px dashed var(--line);
+  box-sizing: border-box;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.salon-slot-cell:hover {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.salon-appointment-block {
+  position: absolute;
+  inset-inline: 4px;
+  border-radius: 12px;
+  padding: 8px 10px;
+  overflow: hidden;
+  font-size: 0.82rem;
+  cursor: pointer;
+  box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.12);
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  z-index: 2;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.salon-appointment-block:hover {
+  transform: translateY(-1px) scale(1.01);
+  box-shadow: 0 8px 18px -3px rgba(0, 0, 0, 0.2);
+  z-index: 4;
+}
+
+/* ---------- Farbrezepturen (Color Cards) ---------- */
+.formula-card {
+  background: var(--panel-2);
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--line));
+  border-radius: 16px;
+  padding: 14px 16px;
+  display: grid;
+  gap: 8px;
+}
+
+.formula-brand {
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent);
+}
+
+.formula-text {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.95rem;
+  font-weight: 600;
+  background: var(--panel);
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  word-break: break-all;
+}
+
+/* ---------- Modale Dialoge ---------- */
+.salon-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 11, 16, 0.65);
+  backdrop-filter: blur(5px);
+  display: grid;
+  place-items: center;
+  z-index: 1000;
+  padding: 20px 16px;
+  overflow-y: auto;
+}
+
+.salon-modal {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  width: 100%;
+  max-width: 620px;
+  max-height: min(92vh, 92dvh);
+  overflow-y: auto;
+  box-shadow: var(--shadow-lift);
+  display: grid;
+  gap: 18px;
+  padding: 24px;
+}
+
+.salon-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+@media (max-width: 640px) {
+  .salon-modal-overlay {
+    padding: 10px;
+    align-items: flex-end;
+  }
+  .salon-modal {
+    padding: 20px 16px calc(24px + env(safe-area-inset-bottom));
+    border-radius: 24px 24px 14px 14px;
+    max-height: min(92vh, 92dvh);
+    gap: 14px;
+  }
+}
+
+/* ---------- Aktionen & Knöpfe ---------- */
+.salon-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+@media (max-width: 640px) {
+  .salon-head {
+    flex-direction: column;
+    align-items: flex-start !important;
+    gap: 14px;
+  }
+  .salon-actions {
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .salon-actions .button {
+    flex: 1 1 auto;
+    justify-content: center;
+    min-height: 44px;
+  }
+}

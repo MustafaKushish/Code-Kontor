@@ -838,6 +838,18 @@ export const pl: Dict = {
       description: "Stan pojazdów ze zdjęciami, zapytania, jazdy próbne, umowy sprzedaży, auta w rozliczeniu i połączenie z warsztatem.",
       features: ["Stan pojazdów", "Leady i zapytania", "Jazdy próbne", "Umowy sprzedaży", "Auta w rozliczeniu"],
     },
+    handwerk: {
+      name: "Rzemiosło i budowa",
+      tagline: "Dokumentacja budowy, obmiary, raporty i podpis klienta",
+      description: "Teczki budowy, obmiary na miejscu, raporty pracy z godzinami i materiałami, podpis cyfrowy i fakturowanie.",
+      features: ["Teczki budowy", "Obmiary", "Raporty pracy", "Podpis cyfrowy klienta", "Podział robocizna i materiał", "Fakturowanie"],
+    },
+    fitness: {
+      name: "Siłownia i Kursy",
+      tagline: "Klubowicze, grafik zajęć, check-in w recepcji i karnety",
+      description: "Zarządzanie klubowiczami i umowami, check-in skanerem kodów kreskowych, obłożenie na żywo, tygodniowy grafik zajęć i kasa.",
+      features: ["Check-in w recepcji i kody kreskowe", "Obłożenie klubu na żywo", "Kartoteka klubowiczów i umowy", "Tygodniowy grafik zajęć", "Karnety i wejściówki na 10", "Umowa członkowska i karta"],
+    },
     buero: {
       name: "Biuro i usługi",
       tagline: "Projekty, czas pracy, oferty i faktury",

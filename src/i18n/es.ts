@@ -838,6 +838,18 @@ export const es: Dict = {
       description: "Stock de vehículos con fotos, interesados, pruebas de conducción, contratos de venta, vehículos a cuenta y conexión con el taller.",
       features: ["Stock de vehículos", "Interesados y consultas", "Pruebas de conducción", "Contratos de venta", "Vehículos a cuenta"],
     },
+    handwerk: {
+      name: "Construcción y oficios",
+      tagline: "Obras, mediciones, partes de trabajo y firma del cliente",
+      description: "Gestión de obras, mediciones sobre plano, partes de trabajo con horas y materiales, firma digital y facturación.",
+      features: ["Gestión de obras", "Mediciones", "Partes de trabajo", "Firma digital del cliente", "Desglose mano de obra y material", "Facturación"],
+    },
+    fitness: {
+      name: "Gimnasio y Clases",
+      tagline: "Socios, horario de clases, check-in en mostrador y tarifas",
+      description: "Gestión de socios y contratos, check-in en mostrador con escáner, aforo en directo, horario semanal de clases y caja.",
+      features: ["Check-in en mostrador y código de barras", "Aforo en directo", "Ficha de socios y contratos", "Horario semanal de clases", "Tarifas y bonos de 10", "Contrato y carnet"],
+    },
     buero: {
       name: "Oficina y servicios",
       tagline: "Proyectos, control horario, presupuestos y facturas",

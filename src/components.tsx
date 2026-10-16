@@ -1,5 +1,5 @@
 import type { AnchorHTMLAttributes, CSSProperties, ReactNode } from "react";
-import { Briefcase, Car, Scissors, ShoppingBag, ShoppingCart, Smartphone, UtensilsCrossed, Wrench } from "lucide-react";
+import { Briefcase, Car, Dumbbell, HardHat, Scissors, ShoppingBag, ShoppingCart, Smartphone, UtensilsCrossed, Wrench } from "lucide-react";
 import type { CatalogApp } from "../shared/apps";
 import { navigate } from "./router";
 
@@ -50,6 +50,8 @@ const ICONS = {
   car: Car,
   briefcase: Briefcase,
   register: ShoppingCart,
+  "hard-hat": HardHat,
+  dumbbell: Dumbbell,
 };
 
 export function appStyle(app: CatalogApp): CSSProperties {

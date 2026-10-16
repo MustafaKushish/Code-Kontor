@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { Plus, Receipt, Printer, CheckCircle, Download, Trash2, Pencil, X, AlertTriangle, FileCode, Check } from "lucide-react";
+import { Plus, Receipt, Printer, CheckCircle, Download, Trash2, Pencil, X, AlertTriangle, FileCode, Check, Repeat, Play } from "lucide-react";
 import { api } from "../../api";
 import { Field } from "../../components";
-import type { InvoiceStatus, LineItem, OfficeClient, OfficeInvoice, OfficeProject } from "../../../shared/office";
+import type { InvoiceStatus, LineItem, OfficeClient, OfficeInvoice, OfficeProject, OfficeRecurring } from "../../../shared/office";
 import { useOfficeI18n } from "./i18n";
 import { PrintDocument } from "./PrintDocument";
+import { DunningModal } from "./DunningModal";
 
 export function InvoicesTab({
   isManager,
@@ -23,6 +24,11 @@ export function InvoicesTab({
 
   const [modalOpen, setModalOpen] = useState(false);
   const [payModalInvoice, setPayModalInvoice] = useState<OfficeInvoice | null>(null);
+  const [dunningInvoice, setDunningInvoice] = useState<OfficeInvoice | null>(null);
+  const [recurringModalOpen, setRecurringModalOpen] = useState(false);
+  const [recurringList, setRecurringList] = useState<OfficeRecurring[]>([]);
+  const [newRecurringTitle, setNewRecurringTitle] = useState("");
+  const [newRecurringMonths, setNewRecurringMonths] = useState(1);
   const [payMethod, setPayMethod] = useState("Überweisung");
   const [editingInvoice, setEditingInvoice] = useState<OfficeInvoice | null>(null);
   const [printDoc, setPrintDoc] = useState<OfficeInvoice | null>(null);
@@ -36,6 +42,9 @@ export function InvoicesTab({
     issuedAt: string;
     dueDate: string;
     buyerReference: string;
+    discountPercent: number;
+    skontoDays: number;
+    skontoPercent: number;
     notes: string;
     items: LineItem[];
   }>({
@@ -46,6 +55,9 @@ export function InvoicesTab({
     issuedAt: new Date().toISOString().slice(0, 10),
     dueDate: new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10),
     buyerReference: "",
+    discountPercent: 0,
+    skontoDays: 0,
+    skontoPercent: 0,
     notes: "Zahlbar innerhalb von 14 Tagen ohne Abzug.",
     items: [
       {
@@ -98,6 +110,9 @@ export function InvoicesTab({
         issuedAt: new Date().toISOString().slice(0, 10),
         dueDate: new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10),
         buyerReference: "",
+        discountPercent: 0,
+        skontoDays: 0,
+        skontoPercent: 0,
         notes: "Vielen Dank für Ihren Auftrag. Bitte überweisen Sie den Betrag fristgerecht.",
         items: initialData.items,
       });
@@ -107,15 +122,21 @@ export function InvoicesTab({
 
   const openNew = () => {
     setEditingInvoice(null);
+    const selectedClient = clients.find((c) => c.id === (clientFilter !== "all" ? clientFilter : clients[0]?.id));
     setForm({
-      clientId: clientFilter !== "all" ? clientFilter : (clients[0]?.id || ""),
+      clientId: selectedClient?.id || (clients[0]?.id || ""),
       projectId: "",
       status: "draft",
       title: "Rechnung für Dienstleistungen",
       issuedAt: new Date().toISOString().slice(0, 10),
-      dueDate: new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10),
+      dueDate: new Date(Date.now() + (selectedClient?.paymentTermsDays || 14) * 86_400_000).toISOString().slice(0, 10),
       buyerReference: "",
-      notes: "Zahlbar innerhalb von 14 Tagen ohne Abzug auf das angegebene Geschäftskonto.",
+      discountPercent: selectedClient?.discountPercent || 0,
+      skontoDays: selectedClient?.skontoDays || 0,
+      skontoPercent: selectedClient?.skontoPercent || 0,
+      notes: selectedClient?.skontoDays
+        ? `Zahlbar innerhalb von ${selectedClient.paymentTermsDays || 14} Tagen. Bei Zahlung innerhalb von ${selectedClient.skontoDays} Tagen gewähren wir ${selectedClient.skontoPercent}% Skonto.`
+        : "Zahlbar innerhalb von 14 Tagen ohne Abzug auf das angegebene Geschäftskonto.",
       items: [
         {
           id: crypto.randomUUID(),
@@ -143,6 +164,9 @@ export function InvoicesTab({
       issuedAt: invoice.issuedAt.slice(0, 10),
       dueDate: invoice.dueDate,
       buyerReference: invoice.buyerReference,
+      discountPercent: invoice.discountPercent || 0,
+      skontoDays: invoice.skontoDays || 0,
+      skontoPercent: invoice.skontoPercent || 0,
       notes: invoice.notes,
       items: invoice.items.length > 0 ? invoice.items : [
         {
@@ -193,14 +217,13 @@ export function InvoicesTab({
     setForm({ ...form, items: form.items.filter((_, i) => i !== index) });
   };
 
-  const totals = form.items.reduce(
-    (acc, it) => {
-      const net = Math.round(it.qty * it.unitCents);
-      const vat = Math.round(net * (it.vatRate / 100));
-      return { net: acc.net + net, vat: acc.vat + vat, gross: acc.gross + net + vat };
-    },
-    { net: 0, vat: 0, gross: 0 },
-  );
+  const itemsNet = form.items.reduce((s, it) => s + Math.round(it.qty * it.unitCents), 0);
+  const itemsVat = form.items.reduce((s, it) => s + Math.round(Math.round(it.qty * it.unitCents) * (it.vatRate / 100)), 0);
+  const discountFactor = (form.discountPercent > 0 && form.discountPercent <= 100) ? (100 - form.discountPercent) / 100 : 1;
+  const net = Math.round(itemsNet * discountFactor);
+  const vat = Math.round(itemsVat * discountFactor);
+  const gross = net + vat;
+  const totals = { net, vat, gross, itemsNet };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -209,6 +232,9 @@ export function InvoicesTab({
       const payload = {
         ...(editingInvoice ? { id: editingInvoice.id } : {}),
         ...form,
+        discountPercent: Number(form.discountPercent) || 0,
+        skontoDays: Number(form.skontoDays) || 0,
+        skontoPercent: Number(form.skontoPercent) || 0,
         projectId: form.projectId || null,
       };
       await api("/office/invoices", { method: "POST", body: payload });
@@ -229,6 +255,73 @@ export function InvoicesTab({
       });
       setPayModalInvoice(null);
       await loadData();
+    } catch (err) {
+      alert(officeError(err));
+    }
+  };
+
+  const loadRecurring = async () => {
+    try {
+      const res = await api<{ recurring: OfficeRecurring[] }>("/office/recurring");
+      setRecurringList(res.recurring);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleOpenRecurring = () => {
+    loadRecurring();
+    setRecurringModalOpen(true);
+  };
+
+  const handleTriggerRecurring = async (id: string) => {
+    try {
+      await api(`/office/recurring/${id}/trigger`, { method: "POST" });
+      await loadData();
+      await loadRecurring();
+      alert("Rechnung erfolgreich aus Dauerauftrag erzeugt!");
+    } catch (err) {
+      alert(officeError(err));
+    }
+  };
+
+  const handleDeleteRecurring = async (id: string) => {
+    if (!confirm(o("common.confirmDelete"))) return;
+    try {
+      await api(`/office/recurring/${id}`, { method: "DELETE" });
+      await loadRecurring();
+    } catch (err) {
+      alert(officeError(err));
+    }
+  };
+
+  const handleCreateRecurring = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newRecurringTitle.trim() || clients.length === 0) return;
+    try {
+      await api("/office/recurring", {
+        method: "POST",
+        body: {
+          clientId: clientFilter !== "all" ? clientFilter : clients[0].id,
+          title: newRecurringTitle.trim(),
+          intervalMonths: newRecurringMonths,
+          nextRunDay: new Date().toISOString().slice(0, 10),
+          items: [
+            {
+              id: crypto.randomUUID(),
+              title: newRecurringTitle.trim(),
+              description: "Monatlicher Retainer / Betreuungspauschale",
+              qty: 1,
+              unit: "Monat",
+              unitCents: 50000,
+              vatRate: 19,
+              totalCents: 50000,
+            },
+          ],
+        },
+      });
+      setNewRecurringTitle("");
+      await loadRecurring();
     } catch (err) {
       alert(officeError(err));
     }
@@ -307,6 +400,9 @@ export function InvoicesTab({
         )}
 
         <div className="row gap push-end">
+          <button className="button" onClick={handleOpenRecurring} title="Wiederkehrende Rechnungen & Daueraufträge verwalten">
+            <Repeat size={17} /> Daueraufträge
+          </button>
           <button className="button" onClick={handleDatevExport} title="DATEV Buchungsstapel für den Steuerberater">
             <Download size={17} /> {o("invoices.exportDatev")}
           </button>
@@ -359,7 +455,7 @@ export function InvoicesTab({
                     </span>
                   </td>
                   <td className="num">
-                    <div className="row gap" style={{ justifyContent: "flex-end" }}>
+                    <div className="row gap" style={{ justifyContent: "flex-end", flexWrap: "wrap", minWidth: "200px" }}>
                       <button
                         className="button small"
                         onClick={() => setPrintDoc(inv)}
@@ -368,13 +464,22 @@ export function InvoicesTab({
                         <Printer size={15} /> Druck / XML
                       </button>
                       {inv.status !== "paid" && inv.status !== "canceled" && (
-                        <button
-                          className="button small success"
-                          onClick={() => setPayModalInvoice(inv)}
-                          title="Als bezahlt markieren"
-                        >
-                          <CheckCircle size={15} /> Bezahlt
-                        </button>
+                        <>
+                          <button
+                            className="button small success"
+                            onClick={() => setPayModalInvoice(inv)}
+                            title="Als bezahlt markieren"
+                          >
+                            <CheckCircle size={15} /> Bezahlt
+                          </button>
+                          <button
+                            className={`button small ${inv.status === "overdue" ? "danger" : "warning"}`}
+                            onClick={() => setDunningInvoice(inv)}
+                            title="Zahlungserinnerung oder Mahnung verfassen und drucken"
+                          >
+                            <AlertTriangle size={15} /> {inv.dunningLevel > 0 ? `Mahnung (${inv.dunningLevel})` : "Mahnung"}
+                          </button>
+                        </>
                       )}
                       {isManager && (
                         <>
@@ -540,6 +645,44 @@ export function InvoicesTab({
                 />
               </Field>
 
+              <div className="row-grid" style={{ gridTemplateColumns: "1fr 1fr 1fr" }}>
+                <Field label="Rabatt (%)">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.5"
+                    className="input"
+                    value={form.discountPercent || ""}
+                    placeholder="z.B. 5"
+                    onChange={(e) => setForm({ ...form, discountPercent: parseFloat(e.target.value) || 0 })}
+                  />
+                </Field>
+                <Field label="Skonto-Frist (Tage)">
+                  <input
+                    type="number"
+                    min="0"
+                    max="60"
+                    className="input"
+                    value={form.skontoDays || ""}
+                    placeholder="z.B. 7"
+                    onChange={(e) => setForm({ ...form, skontoDays: parseInt(e.target.value, 10) || 0 })}
+                  />
+                </Field>
+                <Field label="Skonto (%)">
+                  <input
+                    type="number"
+                    min="0"
+                    max="10"
+                    step="0.5"
+                    className="input"
+                    value={form.skontoPercent || ""}
+                    placeholder="z.B. 2"
+                    onChange={(e) => setForm({ ...form, skontoPercent: parseFloat(e.target.value) || 0 })}
+                  />
+                </Field>
+              </div>
+
               {/* Line Items */}
               <div style={{ borderTop: "1px solid var(--line)", paddingTop: "14px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
@@ -631,9 +774,19 @@ export function InvoicesTab({
 
                 {/* Totals Summary */}
                 <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "12px", fontSize: "0.95rem" }}>
-                  <div style={{ width: "240px", display: "grid", gap: "4px" }}>
+                  <div style={{ width: "260px", display: "grid", gap: "4px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between" }}>
-                      <span>Netto:</span>
+                      <span>Zwischensumme:</span>
+                      <span>{euro(totals.itemsNet)}</span>
+                    </div>
+                    {form.discountPercent > 0 && (
+                      <div style={{ display: "flex", justifyContent: "space-between", color: "var(--accent)" }}>
+                        <span>Rabatt ({form.discountPercent}%):</span>
+                        <span>-{euro(totals.itemsNet - totals.net)}</span>
+                      </div>
+                    )}
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <span>Nettobetrag:</span>
                       <strong>{euro(totals.net)}</strong>
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between" }}>
@@ -666,6 +819,101 @@ export function InvoicesTab({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Dunning / Mahnwesen Modal */}
+      {dunningInvoice && (
+        <DunningModal
+          invoice={dunningInvoice}
+          onClose={() => setDunningInvoice(null)}
+          onCreated={() => {
+            setDunningInvoice(null);
+            loadData();
+          }}
+        />
+      )}
+
+      {/* Recurring Invoices Modal */}
+      {recurringModalOpen && (
+        <div className="office-modal-overlay" onClick={() => setRecurringModalOpen(false)}>
+          <div className="office-modal" style={{ maxWidth: "680px" }} onClick={(e) => e.stopPropagation()}>
+            <div className="office-modal-head">
+              <h3 style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <Repeat size={20} style={{ color: "var(--accent)" }} /> Wiederkehrende Rechnungen & Daueraufträge
+              </h3>
+              <button className="icon-button" onClick={() => setRecurringModalOpen(false)}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <p className="small muted">
+              Automatische Vorlagen für wiederkehrende Retainer, monatliche Hosting- & Wartungsverträge oder quartalsweise Servicepauschalen.
+            </p>
+
+            <form onSubmit={handleCreateRecurring} className="card stack" style={{ background: "var(--panel-2)", padding: "14px", margin: "14px 0" }}>
+              <div className="row-grid" style={{ gridTemplateColumns: "2fr 1fr auto", alignItems: "flex-end" }}>
+                <Field label="Vertragsbezeichnung">
+                  <input
+                    type="text"
+                    required
+                    className="input"
+                    placeholder="z.B. Monatliche Betreuung & Wartung"
+                    value={newRecurringTitle}
+                    onChange={(e) => setNewRecurringTitle(e.target.value)}
+                  />
+                </Field>
+                <Field label="Intervall">
+                  <select
+                    className="input"
+                    value={newRecurringMonths}
+                    onChange={(e) => setNewRecurringMonths(parseInt(e.target.value, 10) || 1)}
+                  >
+                    <option value={1}>Monatlich (1 Monat)</option>
+                    <option value={3}>Quartalsweise (3 Monate)</option>
+                    <option value={6}>Halbjährlich (6 Monate)</option>
+                    <option value={12}>Jährlich (12 Monate)</option>
+                  </select>
+                </Field>
+                <button type="submit" className="button primary">
+                  <Plus size={16} /> Vorlage anlegen
+                </button>
+              </div>
+            </form>
+
+            <div className="stack-sm">
+              {recurringList.length === 0 ? (
+                <p className="muted" style={{ textAlign: "center", padding: "20px" }}>Noch keine Daueraufträge eingerichtet.</p>
+              ) : (
+                recurringList.map((rec) => (
+                  <div key={rec.id} className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px" }}>
+                    <div>
+                      <strong>{rec.title}</strong>
+                      <div className="small muted">
+                        Kunde: {rec.clientName} · Intervall: {rec.intervalMonths === 1 ? "monatlich" : `${rec.intervalMonths} Monate`} · Nächster Lauf: {day(rec.nextRunDay)}
+                      </div>
+                    </div>
+                    <div className="row gap">
+                      <button
+                        className="button small primary"
+                        onClick={() => handleTriggerRecurring(rec.id)}
+                        title="Rechnung jetzt sofort generieren"
+                      >
+                        <Play size={14} /> Rechnung erzeugen
+                      </button>
+                      <button
+                        className="icon-button danger"
+                        onClick={() => handleDeleteRecurring(rec.id)}
+                        title={o("common.delete")}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
       )}

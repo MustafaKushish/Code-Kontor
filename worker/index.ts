@@ -32,9 +32,17 @@ import { sanitizePrivacy } from "../shared/privacy";
 import { repairRoutes, repairStatusRoutes } from "./repairs/routes";
 import { posRoutes } from "./pos/routes";
 import { officeRoutes } from "./office/routes";
+import { salonRoutes } from "./salon/routes";
+import { retailRoutes } from "./retail/routes";
+import { workshopRoutes } from "./workshop/routes";
+import { restaurantRoutes } from "./restaurant/routes";
+import { craftRoutes } from "./craft/routes";
+import { fitnessRoutes } from "./fitness/routes";
 import { sanitizeRange } from "../shared/insights";
 import { REPAIR_APP_ID } from "../shared/repairs";
 import { OFFICE_APP_ID } from "../shared/office";
+import { SALON_APP_ID } from "../shared/salon";
+import { RETAIL_APP_ID } from "../shared/retail";
 
 export { TenantDatabase };
 
@@ -230,7 +238,8 @@ const DEMO_TENANT_ID = "demo-tenant-id";
 const DEMO_USER_ID = "demo-user-id";
 
 async function ensureDemoAccount(env: Env) {
-  const existing = await env.PLATFORM_DB.prepare("SELECT id FROM users WHERE email = ?").bind(DEMO_EMAIL).first();
+  try {
+    const existing = await env.PLATFORM_DB.prepare("SELECT id FROM users WHERE email = ?").bind(DEMO_EMAIL).first();
   const now = new Date().toISOString();
   if (!existing) {
     const pwHash = await hashPassword("Password123!");
@@ -271,8 +280,20 @@ async function ensureDemoAccount(env: Env) {
   if (!apps.includes("handy-it")) await db.installApp("handy-it");
   if (!apps.includes("kasse")) await db.installApp("kasse");
   if (!apps.includes("buero")) await db.installApp("buero");
+  if (!apps.includes(SALON_APP_ID)) await db.installApp(SALON_APP_ID);
+  if (!apps.includes(RETAIL_APP_ID)) await db.installApp(RETAIL_APP_ID);
 
   try {
+    await db.salon("seedIfEmpty", []);
+  } catch (e) {
+    console.error("[salon seed]", e);
+  }
+
+  try {
+    await db.retail("seedIfEmpty", []);
+  } catch (e) {
+    console.error("[retail seed]", e);
+  }
     const listRes = (await db.repairs("list", ["all", "", 10])) as { ok: boolean; value?: { orders: unknown[] } };
     if (listRes.ok && (!listRes.value?.orders || listRes.value.orders.length === 0)) {
       await db.repairs("create", [
@@ -1639,6 +1660,12 @@ app.get("/insights", requireRole("owner", "admin"), async (c) => {
 app.route("/pos", posRoutes);
 app.route("/repairs", repairRoutes);
 app.route("/office", officeRoutes);
+app.route("/salon", salonRoutes);
+app.route("/retail", retailRoutes);
+app.route("/workshop", workshopRoutes);
+app.route("/restaurant", restaurantRoutes);
+app.route("/craft", craftRoutes);
+app.route("/fitness", fitnessRoutes);
 
 app.notFound((c) => fail(c, "notFound", 404));
 

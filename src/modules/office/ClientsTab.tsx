@@ -33,6 +33,13 @@ export function ClientsTab({
     vatId: "",
     paymentTermsDays: 14,
     hourlyRateCents: 9500,
+    sepaIban: "",
+    sepaBic: "",
+    sepaMandateRef: "",
+    sepaMandateDate: "",
+    skontoDays: 0,
+    skontoPercent: 0,
+    discountPercent: 0,
     notes: "",
   });
 
@@ -66,6 +73,13 @@ export function ClientsTab({
       vatId: "",
       paymentTermsDays: 14,
       hourlyRateCents: 9500,
+      sepaIban: "",
+      sepaBic: "",
+      sepaMandateRef: "",
+      sepaMandateDate: "",
+      skontoDays: 0,
+      skontoPercent: 0,
+      discountPercent: 0,
       notes: "",
     });
     setErrorMsg("");
@@ -86,6 +100,13 @@ export function ClientsTab({
       vatId: client.vatId,
       paymentTermsDays: client.paymentTermsDays || 14,
       hourlyRateCents: client.hourlyRateCents || 9500,
+      sepaIban: client.sepaIban || "",
+      sepaBic: client.sepaBic || "",
+      sepaMandateRef: client.sepaMandateRef || "",
+      sepaMandateDate: client.sepaMandateDate || "",
+      skontoDays: client.skontoDays || 0,
+      skontoPercent: client.skontoPercent || 0,
+      discountPercent: client.discountPercent || 0,
       notes: client.notes,
     });
     setErrorMsg("");
@@ -101,6 +122,9 @@ export function ClientsTab({
         ...form,
         paymentTermsDays: Number(form.paymentTermsDays) || 14,
         hourlyRateCents: Number(form.hourlyRateCents) || 0,
+        skontoDays: Number(form.skontoDays) || 0,
+        skontoPercent: Number(form.skontoPercent) || 0,
+        discountPercent: Number(form.discountPercent) || 0,
       };
       await api("/office/clients", { method: "POST", body: payload });
       setModalOpen(false);
@@ -205,13 +229,29 @@ export function ClientsTab({
                 )}
               </div>
 
+              {(c.sepaIban || (c.skontoDays && c.skontoDays > 0) || (c.discountPercent && c.discountPercent > 0)) && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", fontSize: "0.78rem" }}>
+                  {c.sepaIban ? <span className="pill success" title={`IBAN: ${c.sepaIban}`}>SEPA-Mandat</span> : null}
+                  {c.skontoDays && c.skontoDays > 0 ? (
+                    <span className="pill" title={`Skonto: ${c.skontoPercent}% bei ${c.skontoDays} Tagen`}>
+                      {c.skontoPercent}% Skonto ({c.skontoDays} T.)
+                    </span>
+                  ) : null}
+                  {c.discountPercent && c.discountPercent > 0 ? (
+                    <span className="pill warning" title={`Rabatt: ${c.discountPercent}%`}>
+                      {c.discountPercent}% Rabatt
+                    </span>
+                  ) : null}
+                </div>
+              )}
+
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.82rem", color: "var(--muted)", borderTop: "1px solid var(--line)", paddingTop: "10px" }}>
                 <span>Satz: <strong>{c.hourlyRateCents > 0 ? `${euro(c.hourlyRateCents)}/h` : "Standard"}</strong></span>
                 <span>Zahlungsziel: <strong>{c.paymentTermsDays || 14} Tage</strong></span>
               </div>
 
               {isManager && (
-                <div className="row gap" style={{ justifyContent: "flex-end", marginTop: "4px" }}>
+                <div className="row gap" style={{ justifyContent: "flex-end", marginTop: "4px", flexWrap: "wrap" }}>
                   {onSelectClient && (
                     <button className="button small" onClick={() => onSelectClient(c.id)} title="Projekte anzeigen">
                       Projekte <ArrowRight size={14} />
@@ -389,7 +429,93 @@ export function ClientsTab({
                 </Field>
               </div>
 
-              <Field label="Interne Notizen">
+              {/* Skonto- & Rabatt-Konditionen */}
+              <div style={{ borderTop: "1px solid var(--line)", paddingTop: "12px" }}>
+                <h4 style={{ margin: "0 0 8px", fontSize: "0.95rem" }}>Skonto- & Rabatt-Konditionen</h4>
+                <div className="row-grid" style={{ gridTemplateColumns: "1fr 1fr 1fr" }}>
+                  <Field label="Skonto-Frist (Tage)">
+                    <input
+                      type="number"
+                      min="0"
+                      max="60"
+                      className="input"
+                      placeholder="z.B. 7"
+                      value={form.skontoDays || ""}
+                      onChange={(e) => setForm({ ...form, skontoDays: parseInt(e.target.value, 10) || 0 })}
+                    />
+                  </Field>
+                  <Field label="Skonto (%)">
+                    <input
+                      type="number"
+                      min="0"
+                      max="10"
+                      step="0.5"
+                      className="input"
+                      placeholder="z.B. 2"
+                      value={form.skontoPercent || ""}
+                      onChange={(e) => setForm({ ...form, skontoPercent: parseFloat(e.target.value) || 0 })}
+                    />
+                  </Field>
+                  <Field label="Standard-Rabatt (%)">
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.5"
+                      className="input"
+                      placeholder="z.B. 5"
+                      value={form.discountPercent || ""}
+                      onChange={(e) => setForm({ ...form, discountPercent: parseFloat(e.target.value) || 0 })}
+                    />
+                  </Field>
+                </div>
+              </div>
+
+              {/* SEPA-Lastschriftmandat */}
+              <div style={{ borderTop: "1px solid var(--line)", paddingTop: "12px" }}>
+                <h4 style={{ margin: "0 0 8px", fontSize: "0.95rem" }}>SEPA-Lastschriftmandat</h4>
+                <div className="row-grid">
+                  <Field label="IBAN">
+                    <input
+                      type="text"
+                      className="input"
+                      placeholder="DE89 3704 0044 0532 0130 00"
+                      value={form.sepaIban}
+                      onChange={(e) => setForm({ ...form, sepaIban: e.target.value.toUpperCase() })}
+                    />
+                  </Field>
+                  <Field label="BIC">
+                    <input
+                      type="text"
+                      className="input"
+                      placeholder="COBADEFFXXX"
+                      value={form.sepaBic}
+                      onChange={(e) => setForm({ ...form, sepaBic: e.target.value.toUpperCase() })}
+                    />
+                  </Field>
+                </div>
+                <div className="row-grid">
+                  <Field label="Mandatsreferenz">
+                    <input
+                      type="text"
+                      className="input"
+                      placeholder="MANDAT-1001"
+                      value={form.sepaMandateRef}
+                      onChange={(e) => setForm({ ...form, sepaMandateRef: e.target.value })}
+                    />
+                  </Field>
+                  <Field label="Mandatsdatum">
+                    <input
+                      type="date"
+                      className="input"
+                      value={form.sepaMandateDate}
+                      onChange={(e) => setForm({ ...form, sepaMandateDate: e.target.value })}
+                    />
+                  </Field>
+                </div>
+              </div>
+
+              <Field label="Kundenhistorie & Interne Notizen">
                 <textarea
                   className="input"
                   rows={2}

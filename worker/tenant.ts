@@ -7,6 +7,12 @@ import { localDay, type Absence, type RequestStatus, type TimeEntry, type TimeRe
 import { REPAIR_MIGRATIONS, RepairError, RepairStore } from "./repairs/store";
 import { POS_MIGRATIONS, POS_MODULE_MIGRATIONS, PosError, PosStore } from "./pos/store";
 import { OFFICE_MIGRATIONS, OfficeError, OfficeStore } from "./office/store";
+import { SALON_MIGRATIONS, SalonError, SalonStore } from "./salon/store";
+import { RETAIL_MIGRATIONS, RetailError, RetailStore } from "./retail/store";
+import { WORKSHOP_MIGRATIONS, WorkshopError, WorkshopStore } from "./workshop/store";
+import { RESTAURANT_MIGRATIONS, RestaurantError, RestaurantStore } from "./restaurant/store";
+import { CRAFT_MIGRATIONS, CraftError, CraftStore } from "./craft/store";
+import { FITNESS_MIGRATIONS, FitnessError, FitnessStore } from "./fitness/store";
 import { bucketOf, comparisonRange, workTime, type Insights, type Range } from "../shared/insights";
 
 // Die eigene Datenbank eines Kunden. Jede Firma bekommt bei der Anmeldung
@@ -52,6 +58,12 @@ const MODULE_MIGRATIONS: Record<string, (string | ((sql: SqlStorage) => void))[]
   repairs: REPAIR_MIGRATIONS,
   pos: POS_MODULE_MIGRATIONS,
   buero: OFFICE_MIGRATIONS,
+  friseur: SALON_MIGRATIONS,
+  einzelhandel: RETAIL_MIGRATIONS,
+  werkstatt: WORKSHOP_MIGRATIONS,
+  restaurant: RESTAURANT_MIGRATIONS,
+  handwerk: CRAFT_MIGRATIONS,
+  fitness: FITNESS_MIGRATIONS,
 };
 
 /** Antwort eines Modul-Aufrufs: Fehler kommen als Code zurück, weil eigene Fehlerklassen den Weg aus dem Durable Object nicht überstehen. */
@@ -115,7 +127,7 @@ export class TenantDatabase extends DurableObject<Record<string, never>> {
     }
   }
 
-  private storesCache?: { pos: PosStore; repairs: RepairStore; office: OfficeStore };
+  private storesCache?: { pos: PosStore; repairs: RepairStore; office: OfficeStore; salon: SalonStore; retail: RetailStore; workshop: WorkshopStore; restaurant: RestaurantStore; craft: CraftStore; fitness: FitnessStore };
   private txDepth = 0;
 
   /** Kasse und Module teilen sich eine Datenbank; verschachtelte Transaktionen laufen in der äußeren mit. */
@@ -133,10 +145,16 @@ export class TenantDatabase extends DurableObject<Record<string, never>> {
       const pos = new PosStore(this.sql, transaction);
       const repairs = new RepairStore(this.sql, transaction, pos);
       const office = new OfficeStore(this.sql, transaction);
+      const salon = new SalonStore(this.sql, transaction);
+      const retail = new RetailStore(this.sql, transaction);
+      const workshop = new WorkshopStore(this.sql, transaction);
+      const restaurant = new RestaurantStore(this.sql, transaction);
+      const craft = new CraftStore(this.sql);
+      const fitness = new FitnessStore(this.sql);
       pos.register("repairs", repairs.posModule());
-      this.storesCache = { pos, repairs, office };
+      this.storesCache = { pos, repairs, office, salon, retail, workshop, restaurant, craft, fitness };
     }
-    return this.storesCache;
+    return this.storesCache!;
   }
 
   private call(target: object, action: string, args: unknown[], prefix: { pos: string; repairs: string }): ModuleResult<unknown> {
@@ -148,6 +166,12 @@ export class TenantDatabase extends DurableObject<Record<string, never>> {
       if (error instanceof RepairError) return { ok: false, code: prefix.repairs + error.code };
       if (error instanceof PosError) return { ok: false, code: prefix.pos + error.code };
       if (error instanceof OfficeError) return { ok: false, code: error.code };
+      if (error instanceof SalonError) return { ok: false, code: error.code };
+      if (error instanceof RetailError) return { ok: false, code: error.code };
+      if (error instanceof WorkshopError) return { ok: false, code: error.code };
+      if (error instanceof RestaurantError) return { ok: false, code: error.code };
+      if (error instanceof CraftError) return { ok: false, code: error.code };
+      if (error instanceof FitnessError) return { ok: false, code: error.code };
       throw error;
     }
   }
@@ -162,6 +186,30 @@ export class TenantDatabase extends DurableObject<Record<string, never>> {
 
   async office(action: string, args: unknown[]): Promise<ModuleResult<unknown>> {
     return this.call(this.stores().office, action, args, { repairs: "repairs.", pos: "pos." });
+  }
+
+  async salon(action: string, args: unknown[]): Promise<ModuleResult<unknown>> {
+    return this.call(this.stores().salon, action, args, { repairs: "repairs.", pos: "pos." });
+  }
+
+  async retail(action: string, args: unknown[]): Promise<ModuleResult<unknown>> {
+    return this.call(this.stores().retail, action, args, { repairs: "repairs.", pos: "pos." });
+  }
+
+  async workshop(action: string, args: unknown[]): Promise<ModuleResult<unknown>> {
+    return this.call(this.stores().workshop, action, args, { repairs: "repairs.", pos: "pos." });
+  }
+
+  async restaurant(action: string, args: unknown[]): Promise<ModuleResult<unknown>> {
+    return this.call(this.stores().restaurant, action, args, { repairs: "repairs.", pos: "pos." });
+  }
+
+  async craft(action: string, args: unknown[]): Promise<ModuleResult<unknown>> {
+    return this.call(this.stores().craft, action, args, { repairs: "repairs.", pos: "pos." });
+  }
+
+  async fitness(action: string, args: unknown[]): Promise<ModuleResult<unknown>> {
+    return this.call(this.stores().fitness, action, args, { repairs: "repairs.", pos: "pos." });
   }
 
   async getCompany(): Promise<CompanyProfile | null> {

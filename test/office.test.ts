@@ -24,7 +24,7 @@ describe("Büro & Dienstleister: Rechnen", () => {
 
   it("formatiert Minuten in Stunden und Minuten", () => {
     expect(formatMinutes(45)).toBe("45 Min");
-    expect(formatMinutes(60)).toBe("1 Std 0 Min");
+    expect(formatMinutes(60)).toBe("1 Std");
     expect(formatMinutes(90)).toBe("1 Std 30 Min");
     expect(formatMinutes(150)).toBe("2 Std 30 Min");
   });
@@ -157,5 +157,116 @@ describe("Büro & Dienstleister: Store Integration", () => {
     expect(datev).toContain("1190,00");
     expect(datev).toContain("8400");
     expect(datev).toContain(invoice.number);
+  });
+
+  it("verwaltet Aufgaben & Meilensteine in Projekten", () => {
+    const store = createMemoryStore();
+    const client = store.saveClient({ name: "Tech Ventures AG" });
+    const project = store.saveProject({ clientId: client.id, name: "ERP Migration" });
+
+    const task1 = store.saveTask({
+      projectId: project.id,
+      title: "Datenbank-Schema entwerfen",
+      estimatedMinutes: 240, // 4 Std
+      assigneeName: "Dev Lead",
+    });
+    const task2 = store.saveTask({
+      projectId: project.id,
+      title: "Import-Skripte testen",
+      estimatedMinutes: 180, // 3 Std
+    });
+
+    const tasks = store.listTasks(project.id);
+    expect(tasks.length).toBe(2);
+    expect(tasks[0].completed).toBe(false);
+
+    // Toggle Task 1
+    const toggled = store.toggleTask(task1.id);
+    expect(toggled.completed).toBe(true);
+    expect(toggled.completedAt).toBeDefined();
+
+    // Project tasksCount
+    const p = store.getProject(project.id)!;
+    expect(p.tasksCount).toBe(2);
+    expect(p.tasksCompleted).toBe(1);
+  });
+
+  it("erfasst Auslagen und berechnet Spesen weiter", () => {
+    const store = createMemoryStore();
+    const client = store.saveClient({ name: "Agentur Kunde" });
+    const project = store.saveProject({ clientId: client.id, name: "Messeauftritt" });
+
+    const expense = store.saveExpense({
+      projectId: project.id,
+      title: "Bahnfahrt München - Hamburg",
+      category: "travel",
+      netCents: 15000, // 150,00 €
+      vatRate: 19,
+      markupPercent: 10, // 10% Weiterberechnungs-Aufschlag
+      billable: true,
+    });
+
+    expect(expense.vatCents).toBe(2850);
+    expect(expense.totalCents).toBe(17850);
+
+    const list = store.listExpenses(project.id);
+    expect(list.length).toBe(1);
+    expect(list[0].category).toBe("travel");
+  });
+
+  it("führt das Mahnwesen mit Mahnstufen und Gebühren durch", () => {
+    const store = createMemoryStore();
+    const client = store.saveClient({ name: "Säumiger Kunde", street: "Allee 5", city: "Köln" });
+    const invoice = store.saveInvoice({
+      clientId: client.id,
+      title: "Beratungsrechnung",
+      status: "sent",
+      dueDate: "2026-01-01",
+      items: [
+        { id: "1", title: "Audit", description: "", qty: 1, unit: "Pauschal", unitCents: 200000, vatRate: 19, totalCents: 200000 },
+      ],
+    });
+
+    // Mahnstufe 1 (Zahlungserinnerung, keine Gebühr)
+    const dunning1 = store.createDunning(invoice.id, 1, "Freundliche Erinnerung");
+    expect(dunning1.level).toBe(1);
+    expect(dunning1.feeCents).toBe(0);
+
+    let inv = store.getInvoice(invoice.id)!;
+    expect(inv.dunningLevel).toBe(1);
+
+    // Mahnstufe 2 (1. Mahnung mit 5,00 € Gebühr + Verzugszins)
+    const dunning2 = store.createDunning(invoice.id, 2, "1. Mahnung");
+    expect(dunning2.level).toBe(2);
+    expect(dunning2.feeCents).toBe(500); // 5 €
+    expect(dunning2.interestCents).toBeGreaterThan(0);
+
+    inv = store.getInvoice(invoice.id)!;
+    expect(inv.dunningLevel).toBe(2);
+    expect(inv.status).toBe("overdue");
+  });
+
+  it("verwaltet Daueraufträge und generiert periodische Rechnungen", () => {
+    const store = createMemoryStore();
+    const client = store.saveClient({ name: "Abo Kunde GmbH" });
+
+    const recurring = store.saveRecurring({
+      clientId: client.id,
+      title: "Monatlicher Support & Cloud-Wartung",
+      intervalMonths: 1,
+      nextRunDay: "2026-11-01",
+      items: [
+        { id: "1", title: "Supportvertrag", description: "24/7 Monitoring", qty: 1, unit: "Monat", unitCents: 85000, vatRate: 19, totalCents: 85000 },
+      ],
+    });
+
+    expect(recurring.title).toBe("Monatlicher Support & Cloud-Wartung");
+    expect(recurring.active).toBe(true);
+
+    // Trigger erzeugt neue Ausgangsrechnung
+    const generatedInvoice = store.triggerRecurring(recurring.id);
+    expect(generatedInvoice.number).toMatch(/^RE-\d{4}-\d{3}$/);
+    expect(generatedInvoice.title).toContain("Support & Cloud-Wartung");
+    expect(generatedInvoice.totalCents).toBe(101150); // 850 € + 19% = 1011,50 €
   });
 });

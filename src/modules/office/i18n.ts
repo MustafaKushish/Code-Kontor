@@ -4,13 +4,14 @@ import { useI18n } from "../../i18n";
 
 export const officeDictDe = {
   title: "Büro & Dienstleister",
-  tagline: "Projekte, Zeiterfassung, Angebote und E-Rechnungen",
+  tagline: "Projekte, Zeiterfassung, Auslagen, Angebote, Rechnungen & Mahnwesen",
   tabs: {
     projects: "Projekte",
-    time: "Zeiterfassung",
+    time: "Zeiten & Timer",
+    expenses: "Auslagen & Spesen",
     quotes: "Angebote",
-    invoices: "Rechnungen",
-    clients: "Kunden",
+    invoices: "Rechnungen & Mahnungen",
+    clients: "Kundenkartei",
     settings: "Einstellungen",
   },
   projects: {
@@ -21,6 +22,8 @@ export const officeDictDe = {
     budgetSpent: "Verbraucht",
     hourlyRate: "Stundensatz",
     loggedHours: "Erfasste Stunden",
+    tasksCount: "Aufgaben",
+    milestones: "Meilensteine & Aufgaben",
     status: {
       planned: "Geplant",
       active: "Aktiv",
@@ -39,6 +42,16 @@ export const officeDictDe = {
       description: "Beschreibung",
     },
   },
+  tasks: {
+    title: "Aufgaben & Meilensteine",
+    newTask: "Aufgabe hinzufügen",
+    noTasks: "Keine Aufgaben für dieses Projekt vorhanden.",
+    estimatedHours: "Geschätzte Stunden",
+    completed: "Erledigt",
+    open: "Offen",
+    assignee: "Verantwortlich",
+    dueDate: "Fällig am",
+  },
   time: {
     title: "Projekt-Zeiterfassung",
     logTime: "Zeit erfassen",
@@ -51,6 +64,9 @@ export const officeDictDe = {
     noEntries: "Keine Zeiten erfasst.",
     timerStart: "Timer starten",
     timerStop: "Timer stoppen",
+    timesheet: "Leistungsnachweis drucken",
+    role: "Tätigkeit / Rolle",
+    task: "Zugehörige Aufgabe",
     fields: {
       project: "Projekt auswählen",
       date: "Datum",
@@ -59,12 +75,27 @@ export const officeDictDe = {
       description: "Tätigkeitsbeschreibung",
     },
   },
+  expenses: {
+    title: "Auslagen & Reisekosten",
+    newExpense: "Auslage erfassen",
+    noExpenses: "Keine Auslagen vorhanden.",
+    markup: "Aufschlag (%)",
+    billableNotice: "An Kunden weiterberechnen",
+    categories: {
+      travel: "Reisekosten & Fahrt",
+      subcontractor: "Fremdleistung / Subunternehmer",
+      software: "Software & Lizenzen",
+      material: "Material & Muster",
+      other: "Sonstige Auslagen",
+    },
+  },
   quotes: {
     title: "Angebote",
     newQuote: "Angebot erstellen",
     noQuotes: "Keine Angebote vorhanden.",
     validUntil: "Gültig bis",
     convertToInvoice: "In Rechnung umwandeln",
+    discount: "Rabatt (%)",
     status: {
       draft: "Entwurf",
       sent: "Versendet",
@@ -83,6 +114,13 @@ export const officeDictDe = {
     exportDatev: "DATEV-Export (CSV)",
     eInvoiceNotice: "E-Rechnung (ZUGFeRD / XRechnung kompatibel)",
     buyerReference: "Leitweg-ID / Käuferreferenz",
+    skontoNotice: "{percent}% Skonto bei Zahlung innerhalb von {days} Tagen",
+    dunning: "Mahnstufe",
+    dunningLevel0: "Keine Mahnung",
+    dunningLevel1: "Zahlungserinnerung",
+    dunningLevel2: "1. Mahnung",
+    dunningLevel3: "2. Mahnung (Letzte)",
+    createDunning: "Mahnung erstellen",
     status: {
       draft: "Entwurf",
       sent: "Offen",
@@ -99,6 +137,13 @@ export const officeDictDe = {
     paymentTerms: "Zahlungsziel (Tage)",
     vatId: "USt-IdNr.",
     openInvoices: "Offene Rechnungen",
+    sepaTitle: "SEPA-Lastschriftmandat",
+    sepaIban: "SEPA IBAN",
+    sepaBic: "SEPA BIC",
+    sepaMandateRef: "Mandatsreferenz",
+    sepaMandateDate: "Mandatsdatum",
+    skontoDays: "Skontofrist (Tage)",
+    skontoPercent: "Skontosatz (%)",
   },
   settings: {
     title: "Büro-Einstellungen",
@@ -107,7 +152,11 @@ export const officeDictDe = {
     quotePrefix: "Angebots-Präfix",
     invoicePrefix: "Rechnungs-Präfix",
     buyerReferenceDefault: "Standard Leitweg-ID / Käuferreferenz",
-    eInvoiceEnabled: "E-Rechnungs-Standard aktivieren",
+    eInvoiceEnabled: "E-Rechnungs-Standard (EN 16931) aktivieren",
+    dunningFees: "Mahngebühren",
+    feeLevel2: "Gebühr 1. Mahnung (€)",
+    feeLevel3: "Gebühr 2. Mahnung (€)",
+    roleRates: "Stundensätze nach Rolle / Qualifikation",
     saved: "Einstellungen erfolgreich gespeichert.",
   },
   common: {
@@ -132,6 +181,7 @@ export const officeDictDe = {
     yes: "Ja",
     no: "Nein",
     confirmDelete: "Wirklich löschen?",
+    close: "Schließen",
   },
   errors: {
     clientRequired: "Bitte wählen Sie einen Kunden aus.",
@@ -139,6 +189,8 @@ export const officeDictDe = {
     clientHasProjects: "Dieser Kunde hat noch verknüpfte Projekte und kann nicht gelöscht werden.",
     projectNameRequired: "Der Projektname darf nicht leer sein.",
     projectRequired: "Bitte wählen Sie ein Projekt aus.",
+    taskTitleRequired: "Bitte geben Sie einen Aufgabentitel ein.",
+    expenseTitleRequired: "Bitte geben Sie einen Titel für die Auslage ein.",
     durationInvalid: "Bitte geben Sie eine gültige Dauer an.",
     quoteNotFound: "Angebot nicht gefunden.",
     invoiceNotFound: "Rechnung nicht gefunden.",
@@ -158,6 +210,9 @@ export const officeDictDe = {
     copied: "Kopiert!",
     datevSuccess: "DATEV-Export heruntergeladen.",
     paidWith: "Bezahlt am {date} per {method}",
+    timesheetTitle: "Leistungsnachweis",
+    dunningTitle: "Zahlungserinnerung / Mahnung",
+    dunningNotice: "Trotz Fälligkeit konnten wir für die nachfolgende Rechnung bisher keinen Zahlungseingang feststellen:",
   },
 };
 
@@ -201,4 +256,3 @@ export function useOfficeI18n() {
 
   return { ...core, o, euro, day, officeError };
 }
-

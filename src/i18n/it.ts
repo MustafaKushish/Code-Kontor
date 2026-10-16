@@ -838,6 +838,18 @@ export const it: Dict = {
       description: "Parco veicoli con foto, interessati, prove su strada, contratti di vendita, permute e collegamento all'officina.",
       features: ["Parco veicoli", "Interessati e richieste", "Prove su strada", "Contratti di vendita", "Permute"],
     },
+    handwerk: {
+      name: "Artigianato & Cantiere",
+      tagline: "Fascicolo cantiere, misurazioni, rapporti e firma cliente",
+      description: "Fascicoli di cantiere, misurazioni sul posto, rapporti di lavoro con ore e materiali, firma digitale e fatturazione.",
+      features: ["Fascicoli di cantiere", "Misurazioni", "Rapporti di lavoro", "Firma digitale del cliente", "Ripartizione manodopera e materiali", "Fatturazione"],
+    },
+    fitness: {
+      name: "Palestra e Corsi",
+      tagline: "Iscritti, planning corsi, check-in al banco e abbonamenti",
+      description: "Gestione iscritti e contratti, check-in al banco con codice a barre, capienza in tempo reale, orario corsi settimanale e cassa.",
+      features: ["Check-in al banco con codice a barre", "Capienza studio live", "Anagrafica iscritti e contratti", "Planning corsi settimanale", "Tariffe e ingressi a 10", "Contratto e tesserino"],
+    },
     buero: {
       name: "Ufficio & servizi",
       tagline: "Progetti, rilevazione ore, preventivi e fatture",

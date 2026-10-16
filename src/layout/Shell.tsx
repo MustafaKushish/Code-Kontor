@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Calculator, ChartColumn, Clock, ShoppingCart, Laptop, LayoutDashboard, LogOut, Moon, Search, Settings, ShieldCheck, Store, Sun, Users } from "lucide-react";
+import { Calculator, ChartColumn, Clock, ShoppingCart, Laptop, LayoutDashboard, LogOut, Moon, Search, Settings, ShieldCheck, Store, Sun, Users, Menu, X, FolderKanban } from "lucide-react";
 import type { Me } from "../api";
 import { AppIcon, Avatar, Link, Logo } from "../components";
 import { useTheme, type ThemeChoice } from "../theme";
@@ -50,6 +50,7 @@ export function ThemeSwitch() {
 
 export function Shell({ me, path, onLogout, children }: { me: Me; path: string; onLogout: () => void; children: ReactNode }) {
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { t, lang, appText } = useI18n();
   const isManager = me.user.role !== "staff";
   // Die Kasse steht oben im Menü, sobald das Kassenmodul gebucht ist
@@ -60,15 +61,22 @@ export function Shell({ me, path, onLogout, children }: { me: Me; path: string; 
   const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 
   useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [path]);
+
+  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setPaletteOpen((o) => !o);
       }
+      if (e.key === "Escape" && mobileMenuOpen) {
+        setMobileMenuOpen(false);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [mobileMenuOpen]);
 
   return (
     <div className="shell">
@@ -117,7 +125,17 @@ export function Shell({ me, path, onLogout, children }: { me: Me; path: string; 
       </aside>
 
       <header className="mobile-bar">
-        <Logo />
+        <div className="row gap">
+          <button
+            className="icon-button mobile-menu-btn"
+            onClick={() => setMobileMenuOpen(true)}
+            aria-label={t("nav.menu") || "Menü"}
+            title={t("nav.menu") || "Menü"}
+          >
+            <Menu size={22} />
+          </button>
+          <Logo />
+        </div>
         <div className="row">
           <button className="icon-button" onClick={() => setPaletteOpen(true)} aria-label={t("common.search")}>
             <Search size={20} />
@@ -129,6 +147,80 @@ export function Shell({ me, path, onLogout, children }: { me: Me; path: string; 
         </div>
       </header>
 
+      {/* Mobile Drawer (Touch-Optimized Menu for Phones & Tablets) */}
+      {mobileMenuOpen && (
+        <div className="mobile-drawer-backdrop" onClick={() => setMobileMenuOpen(false)}>
+          <aside className="mobile-drawer" onClick={(e) => e.stopPropagation()}>
+            <div className="mobile-drawer-head">
+              <div className="sidebar-user" style={{ background: "transparent", padding: 0 }}>
+                <Avatar name={me.user.name} />
+                <div>
+                  <strong>{me.user.name}</strong>
+                  <small>{t(`roles.${me.user.role}`)} · {me.user.tenantName}</small>
+                </div>
+              </div>
+              <button
+                className="icon-button"
+                onClick={() => setMobileMenuOpen(false)}
+                aria-label={t("common.close") || "Schließen"}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {apps.length > 0 && (
+              <div className="nav-group" style={{ marginTop: "16px" }}>
+                <p className="nav-title">{t("nav.yourSystems")}</p>
+                <div className="mobile-app-cards">
+                  {apps.map((app) => (
+                    <Link
+                      key={app.id}
+                      to={`/app/${app.id}`}
+                      className={path.startsWith(`/app/${app.id}`) ? "mobile-app-card active" : "mobile-app-card"}
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      <AppIcon app={app} size="md" />
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <strong>{appText(app.id).name}</strong>
+                        <small>{appText(app.id).tagline}</small>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="nav-group" style={{ marginTop: "18px" }}>
+              <p className="nav-title">{t("nav.menu") || "Navigation"}</p>
+              <nav className="nav">
+                {items.map(({ to, label, icon: Icon }) => (
+                  <Link
+                    key={to}
+                    to={to}
+                    className={active(to) ? "nav-item active" : "nav-item"}
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <Icon size={19} /> {t(label)}
+                    {to === "/zeiten" && !!me.timeRequests && <span className="count-badge">{me.timeRequests}</span>}
+                  </Link>
+                ))}
+              </nav>
+            </div>
+
+            <div className="mobile-drawer-foot" style={{ marginTop: "auto", paddingTop: "20px" }}>
+              <LegalLinks />
+              <div className="row foot-switches" style={{ marginTop: "14px", marginBottom: "14px", justifyContent: "space-between" }}>
+                <ThemeSwitch />
+                <LanguageSwitch compact up />
+              </div>
+              <button className="button danger block" onClick={onLogout}>
+                <LogOut size={18} /> {t("common.logout")}
+              </button>
+            </div>
+          </aside>
+        </div>
+      )}
+
       <main className="content" key={path}>
         <BillingBanner me={me} />
         <VerifyBanner me={me} />
@@ -137,14 +229,37 @@ export function Shell({ me, path, onLogout, children }: { me: Me; path: string; 
       </main>
 
       <nav className="tabbar" aria-label={t("nav.menu")}>
-        {/* Auf dem Handy nur die wichtigsten Punkte; Katalog und Firma gibt es über Start und die Suche */}
-        {items.filter((item) => !item.notInTabbar).map(({ to, short, icon: Icon }) => (
+        {/* Auf dem Smartphone/Tablet die Kernpunkte + Schnellzugriff auf Systeme */}
+        {items.filter((item) => !item.notInTabbar).slice(0, 4).map(({ to, short, icon: Icon }) => (
           <Link key={to} to={to} className={active(to) ? "tab active" : "tab"}>
             <Icon size={21} />
             {to === "/zeiten" && !!me.timeRequests && <span className="count-badge tab-badge">{me.timeRequests}</span>}
             <span>{t(short)}</span>
           </Link>
         ))}
+        {apps.length === 1 ? (
+          <Link
+            to={`/app/${apps[0].id}`}
+            className={path.startsWith(`/app/${apps[0].id}`) ? "tab active" : "tab"}
+          >
+            <AppIcon app={apps[0]} size="sm" />
+            <span>{appText(apps[0].id).name.split(" ")[0]}</span>
+          </Link>
+        ) : apps.length > 1 ? (
+          <button
+            className={`tab ${path.startsWith("/app/") ? "active" : ""}`}
+            onClick={() => setMobileMenuOpen(true)}
+            aria-label="Systeme"
+          >
+            <FolderKanban size={21} />
+            <span>Systeme</span>
+          </button>
+        ) : (
+          <Link to="/katalog" className={active("/katalog") ? "tab active" : "tab"}>
+            <Store size={21} />
+            <span>{t("nav.catalogShort")}</span>
+          </Link>
+        )}
       </nav>
 
       <CommandPalette me={me} open={paletteOpen} onClose={() => setPaletteOpen(false)} />

@@ -310,7 +310,7 @@ export function QuotesTab({ isManager }: { isManager: boolean }) {
                     </span>
                   </td>
                   <td className="num">
-                    <div className="row gap" style={{ justifyContent: "flex-end" }}>
+                    <div className="row gap" style={{ justifyContent: "flex-end", flexWrap: "wrap", minWidth: "160px" }}>
                       <button
                         className="button small"
                         onClick={() => setPrintDoc(q)}

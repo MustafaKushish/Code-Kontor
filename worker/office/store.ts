@@ -1,7 +1,8 @@
 import {
   DEFAULT_OFFICE_SETTINGS, computeDocumentTotals, type LineItem, type OfficeClient,
   type OfficeInvoice, type OfficeProject, type OfficeQuote, type OfficeSettings, type OfficeTimeEntry,
-  type ProjectStatus, type QuoteStatus, type InvoiceStatus,
+  type ProjectStatus, type QuoteStatus, type InvoiceStatus, type OfficeTask, type OfficeExpense,
+  type OfficeDunning, type OfficeRecurring, type ExpenseCategory,
 } from "../../shared/office";
 
 export class OfficeError extends Error {
@@ -67,9 +68,61 @@ export const OFFICE_MIGRATIONS: string[] = [
    );
    CREATE INDEX office_invoices_client ON office_invoices(client_id);
    CREATE INDEX office_invoices_status ON office_invoices(status);`,
+
+  // Migration 2: Aufgaben/Meilensteine, Auslagen, Mahnwesen, Wiederkehrende Rechnungen, SEPA/Skonto
+  `CREATE TABLE office_tasks (
+     id TEXT PRIMARY KEY, project_id TEXT NOT NULL, title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
+     estimated_minutes INTEGER NOT NULL DEFAULT 0, completed INTEGER NOT NULL DEFAULT 0, completed_at TEXT,
+     due_date TEXT NOT NULL DEFAULT '', assignee_name TEXT NOT NULL DEFAULT '',
+     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+   );
+   CREATE INDEX office_tasks_project ON office_tasks(project_id);
+
+   CREATE TABLE office_expenses (
+     id TEXT PRIMARY KEY, project_id TEXT NOT NULL, client_id TEXT NOT NULL, title TEXT NOT NULL, category TEXT NOT NULL,
+     day TEXT NOT NULL, net_cents INTEGER NOT NULL, vat_rate INTEGER NOT NULL, vat_cents INTEGER NOT NULL,
+     total_cents INTEGER NOT NULL, billable INTEGER NOT NULL DEFAULT 1, markup_percent INTEGER NOT NULL DEFAULT 0,
+     billed_invoice_id TEXT, notes TEXT NOT NULL DEFAULT '',
+     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+   );
+   CREATE INDEX office_expenses_project ON office_expenses(project_id);
+   CREATE INDEX office_expenses_day ON office_expenses(day);
+
+   CREATE TABLE office_dunning (
+     id TEXT PRIMARY KEY, invoice_id TEXT NOT NULL, invoice_number TEXT NOT NULL, level INTEGER NOT NULL,
+     issued_at TEXT NOT NULL, due_date TEXT NOT NULL, fee_cents INTEGER NOT NULL, interest_cents INTEGER NOT NULL,
+     total_amount_cents INTEGER NOT NULL, notes TEXT NOT NULL DEFAULT '',
+     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+   );
+   CREATE INDEX office_dunning_invoice ON office_dunning(invoice_id);
+
+   CREATE TABLE office_recurring (
+     id TEXT PRIMARY KEY, client_id TEXT NOT NULL, project_id TEXT, title TEXT NOT NULL, items TEXT NOT NULL,
+     interval_months INTEGER NOT NULL DEFAULT 1, next_run_day TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1,
+     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+   );
+
+   ALTER TABLE office_clients ADD COLUMN sepa_iban TEXT NOT NULL DEFAULT '';
+   ALTER TABLE office_clients ADD COLUMN sepa_bic TEXT NOT NULL DEFAULT '';
+   ALTER TABLE office_clients ADD COLUMN sepa_mandate_ref TEXT NOT NULL DEFAULT '';
+   ALTER TABLE office_clients ADD COLUMN sepa_mandate_date TEXT NOT NULL DEFAULT '';
+   ALTER TABLE office_clients ADD COLUMN skonto_days INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE office_clients ADD COLUMN skonto_percent REAL NOT NULL DEFAULT 0;
+   ALTER TABLE office_clients ADD COLUMN discount_percent REAL NOT NULL DEFAULT 0;
+
+   ALTER TABLE office_times ADD COLUMN task_id TEXT;
+   ALTER TABLE office_times ADD COLUMN role_name TEXT NOT NULL DEFAULT '';
+
+   ALTER TABLE office_invoices ADD COLUMN discount_percent REAL NOT NULL DEFAULT 0;
+   ALTER TABLE office_invoices ADD COLUMN skonto_days INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE office_invoices ADD COLUMN skonto_percent REAL NOT NULL DEFAULT 0;
+   ALTER TABLE office_invoices ADD COLUMN dunning_level INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE office_invoices ADD COLUMN last_dunning_at TEXT;
+
+   ALTER TABLE office_quotes ADD COLUMN discount_percent REAL NOT NULL DEFAULT 0;`,
 ];
 
-type Row = Record<string, unknown>;
+type Row = Record<string, string | number | null>;
 
 export class OfficeStore {
   constructor(private sql: SqlStorage, private transaction: <T>(fn: () => T) => T) {}
@@ -126,21 +179,29 @@ export class OfficeStore {
       if (isNew) {
         const nextNum = (this.sql.exec<{ n: number | null }>("SELECT MAX(number) AS n FROM office_clients").one().n ?? 10000) + 1;
         this.sql.exec(
-          `INSERT INTO office_clients (id, number, name, contact_person, email, phone, street, postal_code, city, country, vat_id, payment_terms_days, hourly_rate_cents, notes, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO office_clients (id, number, name, contact_person, email, phone, street, postal_code, city, country, vat_id, payment_terms_days, hourly_rate_cents, notes, sepa_iban, sepa_bic, sepa_mandate_ref, sepa_mandate_date, skonto_days, skonto_percent, discount_percent, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           id, nextNum, name, (input.contactPerson ?? "").trim(), (input.email ?? "").trim(),
           (input.phone ?? "").trim(), (input.street ?? "").trim(), (input.postalCode ?? "").trim(),
           (input.city ?? "").trim(), (input.country ?? "DE").trim().toUpperCase(), (input.vatId ?? "").trim(),
-          Number(input.paymentTermsDays) || 14, Number(input.hourlyRateCents) || 0, (input.notes ?? "").trim(), now, now,
+          Number(input.paymentTermsDays) || 14, Number(input.hourlyRateCents) || 0, (input.notes ?? "").trim(),
+          (input.sepaIban ?? "").trim().toUpperCase(), (input.sepaBic ?? "").trim().toUpperCase(),
+          (input.sepaMandateRef ?? "").trim(), (input.sepaMandateDate ?? "").trim(),
+          Number(input.skontoDays) || 0, Number(input.skontoPercent) || 0, Number(input.discountPercent) || 0,
+          now, now,
         );
       } else {
         this.sql.exec(
-          `UPDATE office_clients SET name = ?, contact_person = ?, email = ?, phone = ?, street = ?, postal_code = ?, city = ?, country = ?, vat_id = ?, payment_terms_days = ?, hourly_rate_cents = ?, notes = ?, updated_at = ?
+          `UPDATE office_clients SET name = ?, contact_person = ?, email = ?, phone = ?, street = ?, postal_code = ?, city = ?, country = ?, vat_id = ?, payment_terms_days = ?, hourly_rate_cents = ?, notes = ?, sepa_iban = ?, sepa_bic = ?, sepa_mandate_ref = ?, sepa_mandate_date = ?, skonto_days = ?, skonto_percent = ?, discount_percent = ?, updated_at = ?
            WHERE id = ?`,
           name, (input.contactPerson ?? "").trim(), (input.email ?? "").trim(),
           (input.phone ?? "").trim(), (input.street ?? "").trim(), (input.postalCode ?? "").trim(),
           (input.city ?? "").trim(), (input.country ?? "DE").trim().toUpperCase(), (input.vatId ?? "").trim(),
-          Number(input.paymentTermsDays) || 14, Number(input.hourlyRateCents) || 0, (input.notes ?? "").trim(), now, id,
+          Number(input.paymentTermsDays) || 14, Number(input.hourlyRateCents) || 0, (input.notes ?? "").trim(),
+          (input.sepaIban ?? "").trim().toUpperCase(), (input.sepaBic ?? "").trim().toUpperCase(),
+          (input.sepaMandateRef ?? "").trim(), (input.sepaMandateDate ?? "").trim(),
+          Number(input.skontoDays) || 0, Number(input.skontoPercent) || 0, Number(input.discountPercent) || 0,
+          now, id,
         );
       }
     });
@@ -171,6 +232,13 @@ export class OfficeStore {
       paymentTermsDays: Number(r.payment_terms_days ?? 14),
       hourlyRateCents: Number(r.hourly_rate_cents ?? 0),
       notes: String(r.notes ?? ""),
+      sepaIban: r.sepa_iban ? String(r.sepa_iban) : undefined,
+      sepaBic: r.sepa_bic ? String(r.sepa_bic) : undefined,
+      sepaMandateRef: r.sepa_mandate_ref ? String(r.sepa_mandate_ref) : undefined,
+      sepaMandateDate: r.sepa_mandate_date ? String(r.sepa_mandate_date) : undefined,
+      skontoDays: Number(r.skonto_days ?? 0),
+      skontoPercent: Number(r.skonto_percent ?? 0),
+      discountPercent: Number(r.discount_percent ?? 0),
       createdAt: String(r.created_at),
       updatedAt: String(r.updated_at),
       openInvoiceCount: r.open_invoice_count !== undefined ? Number(r.open_invoice_count) : undefined,
@@ -197,7 +265,10 @@ export class OfficeStore {
         `SELECT p.*, c.name AS client_name,
                 (SELECT COALESCE(SUM(t.minutes), 0) FROM office_times t WHERE t.project_id = p.id) AS total_minutes,
                 (SELECT COALESCE(SUM(ROUND(t.minutes * t.hourly_rate_cents / 60.0)), 0) FROM office_times t WHERE t.project_id = p.id) AS logged_cents,
-                (SELECT COALESCE(SUM(i.total_cents), 0) FROM office_invoices i WHERE i.project_id = p.id AND i.status != 'canceled') AS billed_cents
+                (SELECT COALESCE(SUM(i.total_cents), 0) FROM office_invoices i WHERE i.project_id = p.id AND i.status != 'canceled') AS billed_cents,
+                (SELECT COALESCE(SUM(e.total_cents), 0) FROM office_expenses e WHERE e.project_id = p.id) AS total_expenses,
+                (SELECT COUNT(*) FROM office_tasks tk WHERE tk.project_id = p.id) AS tasks_count,
+                (SELECT COUNT(*) FROM office_tasks tk WHERE tk.project_id = p.id AND tk.completed = 1) AS tasks_completed
            FROM office_projects p
            JOIN office_clients c ON c.id = p.client_id
           ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
@@ -215,7 +286,10 @@ export class OfficeStore {
         `SELECT p.*, c.name AS client_name,
                 (SELECT COALESCE(SUM(t.minutes), 0) FROM office_times t WHERE t.project_id = p.id) AS total_minutes,
                 (SELECT COALESCE(SUM(ROUND(t.minutes * t.hourly_rate_cents / 60.0)), 0) FROM office_times t WHERE t.project_id = p.id) AS logged_cents,
-                (SELECT COALESCE(SUM(i.total_cents), 0) FROM office_invoices i WHERE i.project_id = p.id AND i.status != 'canceled') AS billed_cents
+                (SELECT COALESCE(SUM(i.total_cents), 0) FROM office_invoices i WHERE i.project_id = p.id AND i.status != 'canceled') AS billed_cents,
+                (SELECT COALESCE(SUM(e.total_cents), 0) FROM office_expenses e WHERE e.project_id = p.id) AS total_expenses,
+                (SELECT COUNT(*) FROM office_tasks tk WHERE tk.project_id = p.id) AS tasks_count,
+                (SELECT COUNT(*) FROM office_tasks tk WHERE tk.project_id = p.id AND tk.completed = 1) AS tasks_completed
            FROM office_projects p
            JOIN office_clients c ON c.id = p.client_id
           WHERE p.id = ?`,
@@ -260,6 +334,8 @@ export class OfficeStore {
   }
 
   deleteProject(id: string): { ok: boolean } {
+    this.sql.exec("DELETE FROM office_tasks WHERE project_id = ?", id);
+    this.sql.exec("DELETE FROM office_expenses WHERE project_id = ?", id);
     this.sql.exec("DELETE FROM office_times WHERE project_id = ?", id);
     this.sql.exec("DELETE FROM office_projects WHERE id = ?", id);
     return { ok: true };
@@ -281,9 +357,99 @@ export class OfficeStore {
       totalMinutesLogged: Number(r.total_minutes ?? 0),
       totalLoggedCents: Number(r.logged_cents ?? 0),
       totalBilledCents: Number(r.billed_cents ?? 0),
+      totalExpensesCents: Number(r.total_expenses ?? 0),
+      tasksCount: Number(r.tasks_count ?? 0),
+      tasksCompleted: Number(r.tasks_completed ?? 0),
       createdAt: String(r.created_at),
       updatedAt: String(r.updated_at),
     };
+  }
+
+  // ---------- Aufgaben & Meilensteine ----------
+
+  listTasks(projectId: string): OfficeTask[] {
+    const rows = this.sql
+      .exec<Row>("SELECT * FROM office_tasks WHERE project_id = ? ORDER BY completed ASC, due_date ASC, created_at DESC", projectId)
+      .toArray();
+
+    return rows.map((r) => ({
+      id: String(r.id),
+      projectId: String(r.project_id),
+      title: String(r.title),
+      description: String(r.description ?? ""),
+      estimatedMinutes: Number(r.estimated_minutes ?? 0),
+      completed: Boolean(r.completed),
+      completedAt: r.completed_at ? String(r.completed_at) : null,
+      dueDate: String(r.due_date ?? ""),
+      assigneeName: String(r.assignee_name ?? ""),
+      createdAt: String(r.created_at),
+    }));
+  }
+
+  saveTask(input: Partial<OfficeTask>): OfficeTask {
+    const title = (input.title ?? "").trim();
+    if (!title) throw new OfficeError("taskTitleRequired");
+    if (!input.projectId) throw new OfficeError("projectRequired");
+
+    const id = input.id || crypto.randomUUID();
+    const isNew = !input.id;
+    const now = new Date().toISOString();
+
+    if (isNew) {
+      this.sql.exec(
+        `INSERT INTO office_tasks (id, project_id, title, description, estimated_minutes, completed, due_date, assignee_name, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        id, input.projectId, title, (input.description ?? "").trim(),
+        Number(input.estimatedMinutes) || 0, input.completed ? 1 : 0,
+        input.dueDate || "", (input.assigneeName ?? "").trim(), now,
+      );
+    } else {
+      this.sql.exec(
+        `UPDATE office_tasks SET title = ?, description = ?, estimated_minutes = ?, completed = ?, completed_at = ?, due_date = ?, assignee_name = ?
+         WHERE id = ?`,
+        title, (input.description ?? "").trim(), Number(input.estimatedMinutes) || 0,
+        input.completed ? 1 : 0, input.completed ? now : null, input.dueDate || "", (input.assigneeName ?? "").trim(), id,
+      );
+    }
+
+    const r = this.sql.exec<Row>("SELECT * FROM office_tasks WHERE id = ?", id).toArray()[0];
+    return {
+      id: String(r.id),
+      projectId: String(r.project_id),
+      title: String(r.title),
+      description: String(r.description ?? ""),
+      estimatedMinutes: Number(r.estimated_minutes ?? 0),
+      completed: Boolean(r.completed),
+      completedAt: r.completed_at ? String(r.completed_at) : null,
+      dueDate: String(r.due_date ?? ""),
+      assigneeName: String(r.assignee_name ?? ""),
+      createdAt: String(r.created_at),
+    };
+  }
+
+  toggleTask(id: string): OfficeTask {
+    const r = this.sql.exec<Row>("SELECT * FROM office_tasks WHERE id = ?", id).toArray()[0];
+    if (!r) throw new OfficeError("taskNotFound");
+    const nextCompleted = Number(r.completed) === 1 ? 0 : 1;
+    const completedAt = nextCompleted === 1 ? new Date().toISOString() : null;
+    this.sql.exec("UPDATE office_tasks SET completed = ?, completed_at = ? WHERE id = ?", nextCompleted, completedAt, id);
+    return {
+      id: String(r.id),
+      projectId: String(r.project_id),
+      title: String(r.title),
+      description: String(r.description ?? ""),
+      estimatedMinutes: Number(r.estimated_minutes ?? 0),
+      completed: Boolean(nextCompleted),
+      completedAt,
+      dueDate: String(r.due_date ?? ""),
+      assigneeName: String(r.assignee_name ?? ""),
+      createdAt: String(r.created_at),
+    };
+  }
+
+  deleteTask(id: string): { ok: boolean } {
+    this.sql.exec("DELETE FROM office_tasks WHERE id = ?", id);
+    return { ok: true };
   }
 
   // ---------- Zeiterfassung ----------
@@ -310,10 +476,11 @@ export class OfficeStore {
 
     const rows = this.sql
       .exec<Row>(
-        `SELECT t.*, p.name AS project_name, c.name AS client_name
+        `SELECT t.*, p.name AS project_name, c.name AS client_name, tk.title AS task_title
            FROM office_times t
            JOIN office_projects p ON p.id = t.project_id
            JOIN office_clients c ON c.id = t.client_id
+           LEFT JOIN office_tasks tk ON tk.id = t.task_id
           ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
           ORDER BY t.day DESC, t.created_at DESC`,
         ...args,
@@ -326,6 +493,9 @@ export class OfficeStore {
       projectName: String(r.project_name ?? ""),
       clientId: String(r.client_id),
       clientName: String(r.client_name ?? ""),
+      taskId: r.task_id ? String(r.task_id) : null,
+      taskTitle: r.task_title ? String(r.task_title) : undefined,
+      roleName: String(r.role_name ?? ""),
       userId: String(r.user_id ?? ""),
       userName: String(r.user_name ?? ""),
       day: String(r.day),
@@ -355,8 +525,8 @@ export class OfficeStore {
     const billable = input.billable !== undefined ? (input.billable ? 1 : 0) : 1;
 
     this.sql.exec(
-      `INSERT INTO office_times (id, project_id, client_id, user_id, user_name, day, minutes, hourly_rate_cents, description, billable, billed_invoice_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO office_times (id, project_id, client_id, user_id, user_name, day, minutes, hourly_rate_cents, description, billable, billed_invoice_id, task_id, role_name)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          project_id = excluded.project_id,
          client_id = excluded.client_id,
@@ -364,9 +534,12 @@ export class OfficeStore {
          minutes = excluded.minutes,
          hourly_rate_cents = excluded.hourly_rate_cents,
          description = excluded.description,
-         billable = excluded.billable`,
+         billable = excluded.billable,
+         task_id = excluded.task_id,
+         role_name = excluded.role_name`,
       id, projectId, project.clientId, actor.id, actor.name, day, minutes, hourlyRate,
       (input.description ?? "").trim(), billable, input.billedInvoiceId || null,
+      input.taskId || null, (input.roleName ?? "").trim(),
     );
 
     return {
@@ -375,6 +548,8 @@ export class OfficeStore {
       projectName: project.name,
       clientId: project.clientId,
       clientName: project.clientName,
+      taskId: input.taskId || null,
+      roleName: (input.roleName ?? "").trim(),
       userId: actor.id,
       userName: actor.name,
       day,
@@ -389,6 +564,137 @@ export class OfficeStore {
 
   deleteTime(id: string): { ok: boolean } {
     this.sql.exec("DELETE FROM office_times WHERE id = ?", id);
+    return { ok: true };
+  }
+
+  getTimesheet(projectId?: string, clientId?: string, fromDay?: string, toDay?: string) {
+    const entries = this.listTimes(projectId, clientId, fromDay, toDay);
+    const totalMinutes = entries.reduce((s, e) => s + e.minutes, 0);
+    const totalFeeCents = entries.reduce((s, e) => s + Math.round((e.minutes * e.hourlyRateCents) / 60), 0);
+    const billableEntries = entries.filter((e) => e.billable);
+    const billableMinutes = billableEntries.reduce((s, e) => s + e.minutes, 0);
+    const billableFeeCents = billableEntries.reduce((s, e) => s + Math.round((e.minutes * e.hourlyRateCents) / 60), 0);
+
+    return { entries, totalMinutes, totalFeeCents, billableMinutes, billableFeeCents };
+  }
+
+  // ---------- Auslagen & Reisekosten ----------
+
+  listExpenses(projectId?: string, clientId?: string, fromDay?: string, toDay?: string): OfficeExpense[] {
+    const where: string[] = [];
+    const args: (string | number)[] = [];
+    if (projectId) {
+      where.push("e.project_id = ?");
+      args.push(projectId);
+    }
+    if (clientId) {
+      where.push("e.client_id = ?");
+      args.push(clientId);
+    }
+    if (fromDay) {
+      where.push("e.day >= ?");
+      args.push(fromDay);
+    }
+    if (toDay) {
+      where.push("e.day <= ?");
+      args.push(toDay);
+    }
+
+    const rows = this.sql
+      .exec<Row>(
+        `SELECT e.*, p.name AS project_name, c.name AS client_name
+           FROM office_expenses e
+           JOIN office_projects p ON p.id = e.project_id
+           JOIN office_clients c ON c.id = e.client_id
+          ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+          ORDER BY e.day DESC, e.created_at DESC`,
+        ...args,
+      )
+      .toArray();
+
+    return rows.map((r) => ({
+      id: String(r.id),
+      projectId: String(r.project_id),
+      projectName: String(r.project_name ?? ""),
+      clientId: String(r.client_id),
+      clientName: String(r.client_name ?? ""),
+      title: String(r.title),
+      category: String(r.category) as ExpenseCategory,
+      day: String(r.day),
+      netCents: Number(r.net_cents),
+      vatRate: Number(r.vat_rate),
+      vatCents: Number(r.vat_cents),
+      totalCents: Number(r.total_cents),
+      billable: Boolean(r.billable),
+      markupPercent: Number(r.markup_percent ?? 0),
+      billedInvoiceId: r.billed_invoice_id ? String(r.billed_invoice_id) : null,
+      notes: String(r.notes ?? ""),
+      createdAt: String(r.created_at),
+    }));
+  }
+
+  saveExpense(input: Partial<OfficeExpense>): OfficeExpense {
+    const title = (input.title ?? "").trim();
+    if (!title) throw new OfficeError("expenseTitleRequired");
+    const projectId = input.projectId;
+    if (!projectId) throw new OfficeError("projectRequired");
+
+    const project = this.getProject(projectId);
+    if (!project) throw new OfficeError("projectNotFound");
+
+    const netCents = Number(input.netCents) || 0;
+    const vatRate = Number(input.vatRate) || 19;
+    const vatCents = Math.round(netCents * (vatRate / 100));
+    const totalCents = netCents + vatCents;
+
+    const id = input.id || crypto.randomUUID();
+    const isNew = !input.id;
+    const now = new Date().toISOString();
+
+    if (isNew) {
+      this.sql.exec(
+        `INSERT INTO office_expenses (id, project_id, client_id, title, category, day, net_cents, vat_rate, vat_cents, total_cents, billable, markup_percent, billed_invoice_id, notes, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        id, projectId, project.clientId, title, input.category || "other",
+        input.day || now.slice(0, 10), netCents, vatRate, vatCents, totalCents,
+        input.billable !== false ? 1 : 0, Number(input.markupPercent) || 0,
+        input.billedInvoiceId || null, (input.notes ?? "").trim(), now,
+      );
+    } else {
+      this.sql.exec(
+        `UPDATE office_expenses SET project_id = ?, client_id = ?, title = ?, category = ?, day = ?, net_cents = ?, vat_rate = ?, vat_cents = ?, total_cents = ?, billable = ?, markup_percent = ?, billed_invoice_id = ?, notes = ?
+         WHERE id = ?`,
+        projectId, project.clientId, title, input.category || "other",
+        input.day || now.slice(0, 10), netCents, vatRate, vatCents, totalCents,
+        input.billable !== false ? 1 : 0, Number(input.markupPercent) || 0,
+        input.billedInvoiceId || null, (input.notes ?? "").trim(), id,
+      );
+    }
+
+    const r = this.sql.exec<Row>("SELECT * FROM office_expenses WHERE id = ?", id).toArray()[0];
+    return {
+      id: String(r.id),
+      projectId: String(r.project_id),
+      projectName: project.name,
+      clientId: project.clientId,
+      clientName: project.clientName,
+      title: String(r.title),
+      category: String(r.category) as ExpenseCategory,
+      day: String(r.day),
+      netCents: Number(r.net_cents),
+      vatRate: Number(r.vat_rate),
+      vatCents: Number(r.vat_cents),
+      totalCents: Number(r.total_cents),
+      billable: Boolean(r.billable),
+      markupPercent: Number(r.markup_percent ?? 0),
+      billedInvoiceId: r.billed_invoice_id ? String(r.billed_invoice_id) : null,
+      notes: String(r.notes ?? ""),
+      createdAt: String(r.created_at),
+    };
+  }
+
+  deleteExpense(id: string): { ok: boolean } {
+    this.sql.exec("DELETE FROM office_expenses WHERE id = ?", id);
     return { ok: true };
   }
 
@@ -439,7 +745,8 @@ export class OfficeStore {
     const clientId = input.clientId;
     if (!clientId) throw new OfficeError("clientRequired");
     const items = input.items && input.items.length ? input.items : [];
-    const totals = computeDocumentTotals(items);
+    const discount = Number(input.discountPercent) || 0;
+    const totals = computeDocumentTotals(items, discount);
     const settings = this.getSettings();
 
     const id = input.id || crypto.randomUUID();
@@ -454,19 +761,19 @@ export class OfficeStore {
         const number = `${settings.quotePrefix}-${year}-${String(nextSeq).padStart(3, "0")}`;
         const validUntil = input.validUntil || new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
         this.sql.exec(
-          `INSERT INTO office_quotes (id, number, year, seq, client_id, project_id, status, title, items, net_cents, vat_cents, total_cents, valid_until, notes, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO office_quotes (id, number, year, seq, client_id, project_id, status, title, items, discount_percent, net_cents, vat_cents, total_cents, valid_until, notes, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           id, number, year, nextSeq, clientId, input.projectId || null,
           (input.status as QuoteStatus) || "draft", (input.title ?? "Angebot").trim(),
-          JSON.stringify(items), totals.netCents, totals.vatCents, totals.totalCents,
+          JSON.stringify(items), discount, totals.netCents, totals.vatCents, totals.totalCents,
           validUntil, (input.notes ?? "").trim(), nowIso, nowIso,
         );
       } else {
         this.sql.exec(
-          `UPDATE office_quotes SET client_id = ?, project_id = ?, status = ?, title = ?, items = ?, net_cents = ?, vat_cents = ?, total_cents = ?, valid_until = ?, notes = ?, updated_at = ?
+          `UPDATE office_quotes SET client_id = ?, project_id = ?, status = ?, title = ?, items = ?, discount_percent = ?, net_cents = ?, vat_cents = ?, total_cents = ?, valid_until = ?, notes = ?, updated_at = ?
            WHERE id = ?`,
           clientId, input.projectId || null, (input.status as QuoteStatus) || "draft",
-          (input.title ?? "Angebot").trim(), JSON.stringify(items), totals.netCents, totals.vatCents,
+          (input.title ?? "Angebot").trim(), JSON.stringify(items), discount, totals.netCents, totals.vatCents,
           totals.totalCents, input.validUntil || "", (input.notes ?? "").trim(), nowIso, id,
         );
       }
@@ -493,6 +800,9 @@ export class OfficeStore {
       quoteId: quote.id,
       title: quote.title,
       items: quote.items,
+      discountPercent: quote.discountPercent,
+      skontoDays: client?.skontoDays || 0,
+      skontoPercent: client?.skontoPercent || 0,
       clientAddress: address,
       clientVatId: client?.vatId || "",
       notes: quote.notes,
@@ -516,6 +826,7 @@ export class OfficeStore {
       status: String(r.status) as QuoteStatus,
       title: String(r.title),
       items: JSON.parse(String(r.items || "[]")) as LineItem[],
+      discountPercent: Number(r.discount_percent ?? 0),
       netCents: Number(r.net_cents),
       vatCents: Number(r.vat_cents),
       totalCents: Number(r.total_cents),
@@ -573,7 +884,8 @@ export class OfficeStore {
     const clientId = input.clientId;
     if (!clientId) throw new OfficeError("clientRequired");
     const items = input.items && input.items.length ? input.items : [];
-    const totals = computeDocumentTotals(items);
+    const discount = Number(input.discountPercent) || 0;
+    const totals = computeDocumentTotals(items, discount);
     const settings = this.getSettings();
 
     const id = input.id || crypto.randomUUID();
@@ -588,21 +900,23 @@ export class OfficeStore {
         const number = `${settings.invoicePrefix}-${year}-${String(nextSeq).padStart(3, "0")}`;
         const dueDate = input.dueDate || new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10);
         this.sql.exec(
-          `INSERT INTO office_invoices (id, number, year, seq, client_id, project_id, quote_id, status, title, items, net_cents, vat_cents, total_cents, due_date, issued_at, buyer_reference, notes, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO office_invoices (id, number, year, seq, client_id, project_id, quote_id, status, title, items, discount_percent, skonto_days, skonto_percent, net_cents, vat_cents, total_cents, due_date, issued_at, buyer_reference, dunning_level, notes, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           id, number, year, nextSeq, clientId, input.projectId || null, input.quoteId || null,
           (input.status as InvoiceStatus) || "draft", (input.title ?? "Rechnung").trim(),
-          JSON.stringify(items), totals.netCents, totals.vatCents, totals.totalCents,
+          JSON.stringify(items), discount, Number(input.skontoDays) || 0, Number(input.skontoPercent) || 0,
+          totals.netCents, totals.vatCents, totals.totalCents,
           dueDate, input.issuedAt || nowIso, (input.buyerReference ?? settings.buyerReferenceDefault).trim(),
-          (input.notes ?? "").trim(), nowIso, nowIso,
+          Number(input.dunningLevel) || 0, (input.notes ?? "").trim(), nowIso, nowIso,
         );
       } else {
         this.sql.exec(
-          `UPDATE office_invoices SET client_id = ?, project_id = ?, quote_id = ?, status = ?, title = ?, items = ?, net_cents = ?, vat_cents = ?, total_cents = ?, due_date = ?, buyer_reference = ?, notes = ?, updated_at = ?
+          `UPDATE office_invoices SET client_id = ?, project_id = ?, quote_id = ?, status = ?, title = ?, items = ?, discount_percent = ?, skonto_days = ?, skonto_percent = ?, net_cents = ?, vat_cents = ?, total_cents = ?, due_date = ?, buyer_reference = ?, dunning_level = ?, notes = ?, updated_at = ?
            WHERE id = ?`,
           clientId, input.projectId || null, input.quoteId || null, (input.status as InvoiceStatus) || "draft",
-          (input.title ?? "Rechnung").trim(), JSON.stringify(items), totals.netCents, totals.vatCents,
-          totals.totalCents, input.dueDate || "", (input.buyerReference ?? "").trim(), (input.notes ?? "").trim(), nowIso, id,
+          (input.title ?? "Rechnung").trim(), JSON.stringify(items), discount, Number(input.skontoDays) || 0, Number(input.skontoPercent) || 0,
+          totals.netCents, totals.vatCents, totals.totalCents, input.dueDate || "", (input.buyerReference ?? "").trim(),
+          Number(input.dunningLevel) || 0, (input.notes ?? "").trim(), nowIso, id,
         );
       }
     });
@@ -622,6 +936,7 @@ export class OfficeStore {
   }
 
   deleteInvoice(id: string): { ok: boolean } {
+    this.sql.exec("DELETE FROM office_dunning WHERE invoice_id = ?", id);
     this.sql.exec("DELETE FROM office_invoices WHERE id = ?", id);
     return { ok: true };
   }
@@ -642,6 +957,9 @@ export class OfficeStore {
       status: String(r.status) as InvoiceStatus,
       title: String(r.title),
       items: JSON.parse(String(r.items || "[]")) as LineItem[],
+      discountPercent: Number(r.discount_percent ?? 0),
+      skontoDays: Number(r.skonto_days ?? 0),
+      skontoPercent: Number(r.skonto_percent ?? 0),
       netCents: Number(r.net_cents),
       vatCents: Number(r.vat_cents),
       totalCents: Number(r.total_cents),
@@ -650,10 +968,166 @@ export class OfficeStore {
       paidAt: r.paid_at ? String(r.paid_at) : null,
       paidMethod: r.paid_method ? String(r.paid_method) : null,
       buyerReference: String(r.buyer_reference ?? ""),
+      dunningLevel: Number(r.dunning_level ?? 0),
+      lastDunningAt: r.last_dunning_at ? String(r.last_dunning_at) : null,
       notes: String(r.notes ?? ""),
       createdAt: String(r.created_at),
       updatedAt: String(r.updated_at),
     };
+  }
+
+  // ---------- Mahnwesen (Dunning) ----------
+
+  listDunning(invoiceId?: string): OfficeDunning[] {
+    const where = invoiceId ? "WHERE invoice_id = ?" : "";
+    const args = invoiceId ? [invoiceId] : [];
+    const rows = this.sql
+      .exec<Row>(`SELECT * FROM office_dunning ${where} ORDER BY created_at DESC`, ...args)
+      .toArray();
+
+    return rows.map((r) => ({
+      id: String(r.id),
+      invoiceId: String(r.invoice_id),
+      invoiceNumber: String(r.invoice_number),
+      level: Number(r.level) as 1 | 2 | 3,
+      issuedAt: String(r.issued_at),
+      dueDate: String(r.due_date),
+      feeCents: Number(r.fee_cents),
+      interestCents: Number(r.interest_cents),
+      totalAmountCents: Number(r.total_amount_cents),
+      notes: String(r.notes ?? ""),
+      createdAt: String(r.created_at),
+    }));
+  }
+
+  createDunning(invoiceId: string, level: 1 | 2 | 3, notes = ""): OfficeDunning {
+    const inv = this.getInvoice(invoiceId);
+    if (!inv) throw new OfficeError("invoiceNotFound");
+    const settings = this.getSettings();
+
+    const id = crypto.randomUUID();
+    const nowIso = new Date().toISOString();
+    const dueDate = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10); // 7 Tage Zahlungsfrist
+
+    let feeCents = 0;
+    if (level === 2) feeCents = settings.dunningFeeLevel2Cents;
+    if (level === 3) feeCents = settings.dunningFeeLevel3Cents;
+
+    // Verzugszinsen ab Stufe 2 (z.B. 9 Prozentpunkte über Basiszinssatz, pauschal 1% des Betrags)
+    const interestCents = level >= 2 ? Math.round(inv.totalCents * 0.01) : 0;
+    const totalAmountCents = inv.totalCents + feeCents + interestCents;
+
+    this.transaction(() => {
+      this.sql.exec(
+        `INSERT INTO office_dunning (id, invoice_id, invoice_number, level, issued_at, due_date, fee_cents, interest_cents, total_amount_cents, notes, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        id, invoiceId, inv.number, level, nowIso.slice(0, 10), dueDate, feeCents, interestCents, totalAmountCents, notes.trim(), nowIso,
+      );
+      this.sql.exec(
+        "UPDATE office_invoices SET dunning_level = ?, last_dunning_at = ?, status = 'overdue', updated_at = ? WHERE id = ?",
+        level, nowIso, nowIso, invoiceId,
+      );
+    });
+
+    return {
+      id,
+      invoiceId,
+      invoiceNumber: inv.number,
+      level,
+      issuedAt: nowIso.slice(0, 10),
+      dueDate,
+      feeCents,
+      interestCents,
+      totalAmountCents,
+      notes: notes.trim(),
+      createdAt: nowIso,
+    };
+  }
+
+  // ---------- Wiederkehrende Rechnungen (Recurring) ----------
+
+  listRecurring(): OfficeRecurring[] {
+    const rows = this.sql
+      .exec<Row>(
+        `SELECT r.*, c.name AS client_name
+           FROM office_recurring r
+           JOIN office_clients c ON c.id = r.client_id
+          ORDER BY r.next_run_day ASC`,
+      )
+      .toArray();
+
+    return rows.map((r) => ({
+      id: String(r.id),
+      clientId: String(r.client_id),
+      clientName: String(r.client_name ?? ""),
+      projectId: r.project_id ? String(r.project_id) : null,
+      title: String(r.title),
+      items: JSON.parse(String(r.items || "[]")) as LineItem[],
+      intervalMonths: Number(r.interval_months ?? 1),
+      nextRunDay: String(r.next_run_day),
+      active: Boolean(r.active),
+      createdAt: String(r.created_at),
+    }));
+  }
+
+  saveRecurring(input: Partial<OfficeRecurring>): OfficeRecurring {
+    const clientId = input.clientId;
+    if (!clientId) throw new OfficeError("clientRequired");
+    const title = (input.title ?? "").trim();
+    if (!title) throw new OfficeError("titleRequired");
+
+    const id = input.id || crypto.randomUUID();
+    const isNew = !input.id;
+    const now = new Date().toISOString();
+    const nextRun = input.nextRunDay || now.slice(0, 10);
+
+    if (isNew) {
+      this.sql.exec(
+        `INSERT INTO office_recurring (id, client_id, project_id, title, items, interval_months, next_run_day, active, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        id, clientId, input.projectId || null, title, JSON.stringify(input.items || []),
+        Number(input.intervalMonths) || 1, nextRun, input.active !== false ? 1 : 0, now,
+      );
+    } else {
+      this.sql.exec(
+        `UPDATE office_recurring SET client_id = ?, project_id = ?, title = ?, items = ?, interval_months = ?, next_run_day = ?, active = ?
+         WHERE id = ?`,
+        clientId, input.projectId || null, title, JSON.stringify(input.items || []),
+        Number(input.intervalMonths) || 1, nextRun, input.active !== false ? 1 : 0, id,
+      );
+    }
+
+    const rec = this.listRecurring().find((r) => r.id === id);
+    return rec!;
+  }
+
+  deleteRecurring(id: string): { ok: boolean } {
+    this.sql.exec("DELETE FROM office_recurring WHERE id = ?", id);
+    return { ok: true };
+  }
+
+  triggerRecurring(id: string): OfficeInvoice {
+    const rec = this.listRecurring().find((r) => r.id === id);
+    if (!rec) throw new OfficeError("recurringNotFound");
+
+    const client = this.getClient(rec.clientId);
+    const invoice = this.saveInvoice({
+      clientId: rec.clientId,
+      projectId: rec.projectId,
+      title: rec.title,
+      items: rec.items,
+      skontoDays: client?.skontoDays || 0,
+      skontoPercent: client?.skontoPercent || 0,
+      dueDate: new Date(Date.now() + (client?.paymentTermsDays || 14) * 86_400_000).toISOString().slice(0, 10),
+    });
+
+    // Advance next_run_day by intervalMonths
+    const [y, m, d] = rec.nextRunDay.split("-").map(Number);
+    const nextDate = new Date(y, (m - 1) + rec.intervalMonths, d);
+    const nextRunStr = nextDate.toISOString().slice(0, 10);
+    this.sql.exec("UPDATE office_recurring SET next_run_day = ? WHERE id = ?", nextRunStr, id);
+
+    return invoice;
   }
 
   // ---------- DATEV Export ----------

@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { Play, Pause, Square, Plus, Clock, Trash2, CheckCircle2, AlertCircle, X, Receipt, Filter } from "lucide-react";
+import { Play, Pause, Square, Plus, Clock, Trash2, CheckCircle2, AlertCircle, X, Receipt, Filter, Printer } from "lucide-react";
 import { api, type Me } from "../../api";
 import { Field } from "../../components";
-import type { OfficeClient, OfficeProject, OfficeTimeEntry, LineItem } from "../../../shared/office";
+import type { OfficeClient, OfficeProject, OfficeTimeEntry, LineItem, OfficeTask, RoleRate, OfficeSettings } from "../../../shared/office";
 import { useOfficeI18n } from "./i18n";
+import { TimesheetPrint } from "./TimesheetPrint";
 
 export function TimeTab({
   me,
@@ -18,9 +19,12 @@ export function TimeTab({
   const [times, setTimes] = useState<OfficeTimeEntry[]>([]);
   const [projects, setProjects] = useState<OfficeProject[]>([]);
   const [clients, setClients] = useState<OfficeClient[]>([]);
+  const [projectTasks, setProjectTasks] = useState<OfficeTask[]>([]);
+  const [roleRates, setRoleRates] = useState<RoleRate[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedProjectId, setSelectedProjectId] = useState<string>(initialProjectId || "all");
   const [billableFilter, setBillableFilter] = useState<string>("all");
+  const [showTimesheet, setShowTimesheet] = useState(false);
 
   // Live Timer State
   const [timerRunning, setTimerRunning] = useState(false);
@@ -34,6 +38,9 @@ export function TimeTab({
   const [errorMsg, setErrorMsg] = useState("");
   const [form, setForm] = useState({
     projectId: "",
+    taskId: "",
+    roleName: "",
+    hourlyRateCents: 0,
     day: new Date().toISOString().slice(0, 10),
     hoursInput: "1.0",
     description: "",
@@ -42,20 +49,27 @@ export function TimeTab({
 
   const loadData = async () => {
     try {
-      const [tRes, pRes, cRes] = await Promise.all([
+      const [tRes, pRes, cRes, sRes] = await Promise.all([
         api<{ times: OfficeTimeEntry[] }>(
           `/office/times${selectedProjectId !== "all" ? `?projectId=${selectedProjectId}` : ""}`,
         ),
         api<{ projects: OfficeProject[] }>("/office/projects"),
         api<{ clients: OfficeClient[] }>("/office/clients"),
+        api<{ settings: OfficeSettings }>("/office/settings").catch(() => ({ settings: { roleRates: [] } as unknown as OfficeSettings })),
       ]);
       setTimes(tRes.times);
       setProjects(pRes.projects);
       setClients(cRes.clients);
+      setRoleRates(sRes.settings.roleRates || []);
+
       if (pRes.projects.length > 0 && !timerProjectId) {
         const defaultProj = initialProjectId || pRes.projects[0].id;
         setTimerProjectId(defaultProj);
-        setForm((f) => ({ ...f, projectId: defaultProj }));
+        setForm((f) => ({
+          ...f,
+          projectId: defaultProj,
+          hourlyRateCents: pRes.projects.find((p) => p.id === defaultProj)?.hourlyRateCents || 9500,
+        }));
       }
     } catch (err) {
       setErrorMsg(officeError(err));
@@ -67,6 +81,14 @@ export function TimeTab({
   useEffect(() => {
     loadData();
   }, [selectedProjectId]);
+
+  useEffect(() => {
+    if (form.projectId) {
+      api<{ tasks: OfficeTask[] }>(`/office/tasks?projectId=${form.projectId}`)
+        .then((r) => setProjectTasks(r.tasks))
+        .catch(() => setProjectTasks([]));
+    }
+  }, [form.projectId]);
 
   // Live Timer tick
   useEffect(() => {
@@ -143,6 +165,9 @@ export function TimeTab({
         method: "POST",
         body: {
           projectId: form.projectId,
+          taskId: form.taskId || null,
+          roleName: form.roleName || "",
+          hourlyRateCents: form.hourlyRateCents > 0 ? form.hourlyRateCents : undefined,
           day: form.day,
           minutes,
           description: form.description,
@@ -150,7 +175,7 @@ export function TimeTab({
         },
       });
       setModalOpen(false);
-      setForm((f) => ({ ...f, description: "", hoursInput: "1.0" }));
+      setForm((f) => ({ ...f, description: "", hoursInput: "1.0", taskId: "", roleName: "" }));
       await loadData();
     } catch (err) {
       setErrorMsg(officeError(err));
@@ -211,15 +236,15 @@ export function TimeTab({
     <div className="stack">
       {/* Live Stopwatch Widget */}
       <div className="card" style={{ background: "linear-gradient(135deg, var(--panel), color-mix(in srgb, var(--accent) 8%, var(--panel)))", border: "1px solid color-mix(in srgb, var(--accent) 30%, var(--line))" }}>
-        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: "16px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-            <div style={{ fontSize: "2.2rem", fontFamily: "var(--display)", fontWeight: 800, letterSpacing: "-0.03em", color: timerRunning ? "var(--accent)" : "var(--text)" }}>
+        <div className="stopwatch-inner">
+          <div className="stopwatch-clock-row">
+            <div className="stopwatch-clock" style={{ color: timerRunning ? "var(--accent)" : "var(--ink)" }}>
               {formatTimerDisplay(timerSeconds)}
             </div>
             {timerRunning && <span className="pill success" style={{ animation: "pulse 1.5s infinite" }}>Läuft...</span>}
           </div>
 
-          <div style={{ display: "flex", flex: 1, minWidth: "260px", maxWidth: "420px", gap: "8px" }}>
+          <div className="stopwatch-inputs">
             <select
               className="input"
               value={timerProjectId}
@@ -240,7 +265,7 @@ export function TimeTab({
             />
           </div>
 
-          <div className="row gap">
+          <div className="stopwatch-actions">
             {!timerRunning ? (
               <button className="button primary" onClick={handleStartTimer} disabled={projects.length === 0}>
                 <Play size={18} /> {timerSeconds > 0 ? "Fortsetzen" : o("time.timerStart")}
@@ -312,6 +337,14 @@ export function TimeTab({
         )}
 
         <div className="row gap push-end">
+          <button
+            className="button"
+            onClick={() => setShowTimesheet(true)}
+            disabled={filteredTimes.length === 0}
+            title="Druckbaren Leistungsnachweis / Timesheet erstellen"
+          >
+            <Printer size={17} /> Leistungsnachweis
+          </button>
           {unbilledEntries.length > 0 && onNavigateToNewInvoiceWithItems && (
             <button className="button" onClick={handleInvoiceUnbilled} title="Rechnung aus offenen Zeiten generieren">
               <Receipt size={17} /> In Rechnung stellen
@@ -412,13 +445,73 @@ export function TimeTab({
                   required
                   className="input"
                   value={form.projectId}
-                  onChange={(e) => setForm({ ...form, projectId: e.target.value })}
+                  onChange={(e) => {
+                    const pId = e.target.value;
+                    const proj = projects.find((p) => p.id === pId);
+                    setForm({
+                      ...form,
+                      projectId: pId,
+                      taskId: "",
+                      hourlyRateCents: proj?.hourlyRateCents || 9500,
+                    });
+                  }}
                 >
                   {projects.map((p) => (
                     <option key={p.id} value={p.id}>{p.name} ({p.clientName})</option>
                   ))}
                 </select>
               </Field>
+
+              {projectTasks.length > 0 && (
+                <Field label="Aufgabe / Meilenstein (optional)">
+                  <select
+                    className="input"
+                    value={form.taskId}
+                    onChange={(e) => setForm({ ...form, taskId: e.target.value })}
+                  >
+                    <option value="">Keine Aufgabe zuordnen (Allgemein)</option>
+                    {projectTasks.map((t) => (
+                      <option key={t.id} value={t.id}>{t.title} {t.completed ? "✓ (Erledigt)" : ""}</option>
+                    ))}
+                  </select>
+                </Field>
+              )}
+
+              <div className="row-grid">
+                {roleRates.length > 0 && (
+                  <Field label="Rolle / Tätigkeitsstufe">
+                    <select
+                      className="input"
+                      value={form.roleName}
+                      onChange={(e) => {
+                        const rName = e.target.value;
+                        const match = roleRates.find((r) => r.name === rName);
+                        setForm({
+                          ...form,
+                          roleName: rName,
+                          hourlyRateCents: match ? match.hourlyRateCents : form.hourlyRateCents,
+                        });
+                      }}
+                    >
+                      <option value="">Standard-Stundensatz des Projekts</option>
+                      {roleRates.map((r) => (
+                        <option key={r.id} value={r.name}>{r.name} ({euro(r.hourlyRateCents)}/Std)</option>
+                      ))}
+                    </select>
+                  </Field>
+                )}
+
+                <Field label="Stundensatz (€/Std)">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    className="input"
+                    value={(form.hourlyRateCents / 100) || ""}
+                    onChange={(e) => setForm({ ...form, hourlyRateCents: Math.round(parseFloat(e.target.value || "0") * 100) })}
+                  />
+                </Field>
+              </div>
 
               <div className="row-grid">
                 <Field label={o("time.fields.date")} required>
@@ -472,6 +565,15 @@ export function TimeTab({
             </form>
           </div>
         </div>
+      )}
+
+      {/* Timesheet Print Modal */}
+      {showTimesheet && (
+        <TimesheetPrint
+          project={projects.find((p) => p.id === selectedProjectId)}
+          entries={filteredTimes}
+          onClose={() => setShowTimesheet(false)}
+        />
       )}
     </div>
   );

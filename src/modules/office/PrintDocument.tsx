@@ -268,6 +268,12 @@ export function PrintDocument({
 
         {/* Summen */}
         <div className="print-totals" style={{ marginLeft: "auto", maxWidth: "340px", marginTop: "16px" }}>
+          {doc.discountPercent ? (
+            <p style={{ color: "var(--accent)" }}>
+              <span>Rabatt ({doc.discountPercent}%):</span>
+              <span>enthalten</span>
+            </p>
+          ) : null}
           <p>
             <span>Nettobetrag:</span>
             <span>{euro(doc.netCents)}</span>
@@ -297,6 +303,11 @@ export function PrintDocument({
                   ? o("print.paidWith", { date: day(invoice.paidAt), method: invoice.paidMethod || "Überweisung" })
                   : o("print.payNotice", { days: 14 })}
               </p>
+              {invoice?.skontoDays && invoice?.skontoPercent ? (
+                <p style={{ margin: "4px 0", fontSize: "0.88rem", color: "var(--accent)", fontWeight: 500 }}>
+                  Skontovereinbarung: Bei Zahlung innerhalb von {invoice.skontoDays} Tagen gewähren wir {invoice.skontoPercent}% Skonto (Zahlbetrag: {euro(Math.round(invoice.totalCents * (1 - invoice.skontoPercent / 100)))}).
+                </p>
+              ) : null}
               {company?.iban && (
                 <div style={{ fontSize: "0.88rem", color: "var(--muted)" }}>
                   <div>Bank: <strong>{company.bankName || "Geschäftskonto"}</strong></div>

@@ -829,15 +829,27 @@ export const de = {
     },
     restaurant: {
       name: "Restaurant & Café",
-      tagline: "Tische, Bestellungen, Küche und Kasse",
-      description: "Tischplan, Bestellungen per Tablet, Küchenmonitor, Speisekarte, Reservierungen und Kasse mit TSE.",
-      features: ["Tischplan", "Bestellung per Tablet", "Küchenmonitor", "Reservierungen", "Kasse mit TSE"],
+      tagline: "Tischplan, Kundenschalter, Abholschalter & Küchenmonitor",
+      description: "Interaktiver Tischplan, Touch-Kundenschalter für Thekenbestellungen, Abholschalter mit digitalem Aufruf-Monitor, Küchenleitsystem (KDS) und Speisekartenverwaltung.",
+      features: ["Interaktiver Tischplan", "Kundenschalter & Schnellkasse", "Abholschalter & Aufruf-Monitor", "Küchenmonitor (KDS) mit Timern", "Speisekarte mit getrennter MwSt."],
     },
     autohaus: {
       name: "Autohaus",
       tagline: "Fahrzeugbestand, Verkauf und Probefahrten",
       description: "Fahrzeugbestand mit Fotos, Interessenten, Probefahrten, Kaufverträge, Inzahlungnahmen und Werkstatt-Anbindung.",
       features: ["Fahrzeugbestand", "Interessenten & Anfragen", "Probefahrten", "Kaufverträge", "Inzahlungnahme"],
+    },
+    handwerk: {
+      name: "Handwerk & Baustelle",
+      tagline: "Baustellenakte, Aufmaß, Rapportzettel & Kundenunterschrift",
+      description: "Baustellenakte mit Gewerken, mobiles Raumaufmaß mit Formelrechner, Arbeitsberichte mit Stunden und Material, digitale Touch-Kundenunterschrift und Kassenabrechnung mit § 35a EStG Split.",
+      features: ["Baustellenakte & Bauvorhaben", "Mobiles Raumaufmaß", "Arbeitsberichte mit Monteurstunden", "Digitale Kundenunterschrift", "Automatischer § 35a Lohnsplit", "Kassen- & Rechnungsübergabe"],
+    },
+    fitness: {
+      name: "Fitnessstudio & Kurse",
+      tagline: "Mitgliederkartei, Kursplan, Theken-Check-In & Tarife",
+      description: "Mitgliederverwaltung mit Verträgen, Theken-Check-In mit Barcode-Scan, Studioauslastung, wöchentlicher Kursplan und Kassenanbindung.",
+      features: ["Theken-Check-In & Barcode-Scan", "Studioauslastung live", "Mitgliederkartei & Verträge", "Wöchentlicher Kursplan", "Tarife & 10er-Karten", "Mitgliedsausweis & Vertrag"],
     },
     buero: {
       name: "Büro & Dienstleister",

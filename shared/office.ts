@@ -3,6 +3,13 @@ export const OFFICE_APP_ID = "buero";
 export type ProjectStatus = "planned" | "active" | "completed" | "paused" | "canceled";
 export type QuoteStatus = "draft" | "sent" | "accepted" | "rejected" | "expired";
 export type InvoiceStatus = "draft" | "sent" | "paid" | "overdue" | "canceled";
+export type ExpenseCategory = "travel" | "subcontractor" | "software" | "material" | "other";
+
+export interface RoleRate {
+  id: string;
+  name: string;
+  hourlyRateCents: number;
+}
 
 export interface OfficeClient {
   id: string;
@@ -19,10 +26,31 @@ export interface OfficeClient {
   paymentTermsDays: number;
   hourlyRateCents: number;
   notes: string;
+  // SEPA-Mandat & Skonto
+  sepaIban?: string;
+  sepaBic?: string;
+  sepaMandateRef?: string;
+  sepaMandateDate?: string;
+  skontoDays?: number;
+  skontoPercent?: number;
+  discountPercent?: number;
   createdAt: string;
   updatedAt: string;
   openInvoiceCount?: number;
   openInvoiceCents?: number;
+}
+
+export interface OfficeTask {
+  id: string;
+  projectId: string;
+  title: string;
+  description: string;
+  estimatedMinutes: number;
+  completed: boolean;
+  completedAt?: string | null;
+  dueDate?: string;
+  assigneeName?: string;
+  createdAt: string;
 }
 
 export interface OfficeProject {
@@ -40,6 +68,9 @@ export interface OfficeProject {
   totalMinutesLogged: number;
   totalLoggedCents: number;
   totalBilledCents: number;
+  totalExpensesCents: number;
+  tasksCount?: number;
+  tasksCompleted?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -50,6 +81,9 @@ export interface OfficeTimeEntry {
   projectName?: string;
   clientId: string;
   clientName?: string;
+  taskId?: string | null;
+  taskTitle?: string;
+  roleName?: string;
   userId: string;
   userName: string;
   day: string; // YYYY-MM-DD
@@ -61,12 +95,32 @@ export interface OfficeTimeEntry {
   createdAt: string;
 }
 
+export interface OfficeExpense {
+  id: string;
+  projectId: string;
+  projectName?: string;
+  clientId: string;
+  clientName?: string;
+  title: string;
+  category: ExpenseCategory;
+  day: string;
+  netCents: number;
+  vatRate: number;
+  vatCents: number;
+  totalCents: number;
+  billable: boolean;
+  markupPercent: number; // e.g. 10%
+  billedInvoiceId: string | null;
+  notes: string;
+  createdAt: string;
+}
+
 export interface LineItem {
   id: string;
   title: string;
   description: string;
   qty: number;
-  unit: string; // "Std", "Tag", "Stk", "Pauschal"
+  unit: string; // "Std", "Tag", "Stk", "Pauschal", "km"
   unitCents: number;
   vatRate: number; // e.g. 19, 7, 0
   totalCents: number;
@@ -84,6 +138,7 @@ export interface OfficeQuote {
   status: QuoteStatus;
   title: string;
   items: LineItem[];
+  discountPercent?: number;
   netCents: number;
   vatCents: number;
   totalCents: number;
@@ -91,6 +146,20 @@ export interface OfficeQuote {
   notes: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface OfficeDunning {
+  id: string;
+  invoiceId: string;
+  invoiceNumber: string;
+  level: 1 | 2 | 3; // 1 = Zahlungserinnerung, 2 = 1. Mahnung, 3 = 2. Mahnung / Letzte
+  issuedAt: string;
+  dueDate: string;
+  feeCents: number;
+  interestCents: number;
+  totalAmountCents: number;
+  notes: string;
+  createdAt: string;
 }
 
 export interface OfficeInvoice {
@@ -108,6 +177,9 @@ export interface OfficeInvoice {
   status: InvoiceStatus;
   title: string;
   items: LineItem[];
+  discountPercent?: number;
+  skontoDays?: number;
+  skontoPercent?: number;
   netCents: number;
   vatCents: number;
   totalCents: number;
@@ -116,9 +188,24 @@ export interface OfficeInvoice {
   paidAt: string | null;
   paidMethod: string | null;
   buyerReference: string; // Leitweg-ID für E-Rechnung
+  dunningLevel: number; // 0 = keine, 1, 2, 3
+  lastDunningAt?: string | null;
   notes: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface OfficeRecurring {
+  id: string;
+  clientId: string;
+  clientName: string;
+  projectId: string | null;
+  title: string;
+  items: LineItem[];
+  intervalMonths: number; // 1 = monatlich, 3 = quartalsweise, 12 = jährlich
+  nextRunDay: string;
+  active: boolean;
+  createdAt: string;
 }
 
 export interface OfficeSettings {
@@ -128,7 +215,19 @@ export interface OfficeSettings {
   invoicePrefix: string;
   buyerReferenceDefault: string;
   eInvoiceEnabled: boolean;
+  defaultSkontoDays: number;
+  defaultSkontoPercent: number;
+  dunningFeeLevel1Cents: number; // e.g. 0
+  dunningFeeLevel2Cents: number; // e.g. 500 (5,00 €)
+  dunningFeeLevel3Cents: number; // e.g. 1000 (10,00 €)
+  roleRates: RoleRate[];
 }
+
+export const DEFAULT_ROLE_RATES: RoleRate[] = [
+  { id: "junior", name: "Junior Berater / Assistent", hourlyRateCents: 7500 },
+  { id: "senior", name: "Senior Berater / Entwickler", hourlyRateCents: 12000 },
+  { id: "director", name: "Projektleitung / Partner", hourlyRateCents: 16500 },
+];
 
 export const DEFAULT_OFFICE_SETTINGS: OfficeSettings = {
   defaultHourlyRateCents: 9500, // 95,00 €
@@ -137,19 +236,30 @@ export const DEFAULT_OFFICE_SETTINGS: OfficeSettings = {
   invoicePrefix: "RE",
   buyerReferenceDefault: "",
   eInvoiceEnabled: true,
+  defaultSkontoDays: 7,
+  defaultSkontoPercent: 2,
+  dunningFeeLevel1Cents: 0,
+  dunningFeeLevel2Cents: 500,
+  dunningFeeLevel3Cents: 1000,
+  roleRates: DEFAULT_ROLE_RATES,
 };
 
 export function computeLineTotal(qty: number, unitCents: number): number {
   return Math.round(qty * unitCents);
 }
 
-export function computeDocumentTotals(items: LineItem[]): { netCents: number; vatCents: number; totalCents: number } {
+export function computeDocumentTotals(items: LineItem[], discountPercent = 0): { netCents: number; vatCents: number; totalCents: number } {
   let netCents = 0;
   let vatCents = 0;
   for (const item of items) {
     const itemTotal = computeLineTotal(item.qty, item.unitCents);
     netCents += itemTotal;
     vatCents += Math.round(itemTotal * (item.vatRate / 100));
+  }
+  if (discountPercent > 0 && discountPercent <= 100) {
+    const discountFactor = (100 - discountPercent) / 100;
+    netCents = Math.round(netCents * discountFactor);
+    vatCents = Math.round(vatCents * discountFactor);
   }
   return { netCents, vatCents, totalCents: netCents + vatCents };
 }
@@ -163,7 +273,7 @@ export function formatMinutes(minutes: number): string {
 }
 
 export function hoursToMinutes(hoursStr: string | number): number {
-  const n = typeof hoursStr === "number" ? hoursStr : parseFloat(hoursStr.replace(",", "."));
+  const n = typeof hoursStr === "number" ? hoursStr : parseFloat(String(hoursStr).replace(",", "."));
   if (isNaN(n) || n <= 0) return 0;
   return Math.round(n * 60);
 }

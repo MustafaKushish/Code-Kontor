@@ -838,6 +838,18 @@ export const fr: Dict = {
       description: "Stock de véhicules avec photos, prospects, essais, contrats de vente, reprises et lien avec l'atelier.",
       features: ["Stock de véhicules", "Prospects & demandes", "Essais", "Contrats de vente", "Reprises"],
     },
+    handwerk: {
+      name: "Artisanat & Chantier",
+      tagline: "Dossiers de chantier, métrés, rapports et signature client",
+      description: "Dossiers de chantier, métrés sur site, rapports d'intervention avec heures et matériaux, signature numérique et facturation.",
+      features: ["Dossiers de chantier", "Métrés sur site", "Rapports de travail", "Signature numérique du client", "Répartition main-d'œuvre & matériaux", "Facturation"],
+    },
+    fitness: {
+      name: "Salle de sport & Cours",
+      tagline: "Membres, planning des cours, enregistrement et tarifs",
+      description: "Gestion des adhérents et abonnements, check-in au comptoir par code-barres, taux d'occupation en direct, planning des cours et caisse.",
+      features: ["Enregistrement comptoir & code-barres", "Occupation en direct", "Fichier membres & contrats", "Planning des cours hebdomadaire", "Tarifs & cartes 10 séances", "Contrat d'adhésion & carte"],
+    },
     buero: {
       name: "Bureau & services",
       tagline: "Projets, suivi du temps, devis et factures",

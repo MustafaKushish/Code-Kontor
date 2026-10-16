@@ -49,7 +49,7 @@ export const officeRoutes = new Hono<OfficeEnv>();
 officeRoutes.use("*", async (c, next) => {
   const user = c.get("user");
   const apps = await tenantStub(c.env, user.tenantId).installedApps();
-  if (!apps.includes(OFFICE_APP_ID)) return fail(c, "appNotInstalled", 403);
+  if (!apps.includes(OFFICE_APP_ID)) return fail(c, "forbidden", 403);
   await next();
 });
 
@@ -66,7 +66,7 @@ officeRoutes.get("/clients/:id", async (c) => {
   const id = c.req.param("id");
   const res = await store(c.env, c.get("user").tenantId).getClient(id);
   if (!res.ok) return moduleError(c, res.code);
-  if (!res.value) return fail(c, "clientNotFound", 404);
+  if (!res.value) return moduleError(c, "clientNotFound");
   return c.json({ client: res.value });
 });
 
@@ -98,7 +98,7 @@ officeRoutes.get("/projects/:id", async (c) => {
   const id = c.req.param("id");
   const res = await store(c.env, c.get("user").tenantId).getProject(id);
   if (!res.ok) return moduleError(c, res.code);
-  if (!res.value) return fail(c, "projectNotFound", 404);
+  if (!res.value) return moduleError(c, "projectNotFound");
   return c.json({ project: res.value });
 });
 
@@ -112,6 +112,37 @@ officeRoutes.post("/projects", async (c) => {
 officeRoutes.delete("/projects/:id", async (c) => {
   const id = c.req.param("id");
   const res = await store(c.env, c.get("user").tenantId).deleteProject(id);
+  if (!res.ok) return moduleError(c, res.code);
+  return c.json({ ok: true });
+});
+
+// ---------- Aufgaben & Meilensteine ----------
+
+officeRoutes.get("/tasks", async (c) => {
+  const projectId = c.req.query("projectId");
+  if (!projectId) return moduleError(c, "projectRequired");
+  const res = await store(c.env, c.get("user").tenantId).listTasks(projectId);
+  if (!res.ok) return moduleError(c, res.code);
+  return c.json({ tasks: res.value });
+});
+
+officeRoutes.post("/tasks", async (c) => {
+  const body = await readBody(c);
+  const res = await store(c.env, c.get("user").tenantId).saveTask(body);
+  if (!res.ok) return moduleError(c, res.code);
+  return c.json({ task: res.value }, 201);
+});
+
+officeRoutes.post("/tasks/:id/toggle", async (c) => {
+  const id = c.req.param("id");
+  const res = await store(c.env, c.get("user").tenantId).toggleTask(id);
+  if (!res.ok) return moduleError(c, res.code);
+  return c.json({ task: res.value });
+});
+
+officeRoutes.delete("/tasks/:id", async (c) => {
+  const id = c.req.param("id");
+  const res = await store(c.env, c.get("user").tenantId).deleteTask(id);
   if (!res.ok) return moduleError(c, res.code);
   return c.json({ ok: true });
 });
@@ -143,6 +174,42 @@ officeRoutes.delete("/times/:id", async (c) => {
   return c.json({ ok: true });
 });
 
+officeRoutes.get("/timesheet", async (c) => {
+  const projectId = c.req.query("projectId");
+  const clientId = c.req.query("clientId");
+  const fromDay = c.req.query("from");
+  const toDay = c.req.query("to");
+  const res = await store(c.env, c.get("user").tenantId).getTimesheet(projectId, clientId, fromDay, toDay);
+  if (!res.ok) return moduleError(c, res.code);
+  return c.json(res.value);
+});
+
+// ---------- Auslagen & Reisekosten ----------
+
+officeRoutes.get("/expenses", async (c) => {
+  const projectId = c.req.query("projectId");
+  const clientId = c.req.query("clientId");
+  const fromDay = c.req.query("from");
+  const toDay = c.req.query("to");
+  const res = await store(c.env, c.get("user").tenantId).listExpenses(projectId, clientId, fromDay, toDay);
+  if (!res.ok) return moduleError(c, res.code);
+  return c.json({ expenses: res.value });
+});
+
+officeRoutes.post("/expenses", async (c) => {
+  const body = await readBody(c);
+  const res = await store(c.env, c.get("user").tenantId).saveExpense(body);
+  if (!res.ok) return moduleError(c, res.code);
+  return c.json({ expense: res.value }, 201);
+});
+
+officeRoutes.delete("/expenses/:id", async (c) => {
+  const id = c.req.param("id");
+  const res = await store(c.env, c.get("user").tenantId).deleteExpense(id);
+  if (!res.ok) return moduleError(c, res.code);
+  return c.json({ ok: true });
+});
+
 // ---------- Angebote ----------
 
 officeRoutes.get("/quotes", async (c) => {
@@ -157,7 +224,7 @@ officeRoutes.get("/quotes/:id", async (c) => {
   const id = c.req.param("id");
   const res = await store(c.env, c.get("user").tenantId).getQuote(id);
   if (!res.ok) return moduleError(c, res.code);
-  if (!res.value) return fail(c, "quoteNotFound", 404);
+  if (!res.value) return moduleError(c, "quoteNotFound");
   return c.json({ quote: res.value });
 });
 
@@ -196,7 +263,7 @@ officeRoutes.get("/invoices/:id", async (c) => {
   const id = c.req.param("id");
   const res = await store(c.env, c.get("user").tenantId).getInvoice(id);
   if (!res.ok) return moduleError(c, res.code);
-  if (!res.value) return fail(c, "invoiceNotFound", 404);
+  if (!res.value) return moduleError(c, "invoiceNotFound");
   return c.json({ invoice: res.value });
 });
 
@@ -218,6 +285,55 @@ officeRoutes.post("/invoices/:id/pay", async (c) => {
 officeRoutes.delete("/invoices/:id", async (c) => {
   const id = c.req.param("id");
   const res = await store(c.env, c.get("user").tenantId).deleteInvoice(id);
+  if (!res.ok) return moduleError(c, res.code);
+  return c.json({ ok: true });
+});
+
+// ---------- Mahnwesen (Dunning) ----------
+
+officeRoutes.get("/dunning", async (c) => {
+  const invoiceId = c.req.query("invoiceId");
+  const res = await store(c.env, c.get("user").tenantId).listDunning(invoiceId);
+  if (!res.ok) return moduleError(c, res.code);
+  return c.json({ dunning: res.value });
+});
+
+officeRoutes.post("/dunning", async (c) => {
+  const body = await readBody(c);
+  const invoiceId = String(body.invoiceId || "");
+  const level = Number(body.level) as 1 | 2 | 3;
+  const notes = String(body.notes || "");
+  if (!invoiceId || !level) return moduleError(c, "checkFields");
+  const res = await store(c.env, c.get("user").tenantId).createDunning(invoiceId, level, notes);
+  if (!res.ok) return moduleError(c, res.code);
+  return c.json({ dunning: res.value }, 201);
+});
+
+// ---------- Wiederkehrende Rechnungen (Recurring) ----------
+
+officeRoutes.get("/recurring", async (c) => {
+  const res = await store(c.env, c.get("user").tenantId).listRecurring();
+  if (!res.ok) return moduleError(c, res.code);
+  return c.json({ recurring: res.value });
+});
+
+officeRoutes.post("/recurring", async (c) => {
+  const body = await readBody(c);
+  const res = await store(c.env, c.get("user").tenantId).saveRecurring(body);
+  if (!res.ok) return moduleError(c, res.code);
+  return c.json({ recurring: res.value }, 201);
+});
+
+officeRoutes.post("/recurring/:id/trigger", async (c) => {
+  const id = c.req.param("id");
+  const res = await store(c.env, c.get("user").tenantId).triggerRecurring(id);
+  if (!res.ok) return moduleError(c, res.code);
+  return c.json({ invoice: res.value }, 201);
+});
+
+officeRoutes.delete("/recurring/:id", async (c) => {
+  const id = c.req.param("id");
+  const res = await store(c.env, c.get("user").tenantId).deleteRecurring(id);
   if (!res.ok) return moduleError(c, res.code);
   return c.json({ ok: true });
 });

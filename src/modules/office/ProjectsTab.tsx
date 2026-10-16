@@ -1,18 +1,20 @@
 import { useEffect, useState } from "react";
-import { Plus, FolderKanban, CheckCircle2, Clock, AlertCircle, X, Search, Pencil, Trash2, ArrowUpRight, FileText, UserCheck } from "lucide-react";
+import { Plus, FolderKanban, CheckCircle2, Clock, AlertCircle, X, Search, Pencil, Trash2, CheckSquare, Square, UserCheck, Receipt, ListTodo } from "lucide-react";
 import { api } from "../../api";
 import { Field } from "../../components";
-import type { OfficeClient, OfficeProject, ProjectStatus } from "../../../shared/office";
+import type { OfficeClient, OfficeProject, OfficeTask, ProjectStatus } from "../../../shared/office";
 import { useOfficeI18n } from "./i18n";
 
 export function ProjectsTab({
   isManager,
   initialClientId,
   onNavigateToTime,
+  onNavigateToExpenses,
 }: {
   isManager: boolean;
   initialClientId?: string;
   onNavigateToTime?: (projectId: string) => void;
+  onNavigateToExpenses?: (projectId: string) => void;
 }) {
   const { o, euro, day, officeError } = useOfficeI18n();
   const [projects, setProjects] = useState<OfficeProject[]>([]);
@@ -24,6 +26,13 @@ export function ProjectsTab({
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<OfficeProject | null>(null);
+  const [tasksModalProject, setTasksModalProject] = useState<OfficeProject | null>(null);
+  const [projectTasks, setProjectTasks] = useState<OfficeTask[]>([]);
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskHours, setNewTaskHours] = useState("");
+  const [newTaskAssignee, setNewTaskAssignee] = useState("");
+  const [newTaskDueDate, setNewTaskDueDate] = useState("");
+
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -59,6 +68,66 @@ export function ProjectsTab({
   useEffect(() => {
     loadData();
   }, [clientFilter]);
+
+  const loadTasks = async (projectId: string) => {
+    try {
+      const res = await api<{ tasks: OfficeTask[] }>(`/office/tasks?projectId=${projectId}`);
+      setProjectTasks(res.tasks);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const openTasksModal = (project: OfficeProject) => {
+    setTasksModalProject(project);
+    loadTasks(project.id);
+  };
+
+  const handleToggleTask = async (taskId: string) => {
+    try {
+      await api(`/office/tasks/${taskId}/toggle`, { method: "POST" });
+      if (tasksModalProject) await loadTasks(tasksModalProject.id);
+      await loadData();
+    } catch (err) {
+      alert(officeError(err));
+    }
+  };
+
+  const handleAddTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tasksModalProject || !newTaskTitle.trim()) return;
+    try {
+      const estimatedMinutes = Math.round((parseFloat(newTaskHours) || 0) * 60);
+      await api("/office/tasks", {
+        method: "POST",
+        body: {
+          projectId: tasksModalProject.id,
+          title: newTaskTitle.trim(),
+          estimatedMinutes,
+          assigneeName: newTaskAssignee.trim(),
+          dueDate: newTaskDueDate,
+        },
+      });
+      setNewTaskTitle("");
+      setNewTaskHours("");
+      setNewTaskAssignee("");
+      setNewTaskDueDate("");
+      await loadTasks(tasksModalProject.id);
+      await loadData();
+    } catch (err) {
+      alert(officeError(err));
+    }
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    try {
+      await api(`/office/tasks/${taskId}`, { method: "DELETE" });
+      if (tasksModalProject) await loadTasks(tasksModalProject.id);
+      await loadData();
+    } catch (err) {
+      alert(officeError(err));
+    }
+  };
 
   const openNew = () => {
     setEditingProject(null);
@@ -234,6 +303,21 @@ export function ProjectsTab({
 
                 {p.description && <p className="small muted" style={{ margin: 0 }}>{p.description}</p>}
 
+                {/* Tasks & Milestones overview */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--panel-2)", padding: "8px 12px", borderRadius: "var(--radius)", fontSize: "0.85rem", flexWrap: "wrap", gap: "8px" }}>
+                  <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <ListTodo size={15} style={{ color: "var(--accent)" }} />
+                    <strong>{p.tasksCompleted || 0} von {p.tasksCount || 0}</strong> Aufgaben erledigt
+                  </span>
+                  <button
+                    className="button small"
+                    onClick={() => openTasksModal(p)}
+                    title="Aufgaben & Meilensteine verwalten"
+                  >
+                    Aufgaben anzeigen
+                  </button>
+                </div>
+
                 <div className="stack-sm">
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem" }}>
                     <span>Budget: <strong>{p.budgetCents > 0 ? euro(p.budgetCents) : "Kein Limit"}</strong></span>
@@ -249,12 +333,24 @@ export function ProjectsTab({
                   )}
                 </div>
 
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", color: "var(--muted)", borderTop: "1px solid var(--line)", paddingTop: "10px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", color: "var(--muted)", borderTop: "1px solid var(--line)", paddingTop: "10px", flexWrap: "wrap", gap: "6px" }}>
                   <span>Satz: <strong>{euro(p.hourlyRateCents)}/h</strong></span>
+                  {p.totalExpensesCents > 0 && (
+                    <span>Auslagen: <strong>{euro(p.totalExpensesCents)}</strong></span>
+                  )}
                   {p.dueDate ? <span>Fällig: <strong>{day(p.dueDate)}</strong></span> : <span>Start: {day(p.startDate)}</span>}
                 </div>
 
-                <div className="row gap" style={{ justifyContent: "flex-end", marginTop: "4px" }}>
+                <div className="row gap" style={{ justifyContent: "flex-end", marginTop: "4px", flexWrap: "wrap" }}>
+                  {onNavigateToExpenses && (
+                    <button
+                      className="button small"
+                      onClick={() => onNavigateToExpenses(p.id)}
+                      title="Auslagen für dieses Projekt"
+                    >
+                      <Receipt size={14} /> Auslagen
+                    </button>
+                  )}
                   {onNavigateToTime && (
                     <button
                       className="button small"
@@ -285,6 +381,115 @@ export function ProjectsTab({
         </div>
       )}
 
+      {/* Modal: Aufgaben & Meilensteine */}
+      {tasksModalProject && (
+        <div className="office-modal-overlay" onClick={() => setTasksModalProject(null)}>
+          <div className="office-modal" style={{ maxWidth: "680px" }} onClick={(e) => e.stopPropagation()}>
+            <div className="office-modal-head">
+              <div>
+                <h3 style={{ margin: 0 }}>Aufgaben & Meilensteine</h3>
+                <small className="muted">Projekt: {tasksModalProject.name}</small>
+              </div>
+              <button className="icon-button" onClick={() => setTasksModalProject(null)}>
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Neue Aufgabe hinzufügen */}
+            <form onSubmit={handleAddTask} className="stack-sm" style={{ background: "var(--panel-2)", padding: "12px", borderRadius: "var(--radius)" }}>
+              <strong>Neue Aufgabe hinzufügen</strong>
+              <div className="task-form-grid">
+                <Field label="Aufgabentitel" required>
+                  <input
+                    type="text"
+                    required
+                    className="input"
+                    placeholder="z.B. Design-Entwurf Freigabe..."
+                    value={newTaskTitle}
+                    onChange={(e) => setNewTaskTitle(e.target.value)}
+                  />
+                </Field>
+                <Field label="Schätzung (h)">
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    className="input"
+                    placeholder="4.0"
+                    value={newTaskHours}
+                    onChange={(e) => setNewTaskHours(e.target.value)}
+                  />
+                </Field>
+                <Field label="Zuständig">
+                  <input
+                    type="text"
+                    className="input"
+                    placeholder="Name"
+                    value={newTaskAssignee}
+                    onChange={(e) => setNewTaskAssignee(e.target.value)}
+                  />
+                </Field>
+                <button type="submit" className="button primary" style={{ marginBottom: "2px" }}>
+                  <Plus size={16} /> Hinzufügen
+                </button>
+              </div>
+            </form>
+
+            {/* Aufgabenliste */}
+            <div className="stack-sm" style={{ marginTop: "12px", maxHeight: "360px", overflowY: "auto" }}>
+              {projectTasks.length === 0 ? (
+                <p className="muted" style={{ textAlign: "center", padding: "20px" }}>
+                  Noch keine Aufgaben angelegt.
+                </p>
+              ) : (
+                projectTasks.map((task) => (
+                  <div
+                    key={task.id}
+                    className="card"
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "10px 14px",
+                      background: task.completed ? "color-mix(in srgb, var(--success) 6%, var(--panel))" : "var(--panel)",
+                      opacity: task.completed ? 0.75 : 1,
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1 }}>
+                      <button
+                        type="button"
+                        className="icon-button"
+                        onClick={() => handleToggleTask(task.id)}
+                        style={{ color: task.completed ? "var(--success)" : "var(--muted)" }}
+                      >
+                        {task.completed ? <CheckSquare size={20} /> : <Square size={20} />}
+                      </button>
+                      <div style={{ textDecoration: task.completed ? "line-through" : "none" }}>
+                        <strong>{task.title}</strong>
+                        {(task.assigneeName || task.estimatedMinutes > 0) && (
+                          <div style={{ fontSize: "0.8rem", color: "var(--muted)" }}>
+                            {task.assigneeName && <span>Verantwortlich: {task.assigneeName} · </span>}
+                            {task.estimatedMinutes > 0 && <span>Geschätzt: {(task.estimatedMinutes / 60).toFixed(1)}h</span>}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="icon-button danger"
+                      onClick={() => handleDeleteTask(task.id)}
+                      title="Aufgabe löschen"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Lösch-Bestätigung */}
       {deleteConfirmId && (
         <div className="office-modal-overlay" onClick={() => setDeleteConfirmId(null)}>
@@ -296,7 +501,7 @@ export function ProjectsTab({
               </button>
             </div>
             <p className="small muted">
-              Möchten Sie dieses Projekt wirklich löschen? Alle zugehörigen Zeiteinträge dieses Projekts werden dabei ebenfalls entfernt.
+              Möchten Sie dieses Projekt wirklich löschen? Alle zugehörigen Aufgaben, Auslagen und Zeiteinträge dieses Projekts werden dabei ebenfalls entfernt.
             </p>
             <div className="row gap" style={{ justifyContent: "flex-end" }}>
               <button className="button" onClick={() => setDeleteConfirmId(null)}>{o("common.cancel")}</button>

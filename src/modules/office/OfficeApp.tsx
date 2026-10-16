@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FolderKanban, Clock, FileText, Receipt, Users, Settings2, Plus, ArrowRight } from "lucide-react";
+import { FolderKanban, Clock, FileText, Receipt, Users, Settings2, Plus, ArrowRight, WalletCards } from "lucide-react";
 import type { Me } from "../../api";
 import { AppIcon, Link } from "../../components";
 import { navigate } from "../../router";
@@ -7,6 +7,7 @@ import { findApp } from "../../../shared/apps";
 import { useOfficeI18n } from "./i18n";
 import { ProjectsTab } from "./ProjectsTab";
 import { TimeTab } from "./TimeTab";
+import { ExpensesTab } from "./ExpensesTab";
 import { QuotesTab } from "./QuotesTab";
 import { InvoicesTab } from "./InvoicesTab";
 import { ClientsTab } from "./ClientsTab";
@@ -26,6 +27,7 @@ export default function OfficeApp({ me, path }: { me: Me; path: string }) {
 
   const SECTIONS: Record<string, string> = {
     zeiten: "time",
+    auslagen: "expenses",
     angebote: "quotes",
     rechnungen: "invoices",
     kunden: "clients",
@@ -37,6 +39,7 @@ export default function OfficeApp({ me, path }: { me: Me; path: string }) {
   // Context passing for cross-tab shortcuts
   const [selectedClientForProjects, setSelectedClientForProjects] = useState<string | undefined>(undefined);
   const [selectedProjectForTime, setSelectedProjectForTime] = useState<string | undefined>(undefined);
+  const [selectedProjectForExpenses, setSelectedProjectForExpenses] = useState<string | undefined>(undefined);
   const [initialInvoiceData, setInitialInvoiceData] = useState<{
     clientId: string;
     projectId: string | null;
@@ -46,6 +49,7 @@ export default function OfficeApp({ me, path }: { me: Me; path: string }) {
   const tabs = [
     { id: "projects", to: BASE, label: o("tabs.projects"), icon: FolderKanban },
     { id: "time", to: `${BASE}/zeiten`, label: o("tabs.time"), icon: Clock },
+    { id: "expenses", to: `${BASE}/auslagen`, label: o("tabs.expenses"), icon: WalletCards },
     { id: "quotes", to: `${BASE}/angebote`, label: o("tabs.quotes"), icon: FileText },
     { id: "invoices", to: `${BASE}/rechnungen`, label: o("tabs.invoices"), icon: Receipt },
     { id: "clients", to: `${BASE}/kunden`, label: o("tabs.clients"), icon: Users },
@@ -103,6 +107,10 @@ export default function OfficeApp({ me, path }: { me: Me; path: string }) {
             setSelectedProjectForTime(projId);
             navigate(`${BASE}/zeiten`);
           }}
+          onNavigateToExpenses={(projId) => {
+            setSelectedProjectForExpenses(projId);
+            navigate(`${BASE}/auslagen`);
+          }}
         />
       )}
 
@@ -111,6 +119,17 @@ export default function OfficeApp({ me, path }: { me: Me; path: string }) {
           me={me}
           initialProjectId={selectedProjectForTime}
           onNavigateToNewInvoiceWithItems={(clientId, projectId, items) => {
+            setInitialInvoiceData({ clientId, projectId, items });
+            navigate(`${BASE}/rechnungen`);
+          }}
+        />
+      )}
+
+      {tab === "expenses" && (
+        <ExpensesTab
+          isManager={isManager}
+          initialProjectId={selectedProjectForExpenses}
+          onNavigateToInvoiceWithItems={(clientId, projectId, items) => {
             setInitialInvoiceData({ clientId, projectId, items });
             navigate(`${BASE}/rechnungen`);
           }}

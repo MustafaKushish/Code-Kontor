@@ -838,6 +838,18 @@ export const en: Dict = {
       description: "Vehicle stock with photos, leads, test drives, sales contracts, trade-ins and workshop integration.",
       features: ["Vehicle stock", "Leads & enquiries", "Test drives", "Sales contracts", "Trade-ins"],
     },
+    handwerk: {
+      name: "Craft & Construction",
+      tagline: "Site records, measurements, reports & customer signature",
+      description: "Construction site records, mobile room measurements, daily work reports with hours and materials, digital touch signature and billing.",
+      features: ["Site records & projects", "Mobile measurements", "Work reports with hours", "Digital customer signature", "Labor & material split", "Checkout & invoicing"],
+    },
+    fitness: {
+      name: "Gym & Fitness Studio",
+      tagline: "Members, class schedule, front-desk check-in & plans",
+      description: "Member management with contracts, front-desk check-in with barcode scanner, live gym occupancy, weekly class schedule and POS integration.",
+      features: ["Front-desk check-in & barcode scan", "Live gym occupancy", "Member records & contracts", "Weekly class schedule", "Plans & 10-visit passes", "Membership contract & pass"],
+    },
     buero: {
       name: "Office & services",
       tagline: "Projects, time tracking, quotes and invoices",

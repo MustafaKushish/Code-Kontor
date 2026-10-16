@@ -838,6 +838,18 @@ export const tr: Dict = {
       description: "Fotoğraflı araç stoku, ilgilenenler, test sürüşleri, satış sözleşmeleri, takas ve servis bağlantısı.",
       features: ["Araç stoku", "İlgilenenler ve talepler", "Test sürüşleri", "Satış sözleşmeleri", "Takas"],
     },
+    handwerk: {
+      name: "Zanaat ve Şantiye",
+      tagline: "Şantiye dosyası, metraj, iş raporları ve müşteri imzası",
+      description: "Şantiye dosyaları, yerinde metraj hesabı, saat ve malzeme içeren çalışma raporları, dijital imza ve faturalama.",
+      features: ["Şantiye dosyaları", "Metraj hesabı", "Çalışma raporları", "Dijital müşteri imzası", "İşçilik ve malzeme ayrımı", "Faturalama"],
+    },
+    fitness: {
+      name: "Spor Salonu ve Dersler",
+      tagline: "Üye kartı, ders programı, danışma check-in ve tarifeler",
+      description: "Sözleşmeli üye yönetimi, barkodlu danışma check-in, canlı salon doluluğu, haftalık ders programı ve kasa entegrasyonu.",
+      features: ["Danışma check-in ve barkod", "Canlı salon doluluğu", "Üye kartoteki ve sözleşmeler", "Haftalık ders programı", "Tarifeler ve 10'luk kartlar", "Üyelik sözleşmesi ve kartı"],
+    },
     buero: {
       name: "Ofis ve hizmet",
       tagline: "Projeler, zaman takibi, teklifler ve faturalar",

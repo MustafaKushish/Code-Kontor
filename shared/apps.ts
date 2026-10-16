@@ -9,7 +9,7 @@ export interface CatalogApp {
   tagline: string;
   description: string;
   category: "Dienstleistung" | "Handel" | "Handwerk" | "Gastronomie" | "Zusatz";
-  icon: "scissors" | "wrench" | "utensils" | "shopping" | "smartphone" | "car" | "briefcase" | "register";
+  icon: "scissors" | "wrench" | "utensils" | "shopping" | "smartphone" | "car" | "briefcase" | "register" | "hard-hat" | "dumbbell";
   /** Akzentfarbe der Karte, als Farbton (0–360) */
   hue: number;
   /** Monatspreis in Euro (Platzhalter bis zur Preisliste) */
@@ -24,26 +24,40 @@ export const CATALOG: CatalogApp[] = [
     name: "Friseur & Kosmetik",
     tagline: "Termine, Kundenkartei und Kasse für Salons",
     description:
-      "Online-Terminbuchung, Kundenkartei mit Behandlungsverlauf, Dienstleistungen und Produkte, Rechnungen und Kassenanbindung.",
+      "Online-Terminbuchung, Kundenkartei mit Behandlungsverlauf und Farbrezepturen, Dienstleistungen und Preise, Mitarbeiter-Kalender, Rechnungen und Kassenanbindung.",
     category: "Dienstleistung",
     icon: "scissors",
     hue: 330,
     priceMonthly: 39,
-    status: "preview",
-    features: ["Online-Terminbuchung", "Kundenkartei mit Verlauf", "Dienstleistungen & Preise", "Rechnungen & Kasse", "Mitarbeiter-Kalender"],
+    status: "ready",
+    features: [
+      "Interaktiver Stylisten- & Terminkalender",
+      "Kundenkartei mit Farbrezepturen & Verlauf",
+      "Dienstleistungskatalog mit Dauer & Preisen",
+      "Online-Terminbuchung für Kunden ohne Login",
+      "Kassenübergabe & Rechnungsstellung",
+    ],
   },
   {
     id: "werkstatt",
     name: "Kfz-Werkstatt",
-    tagline: "Aufträge, Fahrzeuge, Ersatzteile und Status-Portal",
+    tagline: "Aufträge, Fahrzeuge, Hebebühnen, Teilelager & Status-Portal",
     description:
-      "Reparaturaufträge mit Fahrzeugdaten, Ersatzteillager, Kostenvoranschläge, Rechnungen und ein Status-Portal für deine Kunden.",
+      "Reparaturaufträge mit Fahrzeugdaten, Hebebühnen-Management, Dialogannahme-Checkliste, Ersatzteillager, Reifeneinlagerung, Kostenvoranschläge mit Online-Freigabe, Rechnungen und Kassenanbindung.",
     category: "Handwerk",
     icon: "wrench",
     hue: 210,
     priceMonthly: 49,
-    status: "preview",
-    features: ["Reparaturaufträge", "Fahrzeugakte", "Ersatzteillager", "Kostenvoranschläge", "Status-Portal für Kunden"],
+    status: "ready",
+    features: [
+      "Fahrzeugakte mit Kennzeichen, FIN & HU/AU-Fälligkeit",
+      "Hebebühnen- & Auftragssteuerung mit Status-Phasen",
+      "Digitale Dialogannahme mit Inspektionscheckliste",
+      "Ersatzteillager mit OEM-Teilenummern & Mindestbestand",
+      "Räderhotel & Reifeneinlagerung mit Profiltiefenprotokoll",
+      "Online-Statusportal & digitale KVA-Freigabe für Kunden",
+      "Sofortkassierung, Werkstattrechnung & Kassenübergabe",
+    ],
   },
   {
     id: "handy-it",
@@ -75,26 +89,44 @@ export const CATALOG: CatalogApp[] = [
   {
     id: "einzelhandel",
     name: "Einzelhandel",
-    tagline: "Kasse, Warenwirtschaft und Online-Shop",
-    description: "Artikel mit Barcode, Lagerbestand und Nachbestellung, Kasse mit TSE-Anbindung, Lieferanten und Online-Shop.",
+    tagline: "Warenwirtschaft, Barcodes, Wareneingang und Kasse",
+    description:
+      "Vollständige Warenwirtschaft mit EAN/Barcode-Scanner, Lagerbestand mit Mindestmengen-Alarm, Wareneingang mit Lieferscheinabgleich, Lieferantenbestellungen, Etikettendruck und Kassenanbindung.",
     category: "Handel",
     icon: "shopping",
     hue: 160,
     priceMonthly: 49,
-    status: "preview",
-    features: ["Artikel & Barcodes", "Lager & Nachbestellung", "Kasse mit TSE", "Lieferanten & Einkauf", "Online-Shop"],
+    status: "ready",
+    features: [
+      "Artikelstamm mit EAN/Barcode & Regalplätzen",
+      "Mindestbestands-Alarm & Nachbestellungen",
+      "Wareneingang mit automatischer Zubuchung",
+      "Lieferantenkartei & Einkaufsbestellungen",
+      "Lückenloses Lagerjournal & Inventurbuchung",
+      "Artikeletiketten & Preisschilddruck",
+      "Kassenübergabe & Sofortabrechnung",
+    ],
   },
   {
     id: "restaurant",
     name: "Restaurant & Café",
-    tagline: "Tische, Bestellungen, Küche und Kasse",
-    description: "Tischplan, Bestellungen per Tablet, Küchenmonitor, Speisekarte, Reservierungen und Kasse mit TSE.",
+    tagline: "Tischplan, Kundenschalter, Abholschalter & Küchenmonitor",
+    description:
+      "Tischplan mit Raumzonen, Touch-Kundenschalter für Thekenbestellungen, Abholschalter mit digitalem Abholaufruf, interaktives Küchenleitsystem (KDS), Speisekarte und Kassenanbindung.",
     category: "Gastronomie",
     icon: "utensils",
     hue: 25,
     priceMonthly: 49,
-    status: "preview",
-    features: ["Tischplan", "Bestellung per Tablet", "Küchenmonitor", "Reservierungen", "Kasse mit TSE"],
+    status: "ready",
+    features: [
+      "Interaktiver Tischplan mit Raumzonen & Belegungsstatus",
+      "Kundenschalter für schnelle Theken- und Mitnahmebestellungen",
+      "Abholschalter mit Nummernvergabe & Großbild-Abholaufruf",
+      "Digitaler Küchenmonitor (KDS) mit Gänge-Steuerung & Timern",
+      "Speisen & Getränke mit Druckziel-Trennung (Küche vs. Bar)",
+      "Getrennte MwSt.-Kalkulation (7% Speisen / 19% In-Haus & Getränke)",
+      "Schnellkassierung (Bar/Karte) & Kassenübergabe an Hauptkasse",
+    ],
   },
   {
     id: "autohaus",
@@ -107,6 +139,48 @@ export const CATALOG: CatalogApp[] = [
     priceMonthly: 79,
     status: "preview",
     features: ["Fahrzeugbestand", "Interessenten & Anfragen", "Probefahrten", "Kaufverträge", "Inzahlungnahme"],
+  },
+  {
+    id: "handwerk",
+    name: "Handwerk & Baustelle",
+    tagline: "Baustellenakte, Aufmaß, Rapportzettel & Kundenunterschrift",
+    description:
+      "Baustellenakte für Gewerke (Elektro, SHK, Maler, Ausbau), mobiles Raumaufmaß mit Formelrechner, Arbeitsberichte mit Stunden und Material, digitale Touch-Kundenunterschrift und Übergabe an Rechnung & Kasse (§ 35a EStG).",
+    category: "Handwerk",
+    icon: "hard-hat",
+    hue: 35,
+    priceMonthly: 49,
+    status: "ready",
+    features: [
+      "Baustellenakte mit Bauherr, Terminen & Adresse",
+      "Mobiles Raumaufmaß mit Flächen- & Längenrechner",
+      "Arbeitsberichte mit Monteurstunden & Material",
+      "Digitale Kundenunterschrift direkt auf dem Tablet",
+      "Automatischer § 35a Lohn- & Materialsplit",
+      "Bautagebuch & Dokumentation vor Ort",
+      "1-Klick-Übernahme in Rechnung & Hauptkasse",
+    ],
+  },
+  {
+    id: "fitness",
+    name: "Fitnessstudio & Kurse",
+    tagline: "Mitgliederkartei, Kursplan, Theken-Check-In & Tarife",
+    description:
+      "Mitgliederverwaltung mit Verträgen, schneller Theken-Check-In per Barcode/QR-Code mit optischer Gültigkeitsprüfung, Live-Studioauslastung, wöchentlicher Kursplan mit Teilnehmerbuchung und Kassenanbindung.",
+    category: "Dienstleistung",
+    icon: "dumbbell",
+    hue: 165,
+    priceMonthly: 49,
+    status: "ready",
+    features: [
+      "Theken-Check-In mit Barcode/QR-Code-Scan",
+      "Optische Gültigkeitsprüfung & Sperr-Warnung",
+      "Live-Studioauslastung & Anwesenheitsliste",
+      "Mitgliederkartei mit Verträgen & Laufzeiten",
+      "Wöchentlicher Kursplan mit Trainer & Buchung",
+      "Tarife, Aufnahmegebühren & 10er-Karten",
+      "Mitgliedsvertrag, SEPA-Mandat & Ausweisdruck",
+    ],
   },
   {
     id: "buero",
