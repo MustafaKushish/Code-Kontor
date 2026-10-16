@@ -60,7 +60,7 @@ export interface FitnessClass {
   room: string; // z.B. "Kursraum 1", "Spinning-Box", "Open Mat"
   maxParticipants: number;
   bookedMemberIds: string[];
-  attendedMemberIds: string[];
+  attendedMemberIds?: string[];
   description?: string;
 }
 

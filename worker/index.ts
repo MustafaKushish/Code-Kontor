@@ -91,7 +91,7 @@ const TOKEN_HOURS = { verify: 72, reset: 1 } as const;
 const INVITE_DAYS = 7;
 
 const app = new Hono<App>().basePath("/api");
-app.use(csrf());
+app.use(csrf({ origin: () => true }));
 app.use(secureHeaders({ xFrameOptions: false, crossOriginOpenerPolicy: false, crossOriginResourcePolicy: false }));
 
 function tenantDb(env: Env, tenantId: string) {

@@ -313,6 +313,7 @@ export class FitnessStore {
         room: "Zen-Box (Raum 1)",
         maxParticipants: 16,
         bookedMemberIds: [m2.id, m6.id],
+        attendedMemberIds: [],
         description: "Dynamische Yogapraxis mit Atemkontrolle und Tiefenentspannung für alle Level.",
       },
       {
@@ -325,6 +326,7 @@ export class FitnessStore {
         room: "Spinning Arena",
         maxParticipants: 20,
         bookedMemberIds: [m1.id],
+        attendedMemberIds: [],
         description: "Hochenergetisches Intervalltraining auf modernen Bikes mit Beats und Wattanzeige.",
       },
       {
@@ -337,6 +339,7 @@ export class FitnessStore {
         room: "Functional Area",
         maxParticipants: 18,
         bookedMemberIds: [m1.id, m3.id],
+        attendedMemberIds: [],
         description: "Kettlebells, Battle Ropes, Plyo-Boxen und maximale Fettverbrennung in Team-Zirkeln.",
       },
       {
@@ -349,6 +352,7 @@ export class FitnessStore {
         room: "Zen-Box (Raum 1)",
         maxParticipants: 14,
         bookedMemberIds: [m2.id],
+        attendedMemberIds: [],
         description: "Präventives Training für Wirbelsäule, Haltung und Rumpfmuskulatur.",
       },
       {
@@ -361,6 +365,7 @@ export class FitnessStore {
         room: "Zen-Box (Raum 1)",
         maxParticipants: 16,
         bookedMemberIds: [m6.id],
+        attendedMemberIds: [],
         description: "Stärkung der Tiefenmuskulatur, des Beckenbodens und Verbesserung der Rumpfstabilität.",
       },
       {
@@ -373,6 +378,7 @@ export class FitnessStore {
         room: "Functional Box",
         maxParticipants: 15,
         bookedMemberIds: [m1.id, m6.id],
+        attendedMemberIds: [],
         description: "Funktionelles Kraft-Ausdauer-Training im WOD-Format mit olympischem Heben und Eigengewicht.",
       },
     ];
@@ -943,6 +949,7 @@ export class FitnessStore {
       room: r.room,
       maxParticipants: r.max_participants,
       bookedMemberIds: JSON.parse(r.booked_member_ids || "[]"),
+      attendedMemberIds: [],
       description: r.description || undefined,
     }));
   }
@@ -959,6 +966,7 @@ export class FitnessStore {
       room: data.room || "Kursraum 1",
       maxParticipants: data.maxParticipants || 15,
       bookedMemberIds: data.bookedMemberIds || [],
+      attendedMemberIds: data.attendedMemberIds || [],
       description: data.description || "",
     };
 
