@@ -1,3 +1,4 @@
+import { berlinYear, nextNumber } from "../numbers";
 import type {
   CraftMeasurement,
   CraftProject,
@@ -374,9 +375,8 @@ export class CraftStore {
     if (!projectNumber && existing.length > 0) {
       projectNumber = existing[0].project_number;
     } else if (!projectNumber) {
-      const year = new Date().getFullYear();
-      const count = this.sql.exec<{ count: number }>("SELECT COUNT(*) AS count FROM craft_projects").toArray()[0]?.count || 0;
-      projectNumber = `BV-${year}-${String(count + 1).padStart(2, "0")}`;
+      const prefix = `BV-${berlinYear()}-`;
+      projectNumber = `${prefix}${String(nextNumber(this.sql, "craft_projects", "project_number", prefix)).padStart(2, "0")}`;
     }
 
     const trade = project.trade || "Allgemein";
@@ -560,8 +560,7 @@ export class CraftStore {
     const project = this.getProject(data.projectId);
     const id = "rep-" + Math.random().toString(36).slice(2, 9);
 
-    const count = this.sql.exec<{ count: number }>("SELECT COUNT(*) AS count FROM craft_reports").toArray()[0]?.count || 0;
-    const reportNumber = `RAP-${100 + count + 1}`;
+    const reportNumber = `RAP-${nextNumber(this.sql, "craft_reports", "report_number", "RAP-", 101)}`;
 
     const items: CraftReportItem[] = data.items || [];
     // Falls keine Items übergeben wurden, mindestens Lohnposition generieren

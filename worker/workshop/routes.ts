@@ -1,4 +1,5 @@
 import { Hono, type Context } from "hono";
+import { createMiddleware } from "hono/factory";
 import type { Env } from "../index";
 import { tenantStub, type ModuleResult } from "../tenant";
 import type { WorkshopStore } from "./store";
@@ -30,9 +31,17 @@ function store(env: Env, tenantId: string): Remote {
   });
 }
 
+// Deutscher Text als Rückfall, bis die Werkstatt eigene Übersetzungen hat
+const ERROR_TEXT: Record<string, string> = {
+  plateTaken: "Dieses Kennzeichen ist schon angelegt.",
+  partNumberTaken: "Diese Teilenummer gibt es schon.",
+  orderNotFound: "Auftrag nicht gefunden.",
+  vehicleNotFound: "Fahrzeug nicht gefunden.",
+};
+
 function moduleError(c: Ctx, code: string) {
-  const status = code.endsWith("NotFound") ? 404 : 400;
-  return c.json({ code: `workshop.${code}`, error: code }, status);
+  const status = code.endsWith("NotFound") ? 404 : code.endsWith("Taken") ? 409 : 400;
+  return c.json({ code: `workshop.${code}`, error: ERROR_TEXT[code] ?? code }, status);
 }
 
 async function readBody(c: Ctx): Promise<Record<string, unknown>> {
@@ -43,6 +52,12 @@ async function readBody(c: Ctx): Promise<Record<string, unknown>> {
     return {};
   }
 }
+
+/** Preise, Stammdaten, Einstellungen und Löschen nur für Inhaber und Admins; Mitarbeiter arbeiten nur damit. */
+const managers = createMiddleware<WorkshopEnv>(async (c, next) => {
+  if (c.get("user").role === "staff") return fail(c, "forbidden", 403);
+  await next();
+});
 
 export const workshopRoutes = new Hono<WorkshopEnv>();
 
@@ -116,7 +131,7 @@ workshopRoutes.post("/orders/:id/checkout", async (c) => {
   return c.json(res.value);
 });
 
-workshopRoutes.delete("/orders/:id", async (c) => {
+workshopRoutes.delete("/orders/:id", managers, async (c) => {
   const user = c.get("user");
   const res = await store(c.env, user.tenantId).deleteOrder(c.req.param("id"));
   if (!res.ok) return moduleError(c, res.code);
@@ -149,7 +164,7 @@ workshopRoutes.post("/vehicles", async (c) => {
   return c.json(res.value);
 });
 
-workshopRoutes.delete("/vehicles/:id", async (c) => {
+workshopRoutes.delete("/vehicles/:id", managers, async (c) => {
   const user = c.get("user");
   const res = await store(c.env, user.tenantId).deleteVehicle(c.req.param("id"));
   if (!res.ok) return moduleError(c, res.code);
@@ -164,7 +179,7 @@ workshopRoutes.get("/parts", async (c) => {
   return c.json(res.value);
 });
 
-workshopRoutes.post("/parts", async (c) => {
+workshopRoutes.post("/parts", managers, async (c) => {
   const user = c.get("user");
   const body = await readBody(c);
   if (!body.partNumber || !body.name) {
@@ -184,7 +199,7 @@ workshopRoutes.post("/parts/:id/stock", async (c) => {
   return c.json(res.value);
 });
 
-workshopRoutes.delete("/parts/:id", async (c) => {
+workshopRoutes.delete("/parts/:id", managers, async (c) => {
   const user = c.get("user");
   const res = await store(c.env, user.tenantId).deletePart(c.req.param("id"));
   if (!res.ok) return moduleError(c, res.code);
@@ -210,7 +225,7 @@ workshopRoutes.post("/tires", async (c) => {
   return c.json(res.value);
 });
 
-workshopRoutes.delete("/tires/:id", async (c) => {
+workshopRoutes.delete("/tires/:id", managers, async (c) => {
   const user = c.get("user");
   const res = await store(c.env, user.tenantId).deleteTireStorage(c.req.param("id"));
   if (!res.ok) return moduleError(c, res.code);

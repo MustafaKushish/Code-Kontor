@@ -1,4 +1,5 @@
 import { Hono, type Context } from "hono";
+import { createMiddleware } from "hono/factory";
 import type { Env } from "../index";
 import { tenantStub, type ModuleResult } from "../tenant";
 import type { FitnessStore } from "./store";
@@ -41,6 +42,12 @@ async function readBody(c: Ctx): Promise<Record<string, unknown>> {
     return {};
   }
 }
+
+/** Preise, Stammdaten, Einstellungen und Löschen nur für Inhaber und Admins; Mitarbeiter arbeiten nur damit. */
+const managers = createMiddleware<FitnessEnv>(async (c, next) => {
+  if (c.get("user").role === "staff") return fail(c, "forbidden", 403);
+  await next();
+});
 
 export const fitnessRoutes = new Hono<FitnessEnv>();
 
@@ -122,7 +129,7 @@ fitnessRoutes.put("/members/:id", async (c) => {
   return c.json(res.value);
 });
 
-fitnessRoutes.delete("/members/:id", async (c) => {
+fitnessRoutes.delete("/members/:id", managers, async (c) => {
   const user = c.get("user");
   const id = c.req.param("id");
   const res = await store(c.env, user.tenantId).deleteMember(id);
@@ -139,7 +146,7 @@ fitnessRoutes.get("/classes", async (c) => {
   return c.json(res.value);
 });
 
-fitnessRoutes.post("/classes", async (c) => {
+fitnessRoutes.post("/classes", managers, async (c) => {
   const user = c.get("user");
   const body = await readBody(c);
   const res = await store(c.env, user.tenantId).createClass(body);
@@ -147,7 +154,7 @@ fitnessRoutes.post("/classes", async (c) => {
   return c.json(res.value, 201);
 });
 
-fitnessRoutes.put("/classes/:id", async (c) => {
+fitnessRoutes.put("/classes/:id", managers, async (c) => {
   const user = c.get("user");
   const id = c.req.param("id");
   const body = await readBody(c);
@@ -156,7 +163,7 @@ fitnessRoutes.put("/classes/:id", async (c) => {
   return c.json(res.value);
 });
 
-fitnessRoutes.delete("/classes/:id", async (c) => {
+fitnessRoutes.delete("/classes/:id", managers, async (c) => {
   const user = c.get("user");
   const id = c.req.param("id");
   const res = await store(c.env, user.tenantId).deleteClass(id);
@@ -192,7 +199,7 @@ fitnessRoutes.get("/plans", async (c) => {
   return c.json(res.value);
 });
 
-fitnessRoutes.post("/plans", async (c) => {
+fitnessRoutes.post("/plans", managers, async (c) => {
   const user = c.get("user");
   const body = await readBody(c);
   const res = await store(c.env, user.tenantId).createPlan(body);
@@ -200,7 +207,7 @@ fitnessRoutes.post("/plans", async (c) => {
   return c.json(res.value, 201);
 });
 
-fitnessRoutes.put("/plans/:id", async (c) => {
+fitnessRoutes.put("/plans/:id", managers, async (c) => {
   const user = c.get("user");
   const id = c.req.param("id");
   const body = await readBody(c);

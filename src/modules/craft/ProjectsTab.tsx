@@ -27,6 +27,7 @@ import type {
 import { currency as companyCurrency, currencySymbol } from "../../money";
 
 interface ProjectsTabProps {
+  isManager: boolean;
   projects: CraftProject[];
   onRefresh: () => void;
   onSelectProjectForMeasurement?: (projectId: string) => void;
@@ -38,6 +39,7 @@ export function ProjectsTab({
   onRefresh,
   onSelectProjectForMeasurement,
   onSelectProjectForReport,
+  isManager,
 }: ProjectsTabProps) {
   const [selectedStatus, setSelectedStatus] = useState<string>("alle");
   const [selectedTrade, setSelectedTrade] = useState<string>("alle");
@@ -270,14 +272,16 @@ export function ProjectsTab({
                     >
                       <Pencil size={17} />
                     </button>
-                    <button
-                      onClick={() => handleDelete(project.id)}
-                      className="icon-button danger"
-                      title="Löschen"
-                      aria-label="Löschen"
-                    >
-                      <Trash2 size={17} />
-                    </button>
+                    {isManager && (
+                      <button
+                        onClick={() => handleDelete(project.id)}
+                        className="icon-button danger"
+                        title="Löschen"
+                        aria-label="Löschen"
+                      >
+                        <Trash2 size={17} />
+                      </button>
+                    )}
                   </div>
                 </div>
               </article>

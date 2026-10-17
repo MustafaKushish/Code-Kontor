@@ -17,6 +17,7 @@ import "./fitness.css";
 import { currency as companyCurrency } from "../../money";
 
 export default function FitnessApp({ me, path }: { me: Me; path: string }) {
+  const isManager = me.user.role !== "staff";
   const app = findApp("fitness")!;
   const [activeTab, setActiveTab] = useState<"checkin" | "members" | "classes" | "plans">("checkin");
   const [stats, setStats] = useState<FitnessStats>({
@@ -80,7 +81,8 @@ export default function FitnessApp({ me, path }: { me: Me; path: string }) {
     { id: "checkin" as const, label: "Theken-Check-In", icon: UserCheck },
     { id: "members" as const, label: `Mitgliederkartei (${stats.totalMembersCount})`, icon: Users },
     { id: "classes" as const, label: "Wochenkursplan", icon: Calendar },
-    { id: "plans" as const, label: "Tarife & 10er-Karten", icon: CreditCard },
+    // Tarife pflegen nur Inhaber und Admins (prüft auch der Server)
+    ...(isManager ? [{ id: "plans" as const, label: "Tarife & 10er-Karten", icon: CreditCard }] : []),
   ];
 
   return (
@@ -153,12 +155,13 @@ export default function FitnessApp({ me, path }: { me: Me; path: string }) {
           onOpenContractPrint={(m, p) => setPrintState({ member: m, plan: p, type: "contract" })}
           onOpenCardPrint={(m, p) => setPrintState({ member: m, plan: p, type: "card" })}
           onRefreshStats={() => loadData(true)}
+          isManager={isManager}
         />
       )}
 
-      {activeTab === "classes" && <ClassesTab onRefreshStats={() => loadData(true)} />}
+      {activeTab === "classes" && <ClassesTab onRefreshStats={() => loadData(true)} isManager={isManager} />}
 
-      {activeTab === "plans" && <PlansTab plans={plans} onRefreshPlans={() => loadData(true)} />}
+      {activeTab === "plans" && isManager && <PlansTab plans={plans} onRefreshPlans={() => loadData(true)} />}
 
       {/* --- DRUCKANSICHT MODAL --- */}
       {printState && (

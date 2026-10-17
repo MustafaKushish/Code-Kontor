@@ -29,13 +29,14 @@ import { RestaurantPrint } from "./RestaurantPrint";
 import { currency as companyCurrency } from "../../money";
 
 interface TablesTabProps {
+  isManager: boolean;
   tables: RestaurantTable[];
   menu: MenuItem[];
   orders: RestaurantOrder[];
   onRefresh: () => void;
 }
 
-export function TablesTab({ tables, menu, orders, onRefresh }: TablesTabProps) {
+export function TablesTab({ tables, menu, orders, isManager, onRefresh }: TablesTabProps) {
   const [selectedArea, setSelectedArea] = useState<TableArea | "alle">("alle");
   const [selectedTable, setSelectedTable] = useState<RestaurantTable | null>(null);
   const [isEditTableModalOpen, setIsEditTableModalOpen] = useState(false);
@@ -210,7 +211,7 @@ export function TablesTab({ tables, menu, orders, onRefresh }: TablesTabProps) {
           ))}
         </div>
 
-        <button
+        {isManager && <button
           onClick={() => {
             setEditingTable({
               area: selectedArea === "alle" ? "innen" : selectedArea,
@@ -223,7 +224,7 @@ export function TablesTab({ tables, menu, orders, onRefresh }: TablesTabProps) {
         >
           <Plus size={18} />
           Neuer Tisch
-        </button>
+        </button>}
       </div>
 
       <div className="restaurant-tables">

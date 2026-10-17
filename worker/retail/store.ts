@@ -194,7 +194,8 @@ export class RetailStore {
           input.purchasePriceCents ?? existing.purchasePriceCents,
           input.sellingPriceCents ?? existing.sellingPriceCents,
           input.vatRate ?? existing.vatRate,
-          input.stockQty ?? existing.stockQty,
+          // Bestand ändert sich nur über Buchungen (adjustStock): das Formular hat einen alten Stand
+          existing.stockQty,
           input.minStockQty ?? existing.minStockQty,
           input.unit ?? existing.unit,
           input.location ?? existing.location ?? "",
@@ -202,12 +203,6 @@ export class RetailStore {
           now,
           id
         );
-
-        // Protokolliere Bestandsveränderung, falls Bestand manuell überschrieben wurde
-        if (input.stockQty !== undefined && input.stockQty !== existing.stockQty) {
-          const delta = input.stockQty - existing.stockQty;
-          this.logStockMovement(id, existing.name, delta, existing.stockQty, input.stockQty, "correction", "", "Manuelle Artikelbearbeitung");
-        }
 
         return this.getProduct(id)!;
       }

@@ -1,4 +1,5 @@
 import { Hono, type Context } from "hono";
+import { createMiddleware } from "hono/factory";
 import type { Env } from "../index";
 import { tenantStub, type ModuleResult } from "../tenant";
 import type { CraftStore } from "./store";
@@ -41,6 +42,12 @@ async function readBody(c: Ctx): Promise<Record<string, unknown>> {
     return {};
   }
 }
+
+/** Preise, Stammdaten, Einstellungen und Löschen nur für Inhaber und Admins; Mitarbeiter arbeiten nur damit. */
+const managers = createMiddleware<CraftEnv>(async (c, next) => {
+  if (c.get("user").role === "staff") return fail(c, "forbidden", 403);
+  await next();
+});
 
 export const craftRoutes = new Hono<CraftEnv>();
 
@@ -88,7 +95,7 @@ craftRoutes.post("/projects", async (c) => {
   return c.json(res.value);
 });
 
-craftRoutes.delete("/projects/:id", async (c) => {
+craftRoutes.delete("/projects/:id", managers, async (c) => {
   const user = c.get("user");
   const res = await store(c.env, user.tenantId).deleteProject(c.req.param("id"));
   if (!res.ok) return moduleError(c, res.code);
@@ -115,7 +122,7 @@ craftRoutes.post("/measurements", async (c) => {
   return c.json(res.value);
 });
 
-craftRoutes.delete("/measurements/:id", async (c) => {
+craftRoutes.delete("/measurements/:id", managers, async (c) => {
   const user = c.get("user");
   const res = await store(c.env, user.tenantId).deleteMeasurement(c.req.param("id"));
   if (!res.ok) return moduleError(c, res.code);
@@ -173,7 +180,7 @@ craftRoutes.post("/reports/:id/checkout", async (c) => {
   return c.json(res.value);
 });
 
-craftRoutes.delete("/reports/:id", async (c) => {
+craftRoutes.delete("/reports/:id", managers, async (c) => {
   const user = c.get("user");
   const res = await store(c.env, user.tenantId).deleteReport(c.req.param("id"));
   if (!res.ok) return moduleError(c, res.code);

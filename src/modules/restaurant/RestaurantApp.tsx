@@ -32,6 +32,7 @@ import "./restaurant.css";
 import { currency as companyCurrency } from "../../money";
 
 export default function RestaurantApp({ me, path }: { me: Me; path: string }) {
+  const isManager = me.user.role !== "staff";
   const { appText } = useI18n();
   const app = findApp("restaurant")!;
   const [activeTab, setActiveTab] = useState<"tische" | "theke" | "abholung" | "kueche" | "speisekarte">("tische");
@@ -86,7 +87,8 @@ export default function RestaurantApp({ me, path }: { me: Me; path: string }) {
     { id: "theke" as const, label: "Kundenschalter (Theke)", icon: ShoppingCart, count: 0 },
     { id: "abholung" as const, label: "Abholschalter", icon: ShoppingBag, count: stats.waitingPickupCount },
     { id: "kueche" as const, label: "Küchenmonitor (KDS)", icon: Flame, count: stats.activeKitchenTicketsCount },
-    { id: "speisekarte" as const, label: "Speisekarte & Preise", icon: BookOpen, count: 0 },
+    // Speisekarte und Preise pflegen nur Inhaber und Admins (prüft auch der Server)
+    ...(isManager ? [{ id: "speisekarte" as const, label: "Speisekarte & Preise", icon: BookOpen, count: 0 }] : []),
   ];
 
   if (loading) {
@@ -171,6 +173,7 @@ export default function RestaurantApp({ me, path }: { me: Me; path: string }) {
             tables={tables}
             menu={menu}
             orders={orders}
+            isManager={isManager}
             onRefresh={() => loadData(true)}
           />
         )}
@@ -198,7 +201,7 @@ export default function RestaurantApp({ me, path }: { me: Me; path: string }) {
           />
         )}
 
-        {activeTab === "speisekarte" && (
+        {activeTab === "speisekarte" && isManager && (
           <MenuTab
             menu={menu}
             onRefresh={() => loadData(true)}

@@ -32,6 +32,7 @@ interface OrderDetailsModalProps {
   order: WorkshopOrder;
   parts: SparePart[];
   tenantId: string;
+  isManager: boolean;
   hasPos: boolean;
   onClose: () => void;
   onUpdated: (updated: WorkshopOrder) => void;
@@ -65,6 +66,7 @@ export function OrderDetailsModal({
   parts,
   tenantId,
   hasPos,
+  isManager,
   onClose,
   onUpdated,
   onDeleted,
@@ -579,7 +581,9 @@ export function OrderDetailsModal({
 
           {/* Fuß mit Löschen-Sicherheit */}
           <div className="workshop-dialog-foot">
-            {deleteConfirm ? (
+            {!isManager ? (
+              <span />
+            ) : deleteConfirm ? (
               <div className="row wrap gap">
                 <strong className="error">Unwiderruflich löschen?</strong>
                 <button onClick={handleDelete} className="button danger small-button">

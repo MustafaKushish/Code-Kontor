@@ -1,3 +1,4 @@
+import { berlinYear, nextNumber } from "../numbers";
 import type {
   InspectionItem,
   OrderPosition,
@@ -719,8 +720,8 @@ export class WorkshopStore {
       }
 
       // 2. Auftragsnummer generieren
-      const count = this.sql.exec<{ c: number }>("SELECT COUNT(*) AS c FROM workshop_orders").one().c;
-      const orderNum = `WO-${new Date().getFullYear()}-${String(count + 43).padStart(4, "0")}`;
+      const prefix = `WO-${berlinYear()}-`;
+      const orderNum = `${prefix}${String(nextNumber(this.sql, "workshop_orders", "order_number", prefix)).padStart(4, "0")}`;
 
       const id = crypto.randomUUID();
       // Nicht erratbar: kein Kennzeichen im Link, 32 Zeichen Zufall
@@ -960,7 +961,7 @@ export class WorkshopStore {
         notes: string;
         created_at: string;
       }>("SELECT * FROM workshop_vehicles WHERE id = ?", id)
-      .one();
+      .toArray()[0];
 
     if (!r) throw new WorkshopError("vehicleNotFound");
     return {
@@ -989,6 +990,8 @@ export class WorkshopStore {
     return this.tx(() => {
       const cleanPlate = data.licensePlate.trim().toUpperCase();
       let id = data.id;
+      // Kennzeichen sind eindeutig; sonst scheitert das Speichern mit einem Datenbankfehler
+      if (this.sql.exec("SELECT 1 FROM workshop_vehicles WHERE license_plate = ? AND id <> ?", cleanPlate, id ?? "").toArray().length) throw new WorkshopError("plateTaken");
 
       if (id) {
         this.sql.exec(
@@ -1092,6 +1095,7 @@ export class WorkshopStore {
   savePart(data: Partial<SparePart> & { partNumber: string; name: string }): SparePart {
     return this.tx(() => {
       let id = data.id;
+      if (this.sql.exec("SELECT 1 FROM workshop_parts WHERE part_number = ? AND id <> ?", data.partNumber, id ?? "").toArray().length) throw new WorkshopError("partNumberTaken");
       if (id) {
         this.sql.exec(
           `UPDATE workshop_parts SET

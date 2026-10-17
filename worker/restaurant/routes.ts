@@ -1,4 +1,5 @@
 import { Hono, type Context } from "hono";
+import { createMiddleware } from "hono/factory";
 import type { Env } from "../index";
 import { tenantStub, type ModuleResult } from "../tenant";
 import type { RestaurantStore } from "./store";
@@ -43,6 +44,12 @@ async function readBody(c: Ctx): Promise<Record<string, unknown>> {
   }
 }
 
+/** Preise, Stammdaten, Einstellungen und Löschen nur für Inhaber und Admins; Mitarbeiter arbeiten nur damit. */
+const managers = createMiddleware<RestaurantEnv>(async (c, next) => {
+  if (c.get("user").role === "staff") return fail(c, "forbidden", 403);
+  await next();
+});
+
 export const restaurantRoutes = new Hono<RestaurantEnv>();
 
 // App-Buchung prüfen für interne Routen
@@ -71,7 +78,7 @@ restaurantRoutes.get("/tables", async (c) => {
   return c.json(res.value);
 });
 
-restaurantRoutes.post("/tables", async (c) => {
+restaurantRoutes.post("/tables", managers, async (c) => {
   const user = c.get("user");
   const body = await readBody(c);
   if (!body.tableNumber || !body.name) return fail(c, "checkFields", 400);
@@ -81,7 +88,7 @@ restaurantRoutes.post("/tables", async (c) => {
   return c.json(res.value);
 });
 
-restaurantRoutes.delete("/tables/:id", async (c) => {
+restaurantRoutes.delete("/tables/:id", managers, async (c) => {
   const user = c.get("user");
   const res = await store(c.env, user.tenantId).deleteTable(c.req.param("id"));
   if (!res.ok) return moduleError(c, res.code);
@@ -96,7 +103,7 @@ restaurantRoutes.get("/menu", async (c) => {
   return c.json(res.value);
 });
 
-restaurantRoutes.post("/menu", async (c) => {
+restaurantRoutes.post("/menu", managers, async (c) => {
   const user = c.get("user");
   const body = await readBody(c);
   if (!body.itemNumber || !body.name || typeof body.priceGross !== "number") {
@@ -107,7 +114,7 @@ restaurantRoutes.post("/menu", async (c) => {
   return c.json(res.value);
 });
 
-restaurantRoutes.delete("/menu/:id", async (c) => {
+restaurantRoutes.delete("/menu/:id", managers, async (c) => {
   const user = c.get("user");
   const res = await store(c.env, user.tenantId).deleteMenuItem(c.req.param("id"));
   if (!res.ok) return moduleError(c, res.code);

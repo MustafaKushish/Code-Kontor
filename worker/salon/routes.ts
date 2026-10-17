@@ -1,4 +1,5 @@
 import { Hono, type Context } from "hono";
+import { createMiddleware } from "hono/factory";
 import type { Env } from "../index";
 import { tenantStub, type ModuleResult } from "../tenant";
 import type { SalonStore } from "./store";
@@ -45,6 +46,12 @@ async function readBody(c: Ctx): Promise<Record<string, unknown>> {
   }
 }
 
+/** Preise, Stammdaten, Einstellungen und Löschen nur für Inhaber und Admins; Mitarbeiter arbeiten nur damit. */
+const managers = createMiddleware<SalonEnv>(async (c, next) => {
+  if (c.get("user").role === "staff") return fail(c, "forbidden", 403);
+  await next();
+});
+
 export const salonRoutes = new Hono<SalonEnv>();
 
 // Überprüfen, ob das Modul „friseur“ gebucht ist
@@ -66,14 +73,14 @@ salonRoutes.get("/services", async (c) => {
   return c.json({ services: res.value });
 });
 
-salonRoutes.post("/services", async (c) => {
+salonRoutes.post("/services", managers, async (c) => {
   const body = await readBody(c);
   const res = await store(c.env, c.get("user").tenantId).saveService(body);
   if (!res.ok) return moduleError(c, res.code);
   return c.json({ service: res.value });
 });
 
-salonRoutes.delete("/services/:id", async (c) => {
+salonRoutes.delete("/services/:id", managers, async (c) => {
   const res = await store(c.env, c.get("user").tenantId).deleteService(c.req.param("id"));
   if (!res.ok) return moduleError(c, res.code);
   return c.json({ ok: true });
@@ -87,14 +94,14 @@ salonRoutes.get("/staff", async (c) => {
   return c.json({ staff: res.value });
 });
 
-salonRoutes.post("/staff", async (c) => {
+salonRoutes.post("/staff", managers, async (c) => {
   const body = await readBody(c);
   const res = await store(c.env, c.get("user").tenantId).saveStaff(body);
   if (!res.ok) return moduleError(c, res.code);
   return c.json({ staff: res.value });
 });
 
-salonRoutes.delete("/staff/:id", async (c) => {
+salonRoutes.delete("/staff/:id", managers, async (c) => {
   const res = await store(c.env, c.get("user").tenantId).deleteStaff(c.req.param("id"));
   if (!res.ok) return moduleError(c, res.code);
   return c.json({ ok: true });
@@ -123,7 +130,7 @@ salonRoutes.post("/clients", async (c) => {
   return c.json({ client: res.value });
 });
 
-salonRoutes.delete("/clients/:id", async (c) => {
+salonRoutes.delete("/clients/:id", managers, async (c) => {
   const res = await store(c.env, c.get("user").tenantId).deleteClient(c.req.param("id"));
   if (!res.ok) return moduleError(c, res.code);
   return c.json({ ok: true });
@@ -193,7 +200,7 @@ salonRoutes.post("/appointments/:id/status", async (c) => {
   return c.json({ appointment: res.value });
 });
 
-salonRoutes.delete("/appointments/:id", async (c) => {
+salonRoutes.delete("/appointments/:id", managers, async (c) => {
   const res = await store(c.env, c.get("user").tenantId).deleteAppointment(c.req.param("id"));
   if (!res.ok) return moduleError(c, res.code);
   return c.json({ ok: true });
@@ -233,7 +240,7 @@ salonRoutes.get("/settings", async (c) => {
   return c.json({ settings: res.value });
 });
 
-salonRoutes.post("/settings", async (c) => {
+salonRoutes.post("/settings", managers, async (c) => {
   const body = await readBody(c);
   const res = await store(c.env, c.get("user").tenantId).saveSettings(body);
   if (!res.ok) return moduleError(c, res.code);

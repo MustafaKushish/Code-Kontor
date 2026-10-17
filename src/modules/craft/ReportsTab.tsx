@@ -32,12 +32,13 @@ import { CraftPrint } from "./CraftPrint";
 import { currency as companyCurrency, currencySymbol } from "../../money";
 
 interface ReportsTabProps {
+  isManager: boolean;
   reports: CraftReport[];
   projects: CraftProject[];
   onRefresh: () => void;
 }
 
-export function ReportsTab({ reports, projects, onRefresh }: ReportsTabProps) {
+export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsTabProps) {
   const [filterStatus, setFilterStatus] = useState<string>("alle");
   const [search, setSearch] = useState("");
   const [signingReport, setSigningReport] = useState<CraftReport | null>(null);
@@ -309,14 +310,16 @@ export function ReportsTab({ reports, projects, onRefresh }: ReportsTabProps) {
                     >
                       <Printer size={17} />
                     </button>
-                    <button
-                      onClick={() => handleDelete(report.id)}
-                      className="icon-button danger"
-                      title="Löschen"
-                      aria-label="Löschen"
-                    >
-                      <Trash2 size={17} />
-                    </button>
+                    {isManager && (
+                      <button
+                        onClick={() => handleDelete(report.id)}
+                        className="icon-button danger"
+                        title="Löschen"
+                        aria-label="Löschen"
+                      >
+                        <Trash2 size={17} />
+                      </button>
+                    )}
                   </div>
 
                   {isSigned && (

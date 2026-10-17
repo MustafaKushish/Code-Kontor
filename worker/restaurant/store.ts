@@ -1,3 +1,4 @@
+import { berlinDayOf, nextNumber } from "../numbers";
 import type {
   ItemStatus,
   MenuItem,
@@ -614,7 +615,7 @@ export class RestaurantStore {
         ready_at: string | null;
         completed_at: string | null;
       }>("SELECT * FROM restaurant_orders WHERE id = ?", id)
-      .one();
+      .toArray()[0];
 
     if (!r) throw new RestaurantError("orderNotFound");
     return this.mapOrder(r);
@@ -633,17 +634,17 @@ export class RestaurantStore {
   }): RestaurantOrder {
     return this.tx(() => {
       const id = crypto.randomUUID();
-      const count = this.sql.exec<{ c: number }>("SELECT COUNT(*) AS c FROM restaurant_orders").one().c;
-      const orderNumber = `BON-${count + 101}`;
+      const orderNumber = `BON-${nextNumber(this.sql, "restaurant_orders", "order_number", "BON-", 101)}`;
 
-      // Falls Theke/Abholung: Abholnummer vergeben (z.B. fortlaufend 1..99)
+      // Falls Theke/Abholung: Abholnummer 1..99, jeden Tag neu ab 1. Nach 99 geht es mit 1 weiter
+      // (vorher blieb die Nummer nach 99 auf 1 stehen, weil das Maximum 99 blieb).
       let pickupNumber: number | undefined;
       if (data.type === "theke" || data.type === "abholung") {
-        const lastPickup =
-          this.sql
-            .exec<{ p: number | null }>("SELECT MAX(pickup_number) AS p FROM restaurant_orders WHERE pickup_number IS NOT NULL")
-            .one().p ?? 0;
-        pickupNumber = (lastPickup % 99) + 1;
+        const last = this.sql
+          .exec<{ p: number; c: string }>("SELECT pickup_number AS p, created_at AS c FROM restaurant_orders WHERE pickup_number IS NOT NULL ORDER BY rowid DESC LIMIT 1")
+          .toArray()[0];
+        const sameDay = last && berlinDayOf(last.c) === berlinDayOf(new Date().toISOString());
+        pickupNumber = sameDay ? (last.p % 99) + 1 : 1;
       }
 
       // Summen kalkulieren

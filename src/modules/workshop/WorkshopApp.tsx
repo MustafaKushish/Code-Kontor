@@ -136,16 +136,17 @@ export default function WorkshopApp({ me, path }: WorkshopAppProps) {
           parts={parts}
           tenantId={me.user.tenantId}
           hasPos={hasPos}
+          isManager={isManager}
           onRefresh={loadData}
           onOrdersChanged={setOrders}
         />
       )}
 
-      {activeTab === "vehicles" && <VehiclesTab vehicles={vehicles} orders={orders} onVehiclesChanged={setVehicles} />}
+      {activeTab === "vehicles" && <VehiclesTab vehicles={vehicles} orders={orders} onVehiclesChanged={setVehicles} isManager={isManager} />}
 
-      {activeTab === "parts" && <PartsTab parts={parts} onPartsChanged={setParts} />}
+      {activeTab === "parts" && <PartsTab parts={parts} onPartsChanged={setParts} isManager={isManager} />}
 
-      {activeTab === "tires" && <TiresTab tires={tires} vehicles={vehicles} onTiresChanged={setTires} />}
+      {activeTab === "tires" && <TiresTab tires={tires} vehicles={vehicles} onTiresChanged={setTires} isManager={isManager} />}
 
       {/* Dialog: Neuer Werkstattauftrag */}
       {newOrderModalOpen && (
