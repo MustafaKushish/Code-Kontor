@@ -1,4 +1,4 @@
-import { nextNumber } from "../numbers";
+import { berlinDayOf, nextNumber } from "../numbers";
 import type {
   FitnessCheckIn,
   FitnessCheckInResult,
@@ -80,7 +80,23 @@ export const FITNESS_MIGRATIONS: string[] = [
      description TEXT NOT NULL DEFAULT ''
    );
    CREATE INDEX fitness_classes_weekday ON fitness_classes(weekday);`,
+  // Buchungen gelten für einen Termin (den nächsten Kurstag), nicht für immer
+  `ALTER TABLE fitness_classes ADD COLUMN bookings_day TEXT`,
 ];
+
+const WEEKDAYS: Weekday[] = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];
+
+/** Nächster Kurstag (YYYY-MM-DD, deutsche Zeit): heute, solange der Kurs noch nicht vorbei ist. */
+export function nextClassDay(weekday: Weekday, endTime: string, now = new Date()): string {
+  const today = now.toLocaleDateString("en-CA", { timeZone: "Europe/Berlin" });
+  const time = now.toLocaleTimeString("en-GB", { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit", hour12: false });
+  const todayIndex = new Date(`${today}T12:00:00Z`).getUTCDay();
+  let diff = (WEEKDAYS.indexOf(weekday) - todayIndex + 7) % 7;
+  if (diff === 0 && time >= endTime) diff = 7;
+  const d = new Date(`${today}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + diff);
+  return d.toISOString().slice(0, 10);
+}
 
 export class FitnessStore {
   constructor(private sql: SqlStorage) {}
@@ -473,19 +489,22 @@ export class FitnessStore {
       iban: string;
       created_at: string;
     }>(
-      `SELECT * FROM fitness_members 
-       WHERE upper(member_number) = ? 
-          OR upper(id) = ? 
-          OR upper(email) = ? 
-          OR upper(phone) = ?
-          OR upper(last_name) = ?
+      // Eindeutige Kennungen zuerst; der Nachname nur, wenn genau ein Mitglied so heißt
+      `SELECT * FROM fitness_members
+       WHERE upper(member_number) = ? OR upper(id) = ? OR (email <> '' AND upper(email) = ?) OR (phone <> '' AND upper(phone) = ?)
        LIMIT 1`,
-      term,
       term,
       term,
       term,
       term
     ).toArray();
+    if (memberRows.length === 0) {
+      const byName = this.sql.exec<(typeof memberRows)[number]>("SELECT * FROM fitness_members WHERE upper(last_name) = upper(?) LIMIT 2", query.trim()).toArray();
+      if (byName.length > 1) {
+        return { success: false, message: `Mehrere Mitglieder heißen „${query}“. Bitte Mitgliedsnummer scannen.`, alertLevel: "warning" };
+      }
+      memberRows.push(...byName);
+    }
 
     if (memberRows.length === 0) {
       return {
@@ -548,7 +567,24 @@ export class FitnessStore {
       };
     }
 
-    // 4. Prüfung 10er-Karte: verbleibende Einheiten
+    // 4. Vertrag abgelaufen? (Gültig bis einschließlich dem Tag)
+    const today = berlinDayOf(new Date().toISOString());
+    if (member.validUntil && member.validUntil.slice(0, 10) < today) {
+      return { success: false, member, message: `Mitgliedschaft ist am ${member.validUntil.slice(0, 10)} abgelaufen. Bitte an der Kasse verlängern.`, alertLevel: "error" };
+    }
+
+    // Vergessenes Auschecken von früheren Tagen schließen, sonst sperrt es den nächsten Besuch
+    for (const open of this.sql.exec<{ id: string; checked_in_at: string }>("SELECT id, checked_in_at FROM fitness_checkins WHERE member_id = ? AND status = 'anwesend'", member.id).toArray()) {
+      if (berlinDayOf(open.checked_in_at) < today) this.sql.exec("UPDATE fitness_checkins SET status = 'verlassen', checked_out_at = ? WHERE id = ?", open.checked_in_at, open.id);
+    }
+
+    // Schon drin (z. B. doppelt gescannt): keine zweite Einheit abziehen
+    const alreadyIn = this.sql.exec<{ id: string }>("SELECT id FROM fitness_checkins WHERE member_id = ? AND status = 'anwesend'", member.id).toArray();
+    if (alreadyIn.length > 0) {
+      return { success: true, member, message: `${member.firstName} ${member.lastName} ist bereits im Studio eingecheckt.`, alertLevel: "warning" };
+    }
+
+    // 5. Prüfung 10er-Karte: verbleibende Einheiten
     let remaining = member.remainingUnits;
     let alertLevel: "success" | "warning" = "success";
     let message = `Willkommen, ${member.firstName}! Check-In erfolgreich gebucht (${member.planName}).`;
@@ -574,21 +610,6 @@ export class FitnessStore {
       } else {
         message = `Willkommen, ${member.firstName}! Check-In erfasst (Noch ${remaining} Einheiten verfügbar).`;
       }
-    }
-
-    // Prüfen, ob das Mitglied bereits als anwesend eingetragen ist (z. B. Doppel-Scan)
-    const alreadyIn = this.sql.exec<{ id: string }>(
-      "SELECT id FROM fitness_checkins WHERE member_id = ? AND status = 'anwesend'",
-      member.id
-    ).toArray();
-
-    if (alreadyIn.length > 0) {
-      return {
-        success: true,
-        member,
-        message: `${member.firstName} ${member.lastName} ist bereits im Studio eingecheckt.`,
-        alertLevel: "warning",
-      };
     }
 
     // Neuen Check-In eintragen
@@ -931,9 +952,14 @@ export class FitnessStore {
       max_participants: number;
       booked_member_ids: string;
       description: string;
+      bookings_day: string | null;
     }>(query, ...params).toArray();
 
-    return rows.map((r) => ({
+    return rows.map((r) => {
+      // Buchungen eines vergangenen Termins zählen nicht mehr
+      const day = nextClassDay(r.weekday as Weekday, r.end_time);
+      const booked: string[] = r.bookings_day === day ? JSON.parse(r.booked_member_ids || "[]") : [];
+      return {
       id: r.id,
       name: r.name,
       coachName: r.coach_name,
@@ -942,10 +968,12 @@ export class FitnessStore {
       endTime: r.end_time,
       room: r.room,
       maxParticipants: r.max_participants,
-      bookedMemberIds: JSON.parse(r.booked_member_ids || "[]"),
+      bookedMemberIds: booked,
+      bookingsFor: day,
       attendedMemberIds: [],
       description: r.description || undefined,
-    }));
+      };
+    });
   }
 
   createClass(data: Partial<FitnessClass>): FitnessClass {
@@ -986,10 +1014,12 @@ export class FitnessStore {
     const classes = this.listClasses().find((c) => c.id === id);
     if (!classes) throw new FitnessError("classNotFound");
 
+    // Buchungen ändern nur bookClass/cancelClassBooking, nicht das Bearbeiten des Kurses
     const updated: FitnessClass = {
       ...classes,
       ...data,
       id,
+      bookedMemberIds: classes.bookedMemberIds,
     };
 
     this.sql.exec(
@@ -1037,8 +1067,12 @@ export class FitnessStore {
       throw new FitnessError("classFull");
     }
 
+    const member = this.sql.exec<{ status: string }>("SELECT status FROM fitness_members WHERE id = ?", memberId).toArray()[0];
+    if (!member) throw new FitnessError("memberNotFound");
+    if (member.status !== "aktiv") throw new FitnessError("memberInactive");
+
     const updatedBookings = [...course.bookedMemberIds, memberId];
-    this.sql.exec("UPDATE fitness_classes SET booked_member_ids = ? WHERE id = ?", JSON.stringify(updatedBookings), classId);
+    this.sql.exec("UPDATE fitness_classes SET booked_member_ids = ?, bookings_day = ? WHERE id = ?", JSON.stringify(updatedBookings), course.bookingsFor ?? null, classId);
     course.bookedMemberIds = updatedBookings;
 
     return { success: true, course };
@@ -1049,7 +1083,7 @@ export class FitnessStore {
     if (!course) throw new FitnessError("classNotFound");
 
     const updatedBookings = course.bookedMemberIds.filter((id) => id !== memberId);
-    this.sql.exec("UPDATE fitness_classes SET booked_member_ids = ? WHERE id = ?", JSON.stringify(updatedBookings), classId);
+    this.sql.exec("UPDATE fitness_classes SET booked_member_ids = ?, bookings_day = ? WHERE id = ?", JSON.stringify(updatedBookings), course.bookingsFor ?? null, classId);
     course.bookedMemberIds = updatedBookings;
 
     return { success: true, course };

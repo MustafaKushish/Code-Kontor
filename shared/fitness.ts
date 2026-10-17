@@ -60,6 +60,8 @@ export interface FitnessClass {
   room: string; // z.B. "Kursraum 1", "Spinning-Box", "Open Mat"
   maxParticipants: number;
   bookedMemberIds: string[];
+  /** Termin (YYYY-MM-DD), für den die Buchungen gelten: der nächste Kurstag */
+  bookingsFor?: string;
   attendedMemberIds?: string[];
   description?: string;
 }

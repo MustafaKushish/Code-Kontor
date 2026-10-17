@@ -358,8 +358,9 @@ export class SalonStore {
        WHERE c.name LIKE ? OR c.phone LIKE ? OR c.email LIKE ?
        GROUP BY c.id
        ORDER BY c.name ASC
-       LIMIT 100`,
-      [q, q, q]
+       LIMIT ?`,
+      // Ohne Suche alle (bis 5000) für die Auswahl im Kalender, mit Suche die besten 100
+      [q, q, q, query.trim() ? 100 : 5000]
     );
 
     return rows.map((r) => ({

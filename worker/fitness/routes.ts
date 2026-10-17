@@ -83,7 +83,7 @@ fitnessRoutes.post("/check-in", async (c) => {
   const query = typeof body.query === "string" ? body.query : "";
   const res = await store(c.env, user.tenantId).checkIn(query);
   if (!res.ok) return moduleError(c, res.code);
-  return c.json(res.value);
+  return c.json(res.value.member ? { ...res.value, member: hideIban(res.value.member, user.role) } : res.value);
 });
 
 fitnessRoutes.post("/check-out/:id", async (c) => {
@@ -95,13 +95,19 @@ fitnessRoutes.post("/check-out/:id", async (c) => {
 });
 
 // ---------- MITGLIEDER ----------
+// Die IBAN der Mitglieder sehen und ändern nur Inhaber und Admins; Mitarbeiter sehen die letzten Stellen
+type WithIban = { iban?: string };
+function hideIban<T extends WithIban>(m: T, role: string): T {
+  return role === "staff" && m.iban ? { ...m, iban: `•••• ${m.iban.replace(/\s/g, "").slice(-4)}` } : m;
+}
+
 fitnessRoutes.get("/members", async (c) => {
   const user = c.get("user");
   const search = c.req.query("search") || undefined;
   const status = c.req.query("status") || undefined;
   const res = await store(c.env, user.tenantId).listMembers(search, status);
   if (!res.ok) return moduleError(c, res.code);
-  return c.json(res.value);
+  return c.json(res.value.map((m) => hideIban(m, user.role)));
 });
 
 fitnessRoutes.get("/members/:id", async (c) => {
@@ -109,7 +115,7 @@ fitnessRoutes.get("/members/:id", async (c) => {
   const id = c.req.param("id");
   const res = await store(c.env, user.tenantId).getMember(id);
   if (!res.ok) return moduleError(c, res.code);
-  return c.json(res.value);
+  return c.json({ ...res.value, member: hideIban(res.value.member, user.role) });
 });
 
 fitnessRoutes.post("/members", async (c) => {
@@ -117,16 +123,17 @@ fitnessRoutes.post("/members", async (c) => {
   const body = await readBody(c);
   const res = await store(c.env, user.tenantId).createMember(body);
   if (!res.ok) return moduleError(c, res.code);
-  return c.json(res.value, 201);
+  return c.json(hideIban(res.value, user.role), 201);
 });
 
 fitnessRoutes.put("/members/:id", async (c) => {
   const user = c.get("user");
   const id = c.req.param("id");
   const body = await readBody(c);
+  if (user.role === "staff") delete body.iban;
   const res = await store(c.env, user.tenantId).updateMember(id, body);
   if (!res.ok) return moduleError(c, res.code);
-  return c.json(res.value);
+  return c.json(hideIban(res.value, user.role));
 });
 
 fitnessRoutes.delete("/members/:id", managers, async (c) => {

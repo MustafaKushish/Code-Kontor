@@ -76,15 +76,17 @@ const pay = (pos: PosStore, line: PosLine) => {
   const { dueCents } = pos.quote([line], ctx);
   return pos.checkout({ lines: [line], payments: [{ method: "cash", cents: dueCents }], customer: null }, ctx)!;
 };
-const item = (name: string, quantity: number, unitPriceGross: number, taxRate: number) => ({
-  id: name, menuItemId: name, name, quantity, unitPriceGross, taxRate, course: "hauptgang" as never, status: "bestellt" as const, destination: "kueche" as const,
-});
+// Speise anlegen und als Position bestellen; Preis und Steuer nimmt der Server aus der Karte
+const item = (restaurant: RestaurantStore, name: string, quantity: number, priceGross: number, taxRate: number) => {
+  const m = restaurant.saveMenuItem({ itemNumber: name, name, priceGross, taxRate });
+  return { id: name, menuItemId: m.id, name, quantity, unitPriceGross: 0, taxRate: 0, course: "Sofort" as const, status: "bestellt" as const, destination: "kueche" as const };
+};
 
 describe("Restaurant über die Kasse", () => {
   it("Tisch: Steuersätze je Speise, Tisch frei, Storno öffnet die Rechnung wieder", () => {
     const { pos, restaurant } = database();
     const table = restaurant.saveTable({ tableNumber: "5", name: "Tisch 5" });
-    const order = restaurant.createOrder({ type: "tisch", tableId: table.id, tableName: table.name, items: [item("Pizza", 2, 9.5, 19), item("Wasser", 1, 3, 19)] });
+    const order = restaurant.createOrder({ type: "tisch", tableId: table.id, tableName: table.name, items: [item(restaurant, "Pizza", 2, 9.5, 19), item(restaurant, "Wasser", 1, 3, 19)] });
     const quote = pos.quote([ref("restaurant", "order", order.id)], ctx);
     expect(quote.totals.grossCents).toBe(2200);
     expect(quote.lines.map((l) => l.kind)).toEqual(["order:item", "order:item"]);
@@ -103,14 +105,14 @@ describe("Restaurant über die Kasse", () => {
 
   it("Theke: bezahlt, aber die Küche arbeitet weiter", () => {
     const { pos, restaurant } = database();
-    const order = restaurant.createOrder({ type: "abholung", items: [item("Pasta", 1, 8, 7)] });
+    const order = restaurant.createOrder({ type: "abholung", items: [item(restaurant, "Pasta", 1, 8, 7)] });
     const receipt = pay(pos, ref("restaurant", "order", order.id));
     expect(receipt.totals.vat).toEqual([{ rate: 7, netCents: 748, vatCents: 52 }]);
     const after = restaurant.getOrder(order.id);
     expect(after.paymentStatus).toBe("bezahlt");
     expect(after.status).toBe("in_zubereitung");
     // Abschließen allein macht nichts bezahlt
-    const open = restaurant.createOrder({ type: "theke", items: [item("Kaffee", 1, 2.5, 19)] });
+    const open = restaurant.createOrder({ type: "theke", items: [item(restaurant, "Kaffee", 1, 2.5, 19)] });
     expect(restaurant.updateOrderStatus(open.id, "abgeschlossen").paymentStatus).toBe("offen");
   });
 });

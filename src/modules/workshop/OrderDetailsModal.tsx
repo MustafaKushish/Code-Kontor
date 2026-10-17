@@ -25,7 +25,7 @@ import { Dialog } from "../../pos/ui";
 import { ModuleCheckout } from "../../pos/ModuleCheckout";
 import type { InspectionItem, OrderPosition, SparePart, WorkshopOrder, WorkshopOrderStatus } from "../../../shared/workshop";
 import { WorkshopPrint } from "./WorkshopPrint";
-import { currency as companyCurrency, currencySymbol } from "../../money";
+import { currency as companyCurrency, currencySymbol, standardVat } from "../../money";
 
 interface OrderDetailsModalProps {
   order: WorkshopOrder;
@@ -138,7 +138,8 @@ export function OrderDetailsModal({
       quantity: Number(newPosQty) || 1,
       unit: newPosUnit,
       unitPriceNet: Number(newPosPrice) || 0,
-      taxRate: 19,
+      // Steuersatz des Lagerteils, sonst der Regelsatz der Firma
+      taxRate: parts.find((p) => p.partNumber === newPosCode.trim())?.taxRate ?? standardVat(),
       approvedByCustomer: true,
     };
 

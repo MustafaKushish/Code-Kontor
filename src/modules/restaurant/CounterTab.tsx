@@ -74,11 +74,8 @@ export function CounterTab({ menu, onRefresh }: CounterTabProps) {
   const favorites = menu.filter((item) => item.active && item.isFavorite);
 
   const addToCart = (item: MenuItem) => {
-    // Wenn Takeaway gewählt ist, gilt für Speisen ermäßigter Satz 7%
-    const effectiveTaxRate =
-      orderType === "abholung" && item.category !== "Heißgetränke" && item.category !== "Alkoholfrei" && item.category !== "Bier & Wein" && item.category !== "Cocktails"
-        ? 7
-        : item.taxRate;
+    // Steuersatz wie in der Speisekarte; der Server rechnet ohnehin mit den Werten der Karte
+    const effectiveTaxRate = item.taxRate;
 
     const existingIndex = cart.findIndex((i) => i.menuItemId === item.id && !i.note);
     if (existingIndex > -1) {

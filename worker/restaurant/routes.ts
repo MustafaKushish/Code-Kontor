@@ -153,7 +153,9 @@ restaurantRoutes.post("/orders", async (c) => {
 restaurantRoutes.put("/orders/:id", async (c) => {
   const user = c.get("user");
   const body = await readBody(c);
-  const res = await store(c.env, user.tenantId).updateOrder(c.req.param("id"), unpaid(body) as any);
+  // Positionen nur über /items (anhängen, entfernen), Status nur über /status
+  if (typeof body.notes !== "string") return fail(c, "checkFields", 400);
+  const res = await store(c.env, user.tenantId).updateOrder(c.req.param("id"), { notes: body.notes.slice(0, 500) });
   if (!res.ok) return moduleError(c, res.code);
   return c.json(res.value);
 });
@@ -163,6 +165,21 @@ restaurantRoutes.post("/orders/:id/status", async (c) => {
   const body = await readBody(c);
   if (typeof body.status !== "string") return fail(c, "checkFields", 400);
   const res = await store(c.env, user.tenantId).updateOrderStatus(c.req.param("id"), body.status as any);
+  if (!res.ok) return moduleError(c, res.code);
+  return c.json(res.value);
+});
+
+restaurantRoutes.post("/orders/:id/items", async (c) => {
+  const user = c.get("user");
+  const body = await readBody(c);
+  const res = await store(c.env, user.tenantId).addOrderItems(c.req.param("id"), body.items);
+  if (!res.ok) return moduleError(c, res.code);
+  return c.json(res.value);
+});
+
+restaurantRoutes.delete("/orders/:id/items/:itemId", async (c) => {
+  const user = c.get("user");
+  const res = await store(c.env, user.tenantId).removeOrderItem(c.req.param("id"), c.req.param("itemId"));
   if (!res.ok) return moduleError(c, res.code);
   return c.json(res.value);
 });

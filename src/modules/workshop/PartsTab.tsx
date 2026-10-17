@@ -4,7 +4,7 @@ import { api } from "../../api";
 import { Field } from "../../components";
 import { Dialog } from "../../pos/ui";
 import type { SparePart } from "../../../shared/workshop";
-import { currency as companyCurrency, currencySymbol } from "../../money";
+import { currency as companyCurrency, currencySymbol, standardVat } from "../../money";
 
 interface PartsTabProps {
   isManager: boolean;
@@ -41,7 +41,7 @@ export function PartsTab({ parts, onPartsChanged, isManager }: PartsTabProps) {
     minStock: 2,
     purchasePriceNet: 10.0,
     salePriceNet: 25.0,
-    taxRate: 19.0,
+    taxRate: standardVat(),
     storageBin: "",
   });
 
@@ -80,7 +80,7 @@ export function PartsTab({ parts, onPartsChanged, isManager }: PartsTabProps) {
       minStock: 2,
       purchasePriceNet: 12.0,
       salePriceNet: 28.0,
-      taxRate: 19.0,
+      taxRate: standardVat(),
       storageBin: "Regal A-01",
     });
     setModalOpen(true);
@@ -128,7 +128,7 @@ export function PartsTab({ parts, onPartsChanged, isManager }: PartsTabProps) {
           minStock: Number(form.minStock) || 0,
           purchasePriceNet: Number(form.purchasePriceNet) || 0,
           salePriceNet: Number(form.salePriceNet) || 0,
-          taxRate: 19.0,
+          taxRate: standardVat(),
           storageBin: form.storageBin.trim(),
         },
       });
