@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { Plus, FileText, Printer, CheckCircle, ArrowRight, Trash2, Pencil, X, AlertCircle } from "lucide-react";
+import { Plus, FileText, Printer, CheckCircle, ArrowRight, Trash2, Pencil, Check, Files } from "lucide-react";
 import { api } from "../../api";
 import { Field } from "../../components";
+import { Dialog } from "../../pos/ui";
 import type { LineItem, OfficeClient, OfficeProject, OfficeQuote, QuoteStatus } from "../../../shared/office";
 import { useOfficeI18n } from "./i18n";
 import { PrintDocument } from "./PrintDocument";
@@ -214,25 +215,21 @@ export function QuotesTab({ isManager }: { isManager: boolean }) {
 
   return (
     <div className="stack">
-      {/* Stats */}
       <div className="office-stats">
-        <div className="office-stat-card">
-          <span className="label">Offene Angebote</span>
-          <span className="value" style={{ color: "var(--brand)" }}>{euro(openCents)}</span>
-          <span className="small muted">{openQuotes.length} Angebote in Prüfung</span>
+        <div className="tile stat-tile">
+          <span className="stat-icon"><FileText size={18} /></span>
+          <strong>{euro(openCents)}</strong><small>Offene Angebote · {openQuotes.length} Angebote in Prüfung</small>
         </div>
-        <div className="office-stat-card">
-          <span className="label">Angenommene Angebote</span>
-          <span className="value" style={{ color: "var(--success)" }}>{euro(acceptedCents)}</span>
-          <span className="small muted">{acceptedQuotes.length} erfolgreich beauftragt</span>
+        <div className="tile stat-tile">
+          <span className="stat-icon"><CheckCircle size={18} /></span>
+          <strong>{euro(acceptedCents)}</strong><small>Angenommene Angebote · {acceptedQuotes.length} erfolgreich beauftragt</small>
         </div>
-        <div className="office-stat-card">
-          <span className="label">Gesamtanzahl Angebote</span>
-          <span className="value">{quotes.length}</span>
+        <div className="tile stat-tile">
+          <span className="stat-icon"><Files size={18} /></span>
+          <strong>{quotes.length}</strong><small>Gesamtanzahl Angebote</small>
         </div>
       </div>
 
-      {/* Toolbar */}
       <div className="toolbar">
         <div className="chips" role="tablist">
           {["all", "draft", "sent", "accepted", "rejected", "expired"].map((st) => (
@@ -248,109 +245,72 @@ export function QuotesTab({ isManager }: { isManager: boolean }) {
           ))}
         </div>
 
-        {clients.length > 0 && (
-          <select
-            className="input"
-            style={{ maxWidth: "220px" }}
-            value={clientFilter}
-            onChange={(e) => setClientFilter(e.target.value)}
-          >
-            <option value="all">Alle Kunden</option>
-            {clients.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-        )}
-
-        {isManager && (
-          <button className="button primary push-end" onClick={openNew}>
-            <Plus size={18} /> {o("quotes.newQuote")}
-          </button>
-        )}
+        <div className="row wrap gap office-filters">
+          {clients.length > 0 && (
+            <select value={clientFilter} onChange={(e) => setClientFilter(e.target.value)} aria-label="Kunde">
+              <option value="all">Alle Kunden</option>
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          )}
+          {isManager && (
+            <div className="row gap push-end">
+              <button className="button primary" onClick={openNew}>
+                <Plus size={18} /> {o("quotes.newQuote")}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Quotes Table */}
       {loading ? (
         <p className="muted">Laden...</p>
-      ) : filteredQuotes.length === 0 ? (
-        <div className="card" style={{ textAlign: "center", padding: "40px" }}>
-          <FileText size={36} style={{ color: "var(--muted)", margin: "0 auto 12px" }} />
-          <h3>{o("quotes.noQuotes")}</h3>
-        </div>
       ) : (
-        <div className="office-table-wrap">
-          <table className="office-table">
-            <thead>
-              <tr>
-                <th>Nummer</th>
-                <th>Kunde & Projekt</th>
-                <th>Betreff</th>
-                <th>Gültig bis</th>
-                <th className="num">Netto</th>
-                <th className="num">Gesamtbetrag</th>
-                <th>Status</th>
-                <th className="num">Aktionen</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredQuotes.map((q) => (
-                <tr key={q.id}>
-                  <td><strong>{q.number}</strong></td>
-                  <td>
-                    <div><strong>{q.clientName}</strong></div>
-                    {q.projectName && <small className="muted">{q.projectName}</small>}
-                  </td>
-                  <td>{q.title}</td>
-                  <td>{day(q.validUntil)}</td>
-                  <td className="num">{euro(q.netCents)}</td>
-                  <td className="num" style={{ fontWeight: 700 }}>{euro(q.totalCents)}</td>
-                  <td>
-                    <span className={`pill ${q.status === "accepted" ? "success" : q.status === "rejected" ? "danger" : q.status === "sent" ? "warning" : ""}`}>
-                      {o(`quotes.status.${q.status}`)}
-                    </span>
-                  </td>
-                  <td className="num">
-                    <div className="row gap" style={{ justifyContent: "flex-end", flexWrap: "wrap", minWidth: "160px" }}>
-                      <button
-                        className="button small"
-                        onClick={() => setPrintDoc(q)}
-                        title={o("common.print")}
-                      >
-                        <Printer size={15} />
-                      </button>
-                      {q.status !== "accepted" && (
-                        <button
-                          className="button small primary"
-                          onClick={() => handleConvert(q)}
-                          title={o("quotes.convertToInvoice")}
-                        >
-                          <ArrowRight size={15} /> Rechnung
-                        </button>
-                      )}
-                      {isManager && (
-                        <>
-                          <button className="icon-button" onClick={() => openEdit(q)} title={o("common.edit")}>
-                            <Pencil size={15} />
-                          </button>
-                          <button
-                            className="icon-button danger"
-                            onClick={() => handleDelete(q.id)}
-                            title={o("common.delete")}
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <section className="card list-card">
+          {filteredQuotes.length === 0 && <p className="empty muted">{o("quotes.noQuotes")}</p>}
+          {filteredQuotes.map((q) => (
+            <div key={q.id} className="office-item">
+              <div className="list-row office-row">
+                <span className="office-date">{q.number}</span>
+                <span className="list-main">
+                  <strong>{q.clientName}</strong>
+                  <small className="muted">{[q.title, q.projectName].filter(Boolean).join(" · ")}</small>
+                </span>
+                <span className="office-row-meta">
+                  <strong>{euro(q.totalCents)}</strong>
+                  <small className="muted">Netto {euro(q.netCents)} · Gültig bis {day(q.validUntil)}</small>
+                  <span className={`pill ${q.status === "accepted" ? "success" : q.status === "rejected" ? "neg" : q.status === "sent" ? "warn" : ""}`}>
+                    {o(`quotes.status.${q.status}`)}
+                  </span>
+                </span>
+              </div>
+              <div className="row wrap gap office-item-actions">
+                <button className="button small-button" onClick={() => setPrintDoc(q)} title={o("common.print")}>
+                  <Printer size={15} /> {o("common.print")}
+                </button>
+                {q.status !== "accepted" && (
+                  <button className="button small-button primary" onClick={() => handleConvert(q)} title={o("quotes.convertToInvoice")}>
+                    <ArrowRight size={15} /> Rechnung
+                  </button>
+                )}
+                {isManager && (
+                  <>
+                    <button className="icon-button" onClick={() => openEdit(q)} title={o("common.edit")} aria-label={o("common.edit")}>
+                      <Pencil size={16} />
+                    </button>
+                    <button className="icon-button danger" onClick={() => handleDelete(q.id)} title={o("common.delete")} aria-label={o("common.delete")}>
+                      <Trash2 size={16} />
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+        </section>
       )}
 
-      {/* Print Preview Overlay */}
+      {/* Druckansicht */}
       {printDoc && (
         <PrintDocument
           doc={printDoc}
@@ -359,210 +319,136 @@ export function QuotesTab({ isManager }: { isManager: boolean }) {
         />
       )}
 
-      {/* Modal: Angebot erstellen / bearbeiten */}
+      {/* Dialog: Angebot erstellen / bearbeiten */}
       {modalOpen && (
-        <div className="office-modal-overlay" onClick={() => setModalOpen(false)}>
-          <div className="office-modal" style={{ maxWidth: "840px" }} onClick={(e) => e.stopPropagation()}>
-            <div className="office-modal-head">
-              <h3>{editingQuote ? "Angebot bearbeiten" : o("quotes.newQuote")}</h3>
-              <button className="icon-button" onClick={() => setModalOpen(false)}>
-                <X size={20} />
-              </button>
+        <Dialog title={editingQuote ? "Angebot bearbeiten" : o("quotes.newQuote")} onClose={() => setModalOpen(false)} wide>
+          <form onSubmit={handleSave} className="stack office-dialog">
+            {errorMsg && <p className="error" role="alert">{errorMsg}</p>}
+            <div className="grid form-grid">
+              <Field label="Kunde" required>
+                <select required value={form.clientId} onChange={(e) => setForm({ ...form, clientId: e.target.value })}>
+                  {clients.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Projekt (optional)">
+                <select value={form.projectId} onChange={(e) => setForm({ ...form, projectId: e.target.value })}>
+                  <option value="">Keinem Projekt zugeordnet</option>
+                  {projects
+                    .filter((p) => !form.clientId || p.clientId === form.clientId)
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                </select>
+              </Field>
+              <Field label="Betreff / Titel" required wide>
+                <input type="text" required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+              </Field>
+              <Field label={o("quotes.validUntil")}>
+                <input type="date" value={form.validUntil} onChange={(e) => setForm({ ...form, validUntil: e.target.value })} />
+              </Field>
+              <Field label="Status">
+                <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as QuoteStatus })}>
+                  <option value="draft">{o("quotes.status.draft")}</option>
+                  <option value="sent">{o("quotes.status.sent")}</option>
+                  <option value="accepted">{o("quotes.status.accepted")}</option>
+                  <option value="rejected">{o("quotes.status.rejected")}</option>
+                  <option value="expired">{o("quotes.status.expired")}</option>
+                </select>
+              </Field>
             </div>
 
-            {errorMsg && <div className="notice warning">{errorMsg}</div>}
-
-            <form onSubmit={handleSave} className="stack">
-              <div className="row-grid">
-                <Field label="Kunde" required>
-                  <select
-                    required
-                    className="input"
-                    value={form.clientId}
-                    onChange={(e) => setForm({ ...form, clientId: e.target.value })}
-                  >
-                    {clients.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Projekt (optional)">
-                  <select
-                    className="input"
-                    value={form.projectId}
-                    onChange={(e) => setForm({ ...form, projectId: e.target.value })}
-                  >
-                    <option value="">Keinem Projekt zugeordnet</option>
-                    {projects
-                      .filter((p) => !form.clientId || p.clientId === form.clientId)
-                      .map((p) => (
-                        <option key={p.id} value={p.id}>{p.name}</option>
-                      ))}
-                  </select>
-                </Field>
+            {/* Positionen */}
+            <div className="office-section">
+              <div className="section-head">
+                <h3 className="card-subtitle">Positionen & Leistungen</h3>
+                <button type="button" className="button small-button" onClick={addItem}>
+                  <Plus size={15} /> {o("common.addItem")}
+                </button>
               </div>
 
-              <div className="row-grid" style={{ gridTemplateColumns: "2fr 1fr 1fr" }}>
-                <Field label="Betreff / Titel" required>
+              {form.items.map((it, idx) => (
+                <div key={it.id || idx} className="office-line">
+                  <Field label="Titel / Leistung" wide>
+                    <input type="text" required value={it.title} onChange={(e) => updateItem(idx, { title: e.target.value })} />
+                  </Field>
+                  <Field label="Menge">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      value={it.qty}
+                      onChange={(e) => updateItem(idx, { qty: parseFloat(e.target.value || "1") })}
+                    />
+                  </Field>
+                  <Field label="Einheit">
+                    <select value={it.unit} onChange={(e) => updateItem(idx, { unit: e.target.value })}>
+                      <option value="Std">Std</option>
+                      <option value="Tag">Tag</option>
+                      <option value="Stk">Stk</option>
+                      <option value="Pauschal">Pauschal</option>
+                    </select>
+                  </Field>
+                  <Field label="Einzelpreis (€)">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={(it.unitCents / 100) || ""}
+                      onChange={(e) => updateItem(idx, { unitCents: Math.round(parseFloat(e.target.value || "0") * 100) })}
+                    />
+                  </Field>
+                  <Field label="MwSt.">
+                    <select value={it.vatRate} onChange={(e) => updateItem(idx, { vatRate: parseInt(e.target.value, 10) || 19 })}>
+                      <option value={19}>19%</option>
+                      <option value={7}>7%</option>
+                      <option value={0}>0%</option>
+                    </select>
+                  </Field>
+                  {form.items.length > 1 ? (
+                    <button type="button" className="icon-button danger" onClick={() => removeItem(idx)} aria-label={o("common.delete")}>
+                      <Trash2 size={16} />
+                    </button>
+                  ) : (
+                    <span className="icon-spacer" />
+                  )}
                   <input
                     type="text"
-                    required
-                    className="input"
-                    value={form.title}
-                    onChange={(e) => setForm({ ...form, title: e.target.value })}
+                    className="wide"
+                    placeholder="Zusätzliche Leistungsbeschreibung (optional)"
+                    aria-label="Zusätzliche Leistungsbeschreibung (optional)"
+                    value={it.description}
+                    onChange={(e) => updateItem(idx, { description: e.target.value })}
                   />
-                </Field>
-                <Field label={o("quotes.validUntil")}>
-                  <input
-                    type="date"
-                    className="input"
-                    value={form.validUntil}
-                    onChange={(e) => setForm({ ...form, validUntil: e.target.value })}
-                  />
-                </Field>
-                <Field label="Status">
-                  <select
-                    className="input"
-                    value={form.status}
-                    onChange={(e) => setForm({ ...form, status: e.target.value as QuoteStatus })}
-                  >
-                    <option value="draft">{o("quotes.status.draft")}</option>
-                    <option value="sent">{o("quotes.status.sent")}</option>
-                    <option value="accepted">{o("quotes.status.accepted")}</option>
-                    <option value="rejected">{o("quotes.status.rejected")}</option>
-                    <option value="expired">{o("quotes.status.expired")}</option>
-                  </select>
-                </Field>
-              </div>
-
-              {/* Line Items */}
-              <div style={{ borderTop: "1px solid var(--line)", paddingTop: "14px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                  <strong>Positionen & Leistungen</strong>
-                  <button type="button" className="button small" onClick={addItem}>
-                    <Plus size={15} /> {o("common.addItem")}
-                  </button>
                 </div>
+              ))}
 
-                <div className="stack-sm">
-                  {form.items.map((it, idx) => (
-                    <div key={it.id || idx} className="card" style={{ padding: "12px", background: "var(--panel-2)" }}>
-                      <div className="row-grid" style={{ gridTemplateColumns: "3fr 1fr 1fr 1.2fr 1fr auto", gap: "8px", alignItems: "flex-end" }}>
-                        <Field label="Titel / Leistung">
-                          <input
-                            type="text"
-                            required
-                            className="input"
-                            value={it.title}
-                            onChange={(e) => updateItem(idx, { title: e.target.value })}
-                          />
-                        </Field>
-                        <Field label="Menge">
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0.01"
-                            className="input"
-                            value={it.qty}
-                            onChange={(e) => updateItem(idx, { qty: parseFloat(e.target.value || "1") })}
-                          />
-                        </Field>
-                        <Field label="Einheit">
-                          <select
-                            className="input"
-                            value={it.unit}
-                            onChange={(e) => updateItem(idx, { unit: e.target.value })}
-                          >
-                            <option value="Std">Std</option>
-                            <option value="Tag">Tag</option>
-                            <option value="Stk">Stk</option>
-                            <option value="Pauschal">Pauschal</option>
-                          </select>
-                        </Field>
-                        <Field label="Einzelpreis (€)">
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            className="input"
-                            value={(it.unitCents / 100) || ""}
-                            onChange={(e) => updateItem(idx, { unitCents: Math.round(parseFloat(e.target.value || "0") * 100) })}
-                          />
-                        </Field>
-                        <Field label="MwSt.">
-                          <select
-                            className="input"
-                            value={it.vatRate}
-                            onChange={(e) => updateItem(idx, { vatRate: parseInt(e.target.value, 10) || 19 })}
-                          >
-                            <option value={19}>19%</option>
-                            <option value={7}>7%</option>
-                            <option value={0}>0%</option>
-                          </select>
-                        </Field>
-                        {form.items.length > 1 && (
-                          <button
-                            type="button"
-                            className="icon-button danger"
-                            style={{ marginBottom: "6px" }}
-                            onClick={() => removeItem(idx)}
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        )}
-                      </div>
-                      <div style={{ marginTop: "6px" }}>
-                        <input
-                          type="text"
-                          className="input"
-                          placeholder="Zusätzliche Leistungsbeschreibung (optional)"
-                          value={it.description}
-                          onChange={(e) => updateItem(idx, { description: e.target.value })}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
+              <table className="price-table office-totals">
+                <tbody>
+                  <tr><td>Netto:</td><td><strong>{euro(totals.net)}</strong></td></tr>
+                  <tr><td>Umsatzsteuer:</td><td>{euro(totals.vat)}</td></tr>
+                </tbody>
+                <tfoot>
+                  <tr><th>Gesamt:</th><th>{euro(totals.gross)}</th></tr>
+                </tfoot>
+              </table>
+            </div>
 
-                {/* Totals Summary */}
-                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "12px", fontSize: "0.95rem" }}>
-                  <div style={{ width: "240px", display: "grid", gap: "4px" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}>
-                      <span>Netto:</span>
-                      <strong>{euro(totals.net)}</strong>
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}>
-                      <span>Umsatzsteuer:</span>
-                      <span>{euro(totals.vat)}</span>
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", borderTop: "2px solid var(--text)", paddingTop: "4px", fontSize: "1.1rem" }}>
-                      <span><strong>Gesamt:</strong></span>
-                      <strong>{euro(totals.gross)}</strong>
-                    </div>
-                  </div>
-                </div>
-              </div>
+            <Field label="Hinweise & Zahlungsbedingungen">
+              <textarea rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+            </Field>
 
-              <Field label="Hinweise & Zahlungsbedingungen">
-                <textarea
-                  className="input"
-                  rows={2}
-                  value={form.notes}
-                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                />
-              </Field>
-
-              <div className="row gap" style={{ justifyContent: "flex-end", marginTop: "12px" }}>
-                <button type="button" className="button" onClick={() => setModalOpen(false)}>
-                  {o("common.cancel")}
-                </button>
-                <button type="submit" className="button primary">
-                  {o("common.save")}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+            <div className="row wrap gap end">
+              <button type="button" className="button" onClick={() => setModalOpen(false)}>
+                {o("common.cancel")}
+              </button>
+              <button type="submit" className="button primary">
+                <Check size={17} /> {o("common.save")}
+              </button>
+            </div>
+          </form>
+        </Dialog>
       )}
     </div>
   );

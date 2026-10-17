@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { Play, Pause, Square, Plus, Clock, Trash2, CheckCircle2, AlertCircle, X, Receipt, Filter, Printer } from "lucide-react";
+import { Play, Pause, Square, Plus, Clock, Trash2, Check, Receipt, Printer, Wallet, Hourglass } from "lucide-react";
 import { api, type Me } from "../../api";
 import { Field } from "../../components";
+import { Dialog } from "../../pos/ui";
 import type { OfficeClient, OfficeProject, OfficeTimeEntry, LineItem, OfficeTask, RoleRate, OfficeSettings } from "../../../shared/office";
 import { useOfficeI18n } from "./i18n";
 import { TimesheetPrint } from "./TimesheetPrint";
@@ -234,74 +235,63 @@ export function TimeTab({
 
   return (
     <div className="stack">
-      {/* Live Stopwatch Widget */}
-      <div className="card" style={{ background: "linear-gradient(135deg, var(--panel), color-mix(in srgb, var(--accent) 8%, var(--panel)))", border: "1px solid color-mix(in srgb, var(--accent) 30%, var(--line))" }}>
-        <div className="stopwatch-inner">
-          <div className="stopwatch-clock-row">
-            <div className="stopwatch-clock" style={{ color: timerRunning ? "var(--accent)" : "var(--ink)" }}>
-              {formatTimerDisplay(timerSeconds)}
-            </div>
-            {timerRunning && <span className="pill success" style={{ animation: "pulse 1.5s infinite" }}>Läuft...</span>}
-          </div>
-
-          <div className="stopwatch-inputs">
-            <select
-              className="input"
-              value={timerProjectId}
-              onChange={(e) => setTimerProjectId(e.target.value)}
-              disabled={timerRunning}
-            >
-              {projects.length === 0 && <option value="">Keine Projekte vorhanden</option>}
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>{p.name} ({p.clientName})</option>
-              ))}
-            </select>
-            <input
-              type="text"
-              className="input"
-              placeholder="Was tun Sie gerade?"
-              value={timerDescription}
-              onChange={(e) => setTimerDescription(e.target.value)}
-            />
-          </div>
-
-          <div className="stopwatch-actions">
-            {!timerRunning ? (
-              <button className="button primary" onClick={handleStartTimer} disabled={projects.length === 0}>
-                <Play size={18} /> {timerSeconds > 0 ? "Fortsetzen" : o("time.timerStart")}
-              </button>
-            ) : (
-              <button className="button" onClick={handlePauseTimer}>
-                <Pause size={18} /> Pausieren
-              </button>
-            )}
-            {timerSeconds > 0 && (
-              <button className="button success" onClick={handleStopAndSaveTimer}>
-                <Square size={17} /> {o("time.timerStop")} & Buchen
-              </button>
-            )}
-          </div>
+      {/* Stoppuhr */}
+      <section className="card office-timer">
+        <div className="row gap">
+          <span className={`office-timer-clock ${timerRunning ? "running" : ""}`}>{formatTimerDisplay(timerSeconds)}</span>
+          {timerRunning && <span className="pill success">Läuft...</span>}
         </div>
-      </div>
 
-      {/* KPI Stats */}
+        <div className="office-timer-inputs">
+          <select value={timerProjectId} onChange={(e) => setTimerProjectId(e.target.value)} disabled={timerRunning} aria-label={o("time.fields.project")}>
+            {projects.length === 0 && <option value="">Keine Projekte vorhanden</option>}
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>{p.name} ({p.clientName})</option>
+            ))}
+          </select>
+          <input
+            type="text"
+            placeholder="Was tun Sie gerade?"
+            aria-label={o("time.fields.description")}
+            value={timerDescription}
+            onChange={(e) => setTimerDescription(e.target.value)}
+          />
+        </div>
+
+        <div className="row wrap gap">
+          {!timerRunning ? (
+            <button className="button primary" onClick={handleStartTimer} disabled={projects.length === 0}>
+              <Play size={18} /> {timerSeconds > 0 ? "Fortsetzen" : o("time.timerStart")}
+            </button>
+          ) : (
+            <button className="button" onClick={handlePauseTimer}>
+              <Pause size={18} /> Pausieren
+            </button>
+          )}
+          {timerSeconds > 0 && (
+            <button className="button success-button" onClick={handleStopAndSaveTimer}>
+              <Square size={17} /> {o("time.timerStop")} & Buchen
+            </button>
+          )}
+        </div>
+      </section>
+
+      {/* Kennzahlen */}
       <div className="office-stats">
-        <div className="office-stat-card">
-          <span className="label">{o("time.unbilled")}</span>
-          <span className="value" style={{ color: "var(--accent)" }}>{euro(unbilledCents)}</span>
-          <span className="small muted">{(unbilledMinutes / 60).toFixed(1)} Stunden</span>
+        <div className="tile stat-tile">
+          <span className="stat-icon"><Wallet size={18} /></span>
+          <strong>{euro(unbilledCents)}</strong><small>{o("time.unbilled")} · {(unbilledMinutes / 60).toFixed(1)} Stunden</small>
         </div>
-        <div className="office-stat-card">
-          <span className="label">Erfasste Stunden (Filter)</span>
-          <span className="value">{(totalMonthMinutes / 60).toFixed(1)} Std</span>
+        <div className="tile stat-tile">
+          <span className="stat-icon"><Clock size={18} /></span>
+          <strong>{(totalMonthMinutes / 60).toFixed(1)} Std</strong><small>Erfasste Stunden (Filter)</small>
         </div>
-        <div className="office-stat-card">
-          <span className="label">Offene Zeiteinträge</span>
-          <span className="value" style={{ color: "var(--brand)" }}>{unbilledEntries.length}</span>
+        <div className="tile stat-tile">
+          <span className="stat-icon"><Hourglass size={18} /></span>
+          <strong>{unbilledEntries.length}</strong><small>Offene Zeiteinträge</small>
         </div>
       </div>
 
-      {/* Toolbar */}
       <div className="toolbar">
         <div className="chips" role="tablist">
           {[
@@ -322,128 +312,83 @@ export function TimeTab({
           ))}
         </div>
 
-        {projects.length > 0 && (
-          <select
-            className="input"
-            style={{ maxWidth: "220px" }}
-            value={selectedProjectId}
-            onChange={(e) => setSelectedProjectId(e.target.value)}
-          >
-            <option value="all">Alle Projekte</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-        )}
-
-        <div className="row gap push-end">
-          <button
-            className="button"
-            onClick={() => setShowTimesheet(true)}
-            disabled={filteredTimes.length === 0}
-            title="Druckbaren Leistungsnachweis / Timesheet erstellen"
-          >
-            <Printer size={17} /> Leistungsnachweis
-          </button>
-          {unbilledEntries.length > 0 && onNavigateToNewInvoiceWithItems && (
-            <button className="button" onClick={handleInvoiceUnbilled} title="Rechnung aus offenen Zeiten generieren">
-              <Receipt size={17} /> In Rechnung stellen
-            </button>
+        <div className="row wrap gap office-filters">
+          {projects.length > 0 && (
+            <select value={selectedProjectId} onChange={(e) => setSelectedProjectId(e.target.value)} aria-label={o("time.fields.project")}>
+              <option value="all">Alle Projekte</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
           )}
-          <button className="button primary" onClick={() => setModalOpen(true)}>
-            <Plus size={18} /> {o("time.logTime")}
-          </button>
+          <div className="row wrap gap push-end">
+            <button
+              className="button"
+              onClick={() => setShowTimesheet(true)}
+              disabled={filteredTimes.length === 0}
+              title="Druckbaren Leistungsnachweis / Timesheet erstellen"
+            >
+              <Printer size={18} /> Leistungsnachweis
+            </button>
+            {unbilledEntries.length > 0 && onNavigateToNewInvoiceWithItems && (
+              <button className="button" onClick={handleInvoiceUnbilled} title="Rechnung aus offenen Zeiten generieren">
+                <Receipt size={18} /> In Rechnung stellen
+              </button>
+            )}
+            <button className="button primary" onClick={() => setModalOpen(true)}>
+              <Plus size={18} /> {o("time.logTime")}
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Time Entries Table */}
       {loading ? (
         <p className="muted">Laden...</p>
-      ) : filteredTimes.length === 0 ? (
-        <div className="card" style={{ textAlign: "center", padding: "40px" }}>
-          <Clock size={36} style={{ color: "var(--muted)", margin: "0 auto 12px" }} />
-          <h3>{o("time.noEntries")}</h3>
-        </div>
       ) : (
-        <div className="office-table-wrap">
-          <table className="office-table">
-            <thead>
-              <tr>
-                <th>Datum</th>
-                <th>Projekt & Kunde</th>
-                <th>Tätigkeit</th>
-                <th>Mitarbeiter</th>
-                <th className="num">Dauer</th>
-                <th className="num">Satz</th>
-                <th className="num">Honorar</th>
-                <th>Status</th>
-                <th className="num">Aktion</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredTimes.map((t) => {
-                const feeCents = Math.round((t.minutes * t.hourlyRateCents) / 60);
-                return (
-                  <tr key={t.id}>
-                    <td><strong>{day(t.day)}</strong></td>
-                    <td>
-                      <div><strong>{t.projectName}</strong></div>
-                      <small className="muted">{t.clientName}</small>
-                    </td>
-                    <td>{t.description || "—"}</td>
-                    <td><small className="muted">{t.userName || "Mitarbeiter"}</small></td>
-                    <td className="num">
-                      <strong>{(t.minutes / 60).toFixed(2)}h</strong>
-                      <div style={{ fontSize: "0.75rem", color: "var(--muted)" }}>{t.minutes} Min</div>
-                    </td>
-                    <td className="num">{euro(t.hourlyRateCents)}</td>
-                    <td className="num" style={{ fontWeight: 600 }}>{t.billable ? euro(feeCents) : "—"}</td>
-                    <td>
-                      {t.billedInvoiceId ? (
-                        <span className="pill success">Abgerechnet</span>
-                      ) : t.billable ? (
-                        <span className="pill warning">Offen</span>
-                      ) : (
-                        <span className="pill">Intern</span>
-                      )}
-                    </td>
-                    <td className="num">
-                      {!t.billedInvoiceId && (
-                        <button
-                          className="icon-button danger"
-                          onClick={() => handleDeleteTime(t.id)}
-                          title={o("common.delete")}
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <section className="card list-card">
+          {filteredTimes.length === 0 && <p className="empty muted">{o("time.noEntries")}</p>}
+          {filteredTimes.map((t) => {
+            const feeCents = Math.round((t.minutes * t.hourlyRateCents) / 60);
+            return (
+              <div key={t.id} className="list-row office-row">
+                <span className="office-date">{day(t.day)}</span>
+                <span className="list-main">
+                  <strong>{t.description || "—"}</strong>
+                  <small className="muted">{t.projectName} · {t.clientName} · {t.userName || "Mitarbeiter"}</small>
+                </span>
+                <span className="office-row-meta">
+                  <strong>{t.billable ? euro(feeCents) : "—"}</strong>
+                  <small className="muted">{(t.minutes / 60).toFixed(2)}h · {t.minutes} Min · {euro(t.hourlyRateCents)}</small>
+                  {t.billedInvoiceId ? (
+                    <span className="pill success">Abgerechnet</span>
+                  ) : t.billable ? (
+                    <span className="pill warn">Offen</span>
+                  ) : (
+                    <span className="pill">Intern</span>
+                  )}
+                </span>
+                {!t.billedInvoiceId ? (
+                  <button className="icon-button danger" onClick={() => handleDeleteTime(t.id)} title={o("common.delete")} aria-label={o("common.delete")}>
+                    <Trash2 size={16} />
+                  </button>
+                ) : (
+                  <span className="icon-spacer" />
+                )}
+              </div>
+            );
+          })}
+        </section>
       )}
 
-      {/* Manual Entry Modal */}
+      {/* Dialog: Zeit manuell erfassen */}
       {modalOpen && (
-        <div className="office-modal-overlay" onClick={() => setModalOpen(false)}>
-          <div className="office-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="office-modal-head">
-              <h3>{o("time.logTime")}</h3>
-              <button className="icon-button" onClick={() => setModalOpen(false)}>
-                <X size={20} />
-              </button>
-            </div>
-
-            {errorMsg && <div className="notice warning">{errorMsg}</div>}
-
-            <form onSubmit={handleSaveManual} className="stack">
-              <Field label={o("time.fields.project")} required>
+        <Dialog title={o("time.logTime")} onClose={() => setModalOpen(false)} wide>
+          <form onSubmit={handleSaveManual} className="stack office-dialog">
+            {errorMsg && <p className="error" role="alert">{errorMsg}</p>}
+            <div className="grid form-grid">
+              <Field label={o("time.fields.project")} required wide>
                 <select
                   required
-                  className="input"
                   value={form.projectId}
                   onChange={(e) => {
                     const pId = e.target.value;
@@ -463,12 +408,8 @@ export function TimeTab({
               </Field>
 
               {projectTasks.length > 0 && (
-                <Field label="Aufgabe / Meilenstein (optional)">
-                  <select
-                    className="input"
-                    value={form.taskId}
-                    onChange={(e) => setForm({ ...form, taskId: e.target.value })}
-                  >
+                <Field label="Aufgabe / Meilenstein (optional)" wide>
+                  <select value={form.taskId} onChange={(e) => setForm({ ...form, taskId: e.target.value })}>
                     <option value="">Keine Aufgabe zuordnen (Allgemein)</option>
                     {projectTasks.map((t) => (
                       <option key={t.id} value={t.id}>{t.title} {t.completed ? "✓ (Erledigt)" : ""}</option>
@@ -477,97 +418,79 @@ export function TimeTab({
                 </Field>
               )}
 
-              <div className="row-grid">
-                {roleRates.length > 0 && (
-                  <Field label="Rolle / Tätigkeitsstufe">
-                    <select
-                      className="input"
-                      value={form.roleName}
-                      onChange={(e) => {
-                        const rName = e.target.value;
-                        const match = roleRates.find((r) => r.name === rName);
-                        setForm({
-                          ...form,
-                          roleName: rName,
-                          hourlyRateCents: match ? match.hourlyRateCents : form.hourlyRateCents,
-                        });
-                      }}
-                    >
-                      <option value="">Standard-Stundensatz des Projekts</option>
-                      {roleRates.map((r) => (
-                        <option key={r.id} value={r.name}>{r.name} ({euro(r.hourlyRateCents)}/Std)</option>
-                      ))}
-                    </select>
-                  </Field>
-                )}
-
-                <Field label="Stundensatz (€/Std)">
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    className="input"
-                    value={(form.hourlyRateCents / 100) || ""}
-                    onChange={(e) => setForm({ ...form, hourlyRateCents: Math.round(parseFloat(e.target.value || "0") * 100) })}
-                  />
+              {roleRates.length > 0 && (
+                <Field label="Rolle / Tätigkeitsstufe">
+                  <select
+                    value={form.roleName}
+                    onChange={(e) => {
+                      const rName = e.target.value;
+                      const match = roleRates.find((r) => r.name === rName);
+                      setForm({
+                        ...form,
+                        roleName: rName,
+                        hourlyRateCents: match ? match.hourlyRateCents : form.hourlyRateCents,
+                      });
+                    }}
+                  >
+                    <option value="">Standard-Stundensatz des Projekts</option>
+                    {roleRates.map((r) => (
+                      <option key={r.id} value={r.name}>{r.name} ({euro(r.hourlyRateCents)}/Std)</option>
+                    ))}
+                  </select>
                 </Field>
-              </div>
+              )}
 
-              <div className="row-grid">
-                <Field label={o("time.fields.date")} required>
-                  <input
-                    type="date"
-                    required
-                    className="input"
-                    value={form.day}
-                    onChange={(e) => setForm({ ...form, day: e.target.value })}
-                  />
-                </Field>
-                <Field label="Dauer in Stunden (z.B. 1.5 oder 2:15)" required>
-                  <input
-                    type="text"
-                    required
-                    className="input"
-                    placeholder="1.5"
-                    value={form.hoursInput}
-                    onChange={(e) => setForm({ ...form, hoursInput: e.target.value })}
-                  />
-                </Field>
-              </div>
+              <Field label="Stundensatz (€/Std)" wide={roleRates.length === 0}>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={(form.hourlyRateCents / 100) || ""}
+                  onChange={(e) => setForm({ ...form, hourlyRateCents: Math.round(parseFloat(e.target.value || "0") * 100) })}
+                />
+              </Field>
 
-              <Field label={o("time.fields.description")}>
+              <Field label={o("time.fields.date")} required>
+                <input type="date" required value={form.day} onChange={(e) => setForm({ ...form, day: e.target.value })} />
+              </Field>
+              <Field label="Dauer in Stunden (z.B. 1.5 oder 2:15)" required>
+                <input
+                  type="text"
+                  required
+                  placeholder="1.5"
+                  value={form.hoursInput}
+                  onChange={(e) => setForm({ ...form, hoursInput: e.target.value })}
+                />
+              </Field>
+
+              <Field label={o("time.fields.description")} wide>
                 <textarea
-                  className="input"
                   rows={2}
                   placeholder="z.B. Frontend-Komponenten implementiert, Abstimmung mit Kunde..."
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
                 />
               </Field>
+            </div>
 
-              <label className="checkbox-label" style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
-                <input
-                  type="checkbox"
-                  checked={form.billable}
-                  onChange={(e) => setForm({ ...form, billable: e.target.checked })}
-                />
-                <span>{o("time.billable")} (wird in Rechnungen zur Abrechnung vorgeschlagen)</span>
-              </label>
+            <label className="check">
+              <input type="checkbox" checked={form.billable} onChange={(e) => setForm({ ...form, billable: e.target.checked })} />
+              <span>{o("time.billable")} (wird in Rechnungen zur Abrechnung vorgeschlagen)</span>
+            </label>
 
-              <div className="row gap" style={{ justifyContent: "flex-end", marginTop: "12px" }}>
-                <button type="button" className="button" onClick={() => setModalOpen(false)}>
-                  {o("common.cancel")}
-                </button>
-                <button type="submit" className="button primary">
-                  {o("common.save")}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+            <div className="row wrap gap end">
+              <button type="button" className="button" onClick={() => setModalOpen(false)}>
+                {o("common.cancel")}
+              </button>
+              <button type="submit" className="button primary">
+                <Check size={17} /> {o("common.save")}
+              </button>
+            </div>
+          </form>
+        </Dialog>
       )}
 
-      {/* Timesheet Print Modal */}
+      {/* Leistungsnachweis (Druckansicht) */}
       {showTimesheet && (
         <TimesheetPrint
           project={projects.find((p) => p.id === selectedProjectId)}

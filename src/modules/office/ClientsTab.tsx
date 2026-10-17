@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { Plus, Users, Search, Building2, Mail, Phone, MapPin, Pencil, Trash2, X, AlertTriangle, ArrowRight } from "lucide-react";
+import { Plus, Users, Search, Building2, Mail, Phone, MapPin, Pencil, Trash2, Check, AlertTriangle, ArrowRight, Wallet } from "lucide-react";
 import { api } from "../../api";
 import { Field } from "../../components";
+import { Dialog } from "../../pos/ui";
 import type { OfficeClient } from "../../../shared/office";
 import { useOfficeI18n } from "./i18n";
 
@@ -152,85 +153,75 @@ export function ClientsTab({
   return (
     <div className="stack">
       <div className="office-stats">
-        <div className="office-stat-card">
-          <span className="label">Kundenkartei</span>
-          <span className="value" style={{ color: "var(--brand)" }}>{totalClients}</span>
+        <div className="tile stat-tile">
+          <span className="stat-icon"><Users size={18} /></span>
+          <strong>{totalClients}</strong><small>Kundenkartei</small>
         </div>
-        <div className="office-stat-card">
-          <span className="label">Mit offenen Rechnungen</span>
-          <span className="value" style={{ color: "var(--warning, #eab308)" }}>{clientsWithOpenInvoices.length}</span>
+        <div className="tile stat-tile">
+          <span className="stat-icon"><AlertTriangle size={18} /></span>
+          <strong>{clientsWithOpenInvoices.length}</strong><small>Mit offenen Rechnungen</small>
         </div>
-        <div className="office-stat-card">
-          <span className="label">Gesamt offener Posten</span>
-          <span className="value" style={{ color: "var(--accent)" }}>{euro(totalOpenCents)}</span>
+        <div className="tile stat-tile">
+          <span className="stat-icon"><Wallet size={18} /></span>
+          <strong>{euro(totalOpenCents)}</strong><small>Gesamt offener Posten</small>
         </div>
       </div>
 
       <div className="toolbar">
-        <div className="search-wrap" style={{ maxWidth: "340px", flex: 1 }}>
-          <Search size={18} className="search-icon" />
-          <input
-            type="search"
-            className="input"
-            placeholder={o("common.search")}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+        <div className="row wrap gap office-filters">
+          <label className="search">
+            <Search size={18} />
+            <input
+              type="search"
+              placeholder={o("common.search")}
+              aria-label={o("common.search")}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </label>
+          {isManager && (
+            <div className="row gap push-end">
+              <button className="button primary" onClick={openNew}>
+                <Plus size={18} /> {o("clients.newClient")}
+              </button>
+            </div>
+          )}
         </div>
-        {isManager && (
-          <button className="button primary push-end" onClick={openNew}>
-            <Plus size={18} /> {o("clients.newClient")}
-          </button>
-        )}
       </div>
 
       {loading ? (
         <p className="muted">Laden...</p>
       ) : clients.length === 0 ? (
-        <div className="card" style={{ textAlign: "center", padding: "40px" }}>
-          <Users size={36} style={{ color: "var(--muted)", margin: "0 auto 12px" }} />
-          <h3>{o("clients.noClients")}</h3>
-        </div>
+        <section className="card list-card">
+          <p className="empty muted">{o("clients.noClients")}</p>
+        </section>
       ) : (
         <div className="office-grid">
           {clients.map((c) => (
-            <div key={c.id} className="office-card">
-              <div className="office-card-header">
+            <article key={c.id} className="card office-card">
+              <div className="section-head">
                 <div>
-                  <h3 style={{ margin: "0 0 4px", display: "flex", alignItems: "center", gap: "8px" }}>
-                    <Building2 size={18} style={{ color: "var(--accent)" }} />
-                    {c.name}
-                  </h3>
+                  <h3 className="office-icon-line"><Building2 size={18} /> {c.name}</h3>
                   <small className="muted">Kunden-Nr. #{c.number}</small>
                 </div>
                 {(c.openInvoiceCount || 0) > 0 && (
-                  <span className="pill warning" title="Offene Rechnungen">
+                  <span className="pill warn" title="Offene Rechnungen">
                     {c.openInvoiceCount} offen ({euro(c.openInvoiceCents || 0)})
                   </span>
                 )}
               </div>
 
-              <div className="stack-sm" style={{ fontSize: "0.88rem", color: "var(--muted)" }}>
-                {c.contactPerson && <div>Ansprechpartner: <strong style={{ color: "var(--text)" }}>{c.contactPerson}</strong></div>}
-                {c.email && (
-                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                    <Mail size={15} /> <span>{c.email}</span>
-                  </div>
-                )}
-                {c.phone && (
-                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                    <Phone size={15} /> <span>{c.phone}</span>
-                  </div>
-                )}
+              <div className="stack-sm small muted">
+                {c.contactPerson && <span>Ansprechpartner: <strong>{c.contactPerson}</strong></span>}
+                {c.email && <span className="office-icon-line"><Mail size={15} /> {c.email}</span>}
+                {c.phone && <span className="office-icon-line"><Phone size={15} /> {c.phone}</span>}
                 {(c.street || c.city) && (
-                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                    <MapPin size={15} /> <span>{[c.street, `${c.postalCode} ${c.city}`.trim()].filter(Boolean).join(", ")}</span>
-                  </div>
+                  <span className="office-icon-line"><MapPin size={15} /> {[c.street, `${c.postalCode} ${c.city}`.trim()].filter(Boolean).join(", ")}</span>
                 )}
               </div>
 
-              {(c.sepaIban || (c.skontoDays && c.skontoDays > 0) || (c.discountPercent && c.discountPercent > 0)) && (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", fontSize: "0.78rem" }}>
+              {!!(c.sepaIban || (c.skontoDays && c.skontoDays > 0) || (c.discountPercent && c.discountPercent > 0)) && (
+                <div className="row wrap gap">
                   {c.sepaIban ? <span className="pill success" title={`IBAN: ${c.sepaIban}`}>SEPA-Mandat</span> : null}
                   {c.skontoDays && c.skontoDays > 0 ? (
                     <span className="pill" title={`Skonto: ${c.skontoPercent}% bei ${c.skontoDays} Tagen`}>
@@ -238,304 +229,214 @@ export function ClientsTab({
                     </span>
                   ) : null}
                   {c.discountPercent && c.discountPercent > 0 ? (
-                    <span className="pill warning" title={`Rabatt: ${c.discountPercent}%`}>
-                      {c.discountPercent}% Rabatt
-                    </span>
+                    <span className="pill warn" title={`Rabatt: ${c.discountPercent}%`}>{c.discountPercent}% Rabatt</span>
                   ) : null}
                 </div>
               )}
 
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.82rem", color: "var(--muted)", borderTop: "1px solid var(--line)", paddingTop: "10px" }}>
+              <div className="office-facts foot">
                 <span>Satz: <strong>{c.hourlyRateCents > 0 ? `${euro(c.hourlyRateCents)}/h` : "Standard"}</strong></span>
                 <span>Zahlungsziel: <strong>{c.paymentTermsDays || 14} Tage</strong></span>
               </div>
 
               {isManager && (
-                <div className="row gap" style={{ justifyContent: "flex-end", marginTop: "4px", flexWrap: "wrap" }}>
+                <div className="row wrap gap end">
                   {onSelectClient && (
-                    <button className="button small" onClick={() => onSelectClient(c.id)} title="Projekte anzeigen">
-                      Projekte <ArrowRight size={14} />
+                    <button className="button small-button" onClick={() => onSelectClient(c.id)} title="Projekte anzeigen">
+                      Projekte <ArrowRight size={15} />
                     </button>
                   )}
-                  <button className="button small" onClick={() => openEdit(c)} title={o("common.edit")}>
+                  <button className="button small-button" onClick={() => openEdit(c)} title={o("common.edit")}>
                     <Pencil size={15} /> {o("common.edit")}
                   </button>
-                  <button
-                    className="button small danger"
-                    onClick={() => setDeleteConfirmId(c.id)}
-                    title={o("common.delete")}
-                  >
-                    <Trash2 size={15} />
+                  <button className="icon-button danger" onClick={() => setDeleteConfirmId(c.id)} title={o("common.delete")} aria-label={o("common.delete")}>
+                    <Trash2 size={17} />
                   </button>
                 </div>
               )}
-            </div>
+            </article>
           ))}
         </div>
       )}
 
       {/* Lösch-Bestätigung */}
       {deleteConfirmId && (
-        <div className="office-modal-overlay" onClick={() => setDeleteConfirmId(null)}>
-          <div className="office-modal" style={{ maxWidth: "440px" }} onClick={(e) => e.stopPropagation()}>
-            <div className="office-modal-head">
-              <h3>{o("common.confirmDelete")}</h3>
-              <button className="icon-button" onClick={() => setDeleteConfirmId(null)}>
-                <X size={20} />
-              </button>
-            </div>
-            <p className="small muted">
+        <Dialog title={o("common.confirmDelete")} onClose={() => setDeleteConfirmId(null)}>
+          <div className="stack office-dialog">
+            <p className="muted">
               Möchten Sie diesen Kunden wirklich löschen? Kunden mit verknüpften Projekten können aus Sicherheitsgründen nicht gelöscht werden.
             </p>
-            <div className="row gap" style={{ justifyContent: "flex-end" }}>
+            <div className="row wrap gap end">
               <button className="button" onClick={() => setDeleteConfirmId(null)}>{o("common.cancel")}</button>
-              <button className="button primary danger" onClick={() => handleDelete(deleteConfirmId)}>{o("common.delete")}</button>
+              <button className="button danger" onClick={() => handleDelete(deleteConfirmId)}><Trash2 size={17} /> {o("common.delete")}</button>
             </div>
           </div>
-        </div>
+        </Dialog>
       )}
 
-      {/* Modal: Neu / Bearbeiten */}
+      {/* Dialog: Neu / Bearbeiten */}
       {modalOpen && (
-        <div className="office-modal-overlay" onClick={() => setModalOpen(false)}>
-          <div className="office-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="office-modal-head">
-              <h3>{editingClient ? "Kunde bearbeiten" : o("clients.newClient")}</h3>
-              <button className="icon-button" onClick={() => setModalOpen(false)}>
-                <X size={20} />
-              </button>
-            </div>
-
-            {errorMsg && (
-              <div className="notice warning" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                <AlertTriangle size={18} /> {errorMsg}
-              </div>
-            )}
-
-            <form onSubmit={handleSave} className="stack">
-              <Field label="Kundenname / Firma" required>
+        <Dialog title={editingClient ? "Kunde bearbeiten" : o("clients.newClient")} onClose={() => setModalOpen(false)} wide>
+          <form onSubmit={handleSave} className="stack office-dialog">
+            {errorMsg && <p className="error" role="alert">{errorMsg}</p>}
+            <div className="grid form-grid">
+              <Field label="Kundenname / Firma" required wide>
                 <input
                   type="text"
                   required
-                  className="input"
                   placeholder="z.B. Musterkanzlei Schmidt & Partner"
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                 />
               </Field>
-
-              <div className="row-grid">
-                <Field label={o("clients.contactPerson")}>
-                  <input
-                    type="text"
-                    className="input"
-                    placeholder="z.B. Dr. Michael Schmidt"
-                    value={form.contactPerson}
-                    onChange={(e) => setForm({ ...form, contactPerson: e.target.value })}
-                  />
-                </Field>
-                <Field label={o("clients.vatId")}>
-                  <input
-                    type="text"
-                    className="input"
-                    placeholder="DE123456789"
-                    value={form.vatId}
-                    onChange={(e) => setForm({ ...form, vatId: e.target.value })}
-                  />
-                </Field>
-              </div>
-
-              <div className="row-grid">
-                <Field label="E-Mail-Adresse">
-                  <input
-                    type="email"
-                    className="input"
-                    placeholder="kontakt@kunde.de"
-                    value={form.email}
-                    onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  />
-                </Field>
-                <Field label="Telefonnummer">
-                  <input
-                    type="tel"
-                    className="input"
-                    placeholder="+49 30 12345678"
-                    value={form.phone}
-                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                  />
-                </Field>
-              </div>
-
-              <Field label="Straße & Hausnummer">
+              <Field label={o("clients.contactPerson")}>
                 <input
                   type="text"
-                  className="input"
-                  placeholder="Hauptstraße 12"
-                  value={form.street}
-                  onChange={(e) => setForm({ ...form, street: e.target.value })}
+                  placeholder="z.B. Dr. Michael Schmidt"
+                  value={form.contactPerson}
+                  onChange={(e) => setForm({ ...form, contactPerson: e.target.value })}
                 />
               </Field>
+              <Field label={o("clients.vatId")}>
+                <input type="text" placeholder="DE123456789" value={form.vatId} onChange={(e) => setForm({ ...form, vatId: e.target.value })} />
+              </Field>
+              <Field label="E-Mail-Adresse">
+                <input type="email" placeholder="kontakt@kunde.de" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+              </Field>
+              <Field label="Telefonnummer">
+                <input type="tel" placeholder="+49 30 12345678" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+              </Field>
+              <Field label="Straße & Hausnummer" wide>
+                <input type="text" placeholder="Hauptstraße 12" value={form.street} onChange={(e) => setForm({ ...form, street: e.target.value })} />
+              </Field>
+            </div>
 
-              <div className="row-grid" style={{ gridTemplateColumns: "1fr 2fr 1fr" }}>
-                <Field label="PLZ">
-                  <input
-                    type="text"
-                    className="input"
-                    placeholder="10115"
-                    value={form.postalCode}
-                    onChange={(e) => setForm({ ...form, postalCode: e.target.value })}
-                  />
-                </Field>
-                <Field label="Ort">
-                  <input
-                    type="text"
-                    className="input"
-                    placeholder="Berlin"
-                    value={form.city}
-                    onChange={(e) => setForm({ ...form, city: e.target.value })}
-                  />
-                </Field>
-                <Field label="Land">
-                  <input
-                    type="text"
-                    className="input"
-                    value={form.country}
-                    onChange={(e) => setForm({ ...form, country: e.target.value })}
-                  />
-                </Field>
-              </div>
+            <div className="grid three">
+              <Field label="PLZ">
+                <input type="text" placeholder="10115" value={form.postalCode} onChange={(e) => setForm({ ...form, postalCode: e.target.value })} />
+              </Field>
+              <Field label="Ort">
+                <input type="text" placeholder="Berlin" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
+              </Field>
+              <Field label="Land">
+                <input type="text" value={form.country} onChange={(e) => setForm({ ...form, country: e.target.value })} />
+              </Field>
+            </div>
 
-              <div className="row-grid">
-                <Field label={o("clients.paymentTerms")}>
+            <div className="grid form-grid">
+              <Field label={o("clients.paymentTerms")}>
+                <input
+                  type="number"
+                  min="0"
+                  max="180"
+                  value={form.paymentTermsDays}
+                  onChange={(e) => setForm({ ...form, paymentTermsDays: parseInt(e.target.value, 10) || 14 })}
+                />
+              </Field>
+              <Field label="Individueller Stundensatz (€/h, netto)">
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="0.00 = Standard"
+                  value={(form.hourlyRateCents / 100) || ""}
+                  onChange={(e) => setForm({ ...form, hourlyRateCents: Math.round(parseFloat(e.target.value || "0") * 100) })}
+                />
+              </Field>
+            </div>
+
+            {/* Skonto- & Rabatt-Konditionen */}
+            <div className="office-section">
+              <h3 className="card-subtitle">Skonto- & Rabatt-Konditionen</h3>
+              <div className="grid three">
+                <Field label="Skonto-Frist (Tage)">
                   <input
                     type="number"
                     min="0"
-                    max="180"
-                    className="input"
-                    value={form.paymentTermsDays}
-                    onChange={(e) => setForm({ ...form, paymentTermsDays: parseInt(e.target.value, 10) || 14 })}
+                    max="60"
+                    placeholder="z.B. 7"
+                    value={form.skontoDays || ""}
+                    onChange={(e) => setForm({ ...form, skontoDays: parseInt(e.target.value, 10) || 0 })}
                   />
                 </Field>
-                <Field label="Individueller Stundensatz (€/h, netto)">
+                <Field label="Skonto (%)">
                   <input
                     type="number"
-                    step="0.01"
                     min="0"
-                    className="input"
-                    placeholder="0.00 = Standard"
-                    value={(form.hourlyRateCents / 100) || ""}
-                    onChange={(e) => setForm({ ...form, hourlyRateCents: Math.round(parseFloat(e.target.value || "0") * 100) })}
+                    max="10"
+                    step="0.5"
+                    placeholder="z.B. 2"
+                    value={form.skontoPercent || ""}
+                    onChange={(e) => setForm({ ...form, skontoPercent: parseFloat(e.target.value) || 0 })}
+                  />
+                </Field>
+                <Field label="Standard-Rabatt (%)">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.5"
+                    placeholder="z.B. 5"
+                    value={form.discountPercent || ""}
+                    onChange={(e) => setForm({ ...form, discountPercent: parseFloat(e.target.value) || 0 })}
                   />
                 </Field>
               </div>
+            </div>
 
-              {/* Skonto- & Rabatt-Konditionen */}
-              <div style={{ borderTop: "1px solid var(--line)", paddingTop: "12px" }}>
-                <h4 style={{ margin: "0 0 8px", fontSize: "0.95rem" }}>Skonto- & Rabatt-Konditionen</h4>
-                <div className="row-grid" style={{ gridTemplateColumns: "1fr 1fr 1fr" }}>
-                  <Field label="Skonto-Frist (Tage)">
-                    <input
-                      type="number"
-                      min="0"
-                      max="60"
-                      className="input"
-                      placeholder="z.B. 7"
-                      value={form.skontoDays || ""}
-                      onChange={(e) => setForm({ ...form, skontoDays: parseInt(e.target.value, 10) || 0 })}
-                    />
-                  </Field>
-                  <Field label="Skonto (%)">
-                    <input
-                      type="number"
-                      min="0"
-                      max="10"
-                      step="0.5"
-                      className="input"
-                      placeholder="z.B. 2"
-                      value={form.skontoPercent || ""}
-                      onChange={(e) => setForm({ ...form, skontoPercent: parseFloat(e.target.value) || 0 })}
-                    />
-                  </Field>
-                  <Field label="Standard-Rabatt (%)">
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="0.5"
-                      className="input"
-                      placeholder="z.B. 5"
-                      value={form.discountPercent || ""}
-                      onChange={(e) => setForm({ ...form, discountPercent: parseFloat(e.target.value) || 0 })}
-                    />
-                  </Field>
-                </div>
+            {/* SEPA-Lastschriftmandat */}
+            <div className="office-section">
+              <h3 className="card-subtitle">SEPA-Lastschriftmandat</h3>
+              <div className="grid form-grid">
+                <Field label="IBAN">
+                  <input
+                    type="text"
+                    placeholder="DE89 3704 0044 0532 0130 00"
+                    value={form.sepaIban}
+                    onChange={(e) => setForm({ ...form, sepaIban: e.target.value.toUpperCase() })}
+                  />
+                </Field>
+                <Field label="BIC">
+                  <input
+                    type="text"
+                    placeholder="COBADEFFXXX"
+                    value={form.sepaBic}
+                    onChange={(e) => setForm({ ...form, sepaBic: e.target.value.toUpperCase() })}
+                  />
+                </Field>
+                <Field label="Mandatsreferenz">
+                  <input
+                    type="text"
+                    placeholder="MANDAT-1001"
+                    value={form.sepaMandateRef}
+                    onChange={(e) => setForm({ ...form, sepaMandateRef: e.target.value })}
+                  />
+                </Field>
+                <Field label="Mandatsdatum">
+                  <input type="date" value={form.sepaMandateDate} onChange={(e) => setForm({ ...form, sepaMandateDate: e.target.value })} />
+                </Field>
               </div>
+            </div>
 
-              {/* SEPA-Lastschriftmandat */}
-              <div style={{ borderTop: "1px solid var(--line)", paddingTop: "12px" }}>
-                <h4 style={{ margin: "0 0 8px", fontSize: "0.95rem" }}>SEPA-Lastschriftmandat</h4>
-                <div className="row-grid">
-                  <Field label="IBAN">
-                    <input
-                      type="text"
-                      className="input"
-                      placeholder="DE89 3704 0044 0532 0130 00"
-                      value={form.sepaIban}
-                      onChange={(e) => setForm({ ...form, sepaIban: e.target.value.toUpperCase() })}
-                    />
-                  </Field>
-                  <Field label="BIC">
-                    <input
-                      type="text"
-                      className="input"
-                      placeholder="COBADEFFXXX"
-                      value={form.sepaBic}
-                      onChange={(e) => setForm({ ...form, sepaBic: e.target.value.toUpperCase() })}
-                    />
-                  </Field>
-                </div>
-                <div className="row-grid">
-                  <Field label="Mandatsreferenz">
-                    <input
-                      type="text"
-                      className="input"
-                      placeholder="MANDAT-1001"
-                      value={form.sepaMandateRef}
-                      onChange={(e) => setForm({ ...form, sepaMandateRef: e.target.value })}
-                    />
-                  </Field>
-                  <Field label="Mandatsdatum">
-                    <input
-                      type="date"
-                      className="input"
-                      value={form.sepaMandateDate}
-                      onChange={(e) => setForm({ ...form, sepaMandateDate: e.target.value })}
-                    />
-                  </Field>
-                </div>
-              </div>
+            <Field label="Kundenhistorie & Interne Notizen">
+              <textarea
+                rows={2}
+                placeholder="Besondere Vereinbarungen, Ansprechzeiten..."
+                value={form.notes}
+                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              />
+            </Field>
 
-              <Field label="Kundenhistorie & Interne Notizen">
-                <textarea
-                  className="input"
-                  rows={2}
-                  placeholder="Besondere Vereinbarungen, Ansprechzeiten..."
-                  value={form.notes}
-                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                />
-              </Field>
-
-              <div className="row gap" style={{ justifyContent: "flex-end", marginTop: "12px" }}>
-                <button type="button" className="button" onClick={() => setModalOpen(false)}>
-                  {o("common.cancel")}
-                </button>
-                <button type="submit" className="button primary">
-                  {o("common.save")}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+            <div className="row wrap gap end">
+              <button type="button" className="button" onClick={() => setModalOpen(false)}>
+                {o("common.cancel")}
+              </button>
+              <button type="submit" className="button primary">
+                <Check size={17} /> {o("common.save")}
+              </button>
+            </div>
+          </form>
+        </Dialog>
       )}
     </div>
   );

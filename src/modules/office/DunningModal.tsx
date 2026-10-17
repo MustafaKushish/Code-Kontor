@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, Printer, X, Check, FileText } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Printer, X } from "lucide-react";
 import { api } from "../../api";
 import { Field } from "../../components";
+import { Dialog } from "../../pos/ui";
 import type { CompanyProfile } from "../../../shared/company";
 import type { OfficeDunning, OfficeInvoice, OfficeSettings } from "../../../shared/office";
 import { useOfficeI18n } from "./i18n";
@@ -48,6 +50,12 @@ export function DunningModal({
   const interestCents = level >= 2 ? Math.round(invoice.totalCents * 0.01) : 0;
   const totalAmountCents = invoice.totalCents + feeCents + interestCents;
 
+  useEffect(() => {
+    if (!printMode) return;
+    document.body.classList.add("ck-printing");
+    return () => document.body.classList.remove("ck-printing");
+  }, [printMode]);
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg("");
@@ -69,13 +77,13 @@ export function DunningModal({
   };
 
   if (printMode && createdDunning) {
-    return (
+    return createPortal(
       <div className="print-layer">
         <div className="print-toolbar">
           <button className="button primary" onClick={() => window.print()}>
             <Printer size={18} /> {o("common.print")}
           </button>
-          <button className="button push-end" onClick={onClose}>
+          <button className="button" onClick={onClose}>
             <X size={18} /> {o("common.close")}
           </button>
         </div>
@@ -87,7 +95,7 @@ export function DunningModal({
               <p>{company?.street}<br />{company?.postalCode} {company?.city}</p>
             </div>
             <div className="print-meta">
-              <h1 style={{ fontSize: "1.6rem", margin: "0 0 6px" }}>
+              <h1>
                 {createdDunning.level === 1
                   ? "Zahlungserinnerung"
                   : createdDunning.level === 2
@@ -99,21 +107,21 @@ export function DunningModal({
             </div>
           </header>
 
-          <section style={{ margin: "24px 0" }}>
-            <small className="muted" style={{ display: "block", marginBottom: "4px" }}>Empfänger:</small>
-            <div style={{ fontSize: "1.05rem" }}>
-              <strong>{invoice.clientName}</strong>
-              <div style={{ whiteSpace: "pre-line" }}>{invoice.clientAddress}</div>
-            </div>
+          <section>
+            <h2>Empfänger:</h2>
+            <p><strong>{invoice.clientName}</strong></p>
+            <p className="office-pre">{invoice.clientAddress}</p>
           </section>
 
-          <div style={{ margin: "20px 0" }}>
-            <h2 style={{ fontSize: "1.2rem", margin: "0 0 8px" }}>
-              {createdDunning.level === 1
-                ? `Zahlungserinnerung zu Rechnung ${invoice.number}`
-                : `Mahnung zu Rechnung ${invoice.number}`}
-            </h2>
-            <p style={{ lineHeight: "1.6" }}>
+          <section>
+            <p className="office-print-title">
+              <strong>
+                {createdDunning.level === 1
+                  ? `Zahlungserinnerung zu Rechnung ${invoice.number}`
+                  : `Mahnung zu Rechnung ${invoice.number}`}
+              </strong>
+            </p>
+            <p>
               {createdDunning.level === 1 ? (
                 <>
                   Sehr geehrte Damen und Herren,<br />
@@ -126,9 +134,9 @@ export function DunningModal({
                 </>
               )}
             </p>
-          </div>
+          </section>
 
-          <table className="print-items">
+          <table className="print-table">
             <thead>
               <tr>
                 <th>Posten</th>
@@ -159,115 +167,87 @@ export function DunningModal({
             </tbody>
           </table>
 
-          <div className="print-totals" style={{ marginLeft: "auto", maxWidth: "340px", marginTop: "16px" }}>
-            <p className="grand" style={{ fontSize: "1.25rem", borderTop: "2px solid var(--text)", paddingTop: "8px" }}>
+          <div className="print-totals">
+            <p className="grand">
               <span><strong>Gesamtforderung:</strong></span>
               <strong>{euro(createdDunning.totalAmountCents)}</strong>
             </p>
           </div>
 
           {company?.iban && (
-            <div style={{ marginTop: "32px", borderTop: "1px solid var(--line)", paddingTop: "16px", fontSize: "0.9rem" }}>
-              <p><strong>Bankverbindung für die Überweisung:</strong></p>
-              <div>Bank: {company.bankName || "Geschäftskonto"}</div>
-              <div>IBAN: <strong>{company.iban}</strong> · BIC: {company.bic || "—"}</div>
-              <div>Verwendungszweck: <strong>{invoice.number} Mahnung</strong></div>
-            </div>
+            <section className="print-terms">
+              <h2>Bankverbindung für die Überweisung:</h2>
+              Bank: {company.bankName || "Geschäftskonto"}<br />
+              IBAN: <strong>{company.iban}</strong> · BIC: {company.bic || "—"}<br />
+              Verwendungszweck: <strong>{invoice.number} Mahnung</strong>
+            </section>
           )}
 
-          <footer className="print-foot" style={{ marginTop: "40px" }}>
+          <footer className="print-foot">
             <span>{company?.name}</span>
             {company?.taxNumber && <span>St.-Nr.: {company.taxNumber}</span>}
             {company?.vatId && <span>USt-IdNr.: {company.vatId}</span>}
           </footer>
         </article>
-      </div>
+      </div>,
+      document.body,
     );
   }
 
   return (
-    <div className="office-modal-overlay" onClick={onClose}>
-      <div className="office-modal" style={{ maxWidth: "560px" }} onClick={(e) => e.stopPropagation()}>
-        <div className="office-modal-head">
-          <h3 style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <AlertTriangle size={20} style={{ color: "var(--warning)" }} />
-            {o("invoices.createDunning")}
-          </h3>
-          <button className="icon-button" onClick={onClose}>
-            <X size={20} />
+    <Dialog title={o("invoices.createDunning")} onClose={onClose}>
+      <form onSubmit={handleCreate} className="stack office-dialog">
+        {errorMsg && <p className="error" role="alert">{errorMsg}</p>}
+
+        <div className="office-panel">
+          <div className="section-head">
+            <strong>Rechnung {invoice.number}</strong>
+            <span className={`pill ${invoice.status === "overdue" ? "neg" : "warn"}`}>{o(`invoices.status.${invoice.status}`)}</span>
+          </div>
+          <div className="stack-sm small muted">
+            <span>Kunde: <strong>{invoice.clientName}</strong></span>
+            <span>Ursprünglich fällig am: <strong>{day(invoice.dueDate)}</strong></span>
+            <span>Hauptforderung: <strong>{euro(invoice.totalCents)}</strong></span>
+          </div>
+        </div>
+
+        <Field label="Mahnstufe auswählen" required>
+          <select value={level} onChange={(e) => setLevel(parseInt(e.target.value, 10) as 1 | 2 | 3)}>
+            <option value={1}>Stufe 1: Zahlungserinnerung (0,00 € Gebühr)</option>
+            <option value={2}>Stufe 2: 1. Mahnung (+ {euro(settings?.dunningFeeLevel2Cents ?? 500)} Gebühr)</option>
+            <option value={3}>Stufe 3: 2. Mahnung / Letzte Frist (+ {euro(settings?.dunningFeeLevel3Cents ?? 1000)} Gebühr)</option>
+          </select>
+        </Field>
+
+        <table className="price-table">
+          <tbody>
+            <tr><td>Rechnungsbetrag:</td><td>{euro(invoice.totalCents)}</td></tr>
+            {feeCents > 0 && <tr><td>Mahngebühr:</td><td>+{euro(feeCents)}</td></tr>}
+            {interestCents > 0 && <tr><td>Pauschale Verzugszinsen (1%):</td><td>+{euro(interestCents)}</td></tr>}
+          </tbody>
+          <tfoot>
+            <tr><th>Gesamtforderung Mahnung:</th><th>{euro(totalAmountCents)}</th></tr>
+          </tfoot>
+        </table>
+
+        <Field label="Zusätzliche Bemerkung / Grund">
+          <textarea
+            rows={2}
+            placeholder="z.B. Telefonische Rücksprache am Vortag ohne Zahlung..."
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+          />
+        </Field>
+
+        <div className="row wrap gap end">
+          <button type="button" className="button" onClick={onClose}>
+            {o("common.cancel")}
+          </button>
+          <button type="submit" className="button primary">
+            <Printer size={17} /> Mahnung erstellen & Drucken
           </button>
         </div>
-
-        {errorMsg && <div className="notice warning">{errorMsg}</div>}
-
-        <div className="card" style={{ padding: "12px", background: "var(--panel-2)" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
-            <strong>Rechnung {invoice.number}</strong>
-            <span className="pill warning">{o(`invoices.status.${invoice.status}`)}</span>
-          </div>
-          <div style={{ fontSize: "0.88rem", color: "var(--muted)" }}>
-            <div>Kunde: <strong>{invoice.clientName}</strong></div>
-            <div>Ursprünglich fällig am: <strong>{day(invoice.dueDate)}</strong></div>
-            <div>Hauptforderung: <strong>{euro(invoice.totalCents)}</strong></div>
-          </div>
-        </div>
-
-        <form onSubmit={handleCreate} className="stack">
-          <Field label="Mahnstufe auswählen" required>
-            <select
-              className="input"
-              value={level}
-              onChange={(e) => setLevel(parseInt(e.target.value, 10) as 1 | 2 | 3)}
-            >
-              <option value={1}>Stufe 1: Zahlungserinnerung (0,00 € Gebühr)</option>
-              <option value={2}>Stufe 2: 1. Mahnung (+ {euro(settings?.dunningFeeLevel2Cents ?? 500)} Gebühr)</option>
-              <option value={3}>Stufe 3: 2. Mahnung / Letzte Frist (+ {euro(settings?.dunningFeeLevel3Cents ?? 1000)} Gebühr)</option>
-            </select>
-          </Field>
-
-          <div className="stack-sm" style={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: "var(--radius)", padding: "12px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.88rem" }}>
-              <span>Rechnungsbetrag:</span>
-              <span>{euro(invoice.totalCents)}</span>
-            </div>
-            {feeCents > 0 && (
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.88rem" }}>
-                <span>Mahngebühr:</span>
-                <span>+{euro(feeCents)}</span>
-              </div>
-            )}
-            {interestCents > 0 && (
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.88rem" }}>
-                <span>Pauschale Verzugszinsen (1%):</span>
-                <span>+{euro(interestCents)}</span>
-              </div>
-            )}
-            <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid var(--line)", paddingTop: "6px", fontWeight: 700 }}>
-              <span>Gesamtforderung Mahnung:</span>
-              <span style={{ color: "var(--accent)" }}>{euro(totalAmountCents)}</span>
-            </div>
-          </div>
-
-          <Field label="Zusätzliche Bemerkung / Grund">
-            <textarea
-              className="input"
-              rows={2}
-              placeholder="z.B. Telefonische Rücksprache am Vortag ohne Zahlung..."
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-            />
-          </Field>
-
-          <div className="row gap" style={{ justifyContent: "flex-end", marginTop: "12px" }}>
-            <button type="button" className="button" onClick={onClose}>
-              {o("common.cancel")}
-            </button>
-            <button type="submit" className="button primary">
-              <Printer size={17} /> Mahnung erstellen & Drucken
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+      </form>
+    </Dialog>
   );
 }

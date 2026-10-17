@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { api } from "../../api";
 import { Field } from "../../components";
+import { Dialog } from "../../pos/ui";
 import type {
   CraftProject,
   CraftProjectStatus,
@@ -103,7 +104,7 @@ export function ProjectsTab({
     try {
       await api("/craft/projects", {
         method: "POST",
-        body: JSON.stringify(editingProject),
+        body: editingProject,
       });
       setIsModalOpen(false);
       onRefresh();
@@ -129,12 +130,46 @@ export function ProjectsTab({
     }
   };
 
+  const statusLabel = (status: CraftProjectStatus) =>
+    status === "abnahmebereit"
+      ? "Abnahmebereit"
+      : status === "in_arbeit"
+      ? "In Arbeit"
+      : status === "abgeschlossen"
+      ? "Abgeschlossen"
+      : "Geplant";
+
   return (
-    <div className="space-y-6">
-      {/* Top Filter and Actions Bar */}
-      <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        {/* Status Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto pb-1 md:pb-0">
+    <div className="stack">
+      <div className="toolbar craft-toolbar">
+        <div className="craft-toolbar-row">
+          <label className="search">
+            <Search size={18} />
+            <input
+              type="search"
+              placeholder="Suchen..."
+              aria-label="Suchen..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </label>
+          <select
+            value={selectedTrade}
+            onChange={(e) => setSelectedTrade(e.target.value)}
+            aria-label="Gewerk"
+          >
+            <option value="alle">Alle Gewerke</option>
+            {trades.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+          <button onClick={handleOpenAdd} className="button primary">
+            <Plus size={18} /> Neue Baustelle
+          </button>
+        </div>
+        <div className="chips" role="tablist">
           {[
             { id: "alle", label: "Alle Baustellen" },
             { id: "in_arbeit", label: "In Arbeit" },
@@ -144,343 +179,241 @@ export function ProjectsTab({
           ].map((s) => (
             <button
               key={s.id}
+              role="tab"
+              aria-selected={selectedStatus === s.id}
               onClick={() => setSelectedStatus(s.id)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
-                selectedStatus === s.id
-                  ? "bg-amber-600 text-white shadow-xs"
-                  : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
-              }`}
+              className={selectedStatus === s.id ? "chip active" : "chip"}
             >
               {s.label}
             </button>
           ))}
         </div>
-
-        {/* Trade & Search & Add */}
-        <div className="flex items-center gap-2.5 w-full md:w-auto justify-end">
-          <select
-            value={selectedTrade}
-            onChange={(e) => setSelectedTrade(e.target.value)}
-            className="px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-700 dark:text-slate-200"
-          >
-            <option value="alle">Alle Gewerke</option>
-            {trades.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-
-          <div className="relative w-full sm:w-48">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Suchen..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg"
-            />
-          </div>
-
-          <button
-            onClick={handleOpenAdd}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors whitespace-nowrap"
-          >
-            <Plus className="w-4 h-4" />
-            Neue Baustelle
-          </button>
-        </div>
       </div>
 
-      {/* Projects Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredProjects.length === 0 ? (
-          <div className="col-span-full text-center py-16 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-slate-400">
-            <HardHat className="w-12 h-12 mx-auto mb-2 opacity-30" />
-            <p className="text-sm font-semibold">Keine Baustellenakten gefunden</p>
-            <p className="text-xs text-slate-500 mt-1">
-              Erstelle eine neue Baustelle, um Aufmaße, Arbeitsberichte und Bautagebücher zuzuordnen.
-            </p>
-          </div>
-        ) : (
-          filteredProjects.map((project) => {
+      {filteredProjects.length === 0 ? (
+        <section className="card craft-empty">
+          <HardHat size={40} aria-hidden />
+          <strong>Keine Baustellenakten gefunden</strong>
+          <p className="muted small">
+            Erstelle eine neue Baustelle, um Aufmaße, Arbeitsberichte und Bautagebücher zuzuordnen.
+          </p>
+        </section>
+      ) : (
+        <div className="craft-grid">
+          {filteredProjects.map((project) => {
             const isInProgress = project.status === "in_arbeit";
             const isReadyForAcceptance = project.status === "abnahmebereit";
             const isCompleted = project.status === "abgeschlossen";
 
             return (
-              <div
-                key={project.id}
-                className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between"
-              >
-                <div>
-                  {/* Top line: Number & Trade */}
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <span className="font-mono text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-tight">
-                      {project.projectNumber}
-                    </span>
-                    <span
-                      className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                        isReadyForAcceptance
-                          ? "bg-blue-100 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300"
-                          : isInProgress
-                          ? "bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300"
-                          : isCompleted
-                          ? "bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300"
-                          : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
-                      }`}
-                    >
-                      {isReadyForAcceptance
-                        ? "Abnahmebereit"
-                        : isInProgress
-                        ? "In Arbeit"
-                        : isCompleted
-                        ? "Abgeschlossen"
-                        : "Geplant"}
-                    </span>
-                  </div>
-
-                  <h3 className="font-bold text-slate-900 dark:text-white text-base line-clamp-1 mb-1">
-                    {project.title}
-                  </h3>
-
-                  <div className="text-xs text-slate-500 flex items-center gap-2 mb-3">
-                    <span className="font-semibold text-slate-700 dark:text-slate-300">
-                      {project.trade}
-                    </span>
-                    <span>·</span>
-                    <span>Bauherr: {project.customerName}</span>
-                  </div>
-
-                  {/* Address & Contacts */}
-                  <div className="space-y-1.5 text-xs text-slate-600 dark:text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800">
-                    <a
-                      href={`https://maps.google.com/?q=${encodeURIComponent(
-                        `${project.siteAddress}, ${project.siteCity}`
-                      )}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-start gap-1.5 hover:text-amber-600 dark:hover:text-amber-400 transition-colors group"
-                      title="In Google Maps öffnen"
-                    >
-                      <MapPin className="w-3.5 h-3.5 mt-0.5 text-slate-400 group-hover:text-amber-500" />
-                      <span className="line-clamp-1">
-                        {project.siteAddress}{project.siteCity ? `, ${project.siteCity}` : ""}
-                      </span>
-                    </a>
-
-                    {project.customerPhone && (
-                      <a
-                        href={`tel:${project.customerPhone}`}
-                        className="flex items-center gap-1.5 hover:text-amber-600 transition-colors"
-                      >
-                        <Phone className="w-3.5 h-3.5 text-slate-400" />
-                        <span>{project.customerPhone}</span>
-                      </a>
-                    )}
-
-                    <div className="flex items-center gap-1.5 text-slate-500 text-[11px] pt-1">
-                      <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                      <span>Start: {new Date(project.startDate).toLocaleDateString("de-DE")}</span>
-                      {project.targetDate && (
-                        <span>· Bis: {new Date(project.targetDate).toLocaleDateString("de-DE")}</span>
-                      )}
-                    </div>
-                  </div>
+              <article key={project.id} className="card craft-card">
+                <div className="craft-card-top">
+                  <span className="craft-number">{project.projectNumber}</span>
+                  <span
+                    className={`pill craft-status ${
+                      isReadyForAcceptance ? "tone-info" : isInProgress ? "warn" : isCompleted ? "pos" : ""
+                    }`}
+                  >
+                    {statusLabel(project.status)}
+                  </span>
                 </div>
 
-                {/* Footer Actions */}
-                <div className="mt-5 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                  <span className="font-mono font-bold text-xs text-slate-900 dark:text-white">
-                    Budget: {fmtEuro(project.budgetGross)}
-                  </span>
+                <div className="craft-card-title">
+                  <h3>{project.title}</h3>
+                  <small className="muted">
+                    <strong>{project.trade}</strong> · Bauherr: {project.customerName}
+                  </small>
+                </div>
 
-                  <div className="flex items-center gap-1">
+                <div className="craft-facts">
+                  <a
+                    href={`https://maps.google.com/?q=${encodeURIComponent(
+                      `${project.siteAddress}, ${project.siteCity}`
+                    )}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="In Google Maps öffnen"
+                  >
+                    <MapPin size={14} />
+                    <span>
+                      {project.siteAddress}{project.siteCity ? `, ${project.siteCity}` : ""}
+                    </span>
+                  </a>
+
+                  {project.customerPhone && (
+                    <a href={`tel:${project.customerPhone}`}>
+                      <Phone size={14} />
+                      <span>{project.customerPhone}</span>
+                    </a>
+                  )}
+
+                  <span className="muted">
+                    <Calendar size={14} />
+                    <span>
+                      Start: {new Date(project.startDate).toLocaleDateString("de-DE")}
+                      {project.targetDate && (
+                        <> · Bis: {new Date(project.targetDate).toLocaleDateString("de-DE")}</>
+                      )}
+                    </span>
+                  </span>
+                </div>
+
+                <div className="craft-card-foot">
+                  <strong className="craft-amount">Budget: {fmtEuro(project.budgetGross)}</strong>
+                  <div className="row">
                     <button
                       onClick={() => handleOpenEdit(project)}
-                      className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+                      className="icon-button"
                       title="Bearbeiten"
+                      aria-label="Bearbeiten"
                     >
-                      <Pencil className="w-4 h-4" />
+                      <Pencil size={17} />
                     </button>
                     <button
                       onClick={() => handleDelete(project.id)}
-                      className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+                      className="icon-button danger"
                       title="Löschen"
+                      aria-label="Löschen"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 size={17} />
                     </button>
                   </div>
                 </div>
-              </div>
+              </article>
             );
-          })
-        )}
-      </div>
+          })}
+        </div>
+      )}
 
-      {/* Modal: New / Edit Project */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl max-h-[92vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-100 dark:border-slate-800">
-              <h3 className="font-bold text-slate-900 dark:text-white text-base">
-                {editingProject.id ? "Baustellenakte bearbeiten" : "Neue Baustelle / Bauvorhaben anlegen"}
-              </h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSave} className="space-y-4">
-              <Field label="Bauvorhaben / Projekt-Titel" required hint="z.B. Sanierung Altbau 1. OG">
+        <Dialog
+          title={editingProject.id ? "Baustellenakte bearbeiten" : "Neue Baustelle / Bauvorhaben anlegen"}
+          onClose={() => setIsModalOpen(false)}
+          wide
+        >
+          <form onSubmit={handleSave} className="stack">
+            <div className="grid form-grid">
+              <Field label="Bauvorhaben / Projekt-Titel" required hint="z.B. Sanierung Altbau 1. OG" wide>
                 <input
                   type="text"
                   required
                   placeholder="Sanierung Altbau 1. OG"
                   value={editingProject.title || ""}
                   onChange={(e) => setEditingProject({ ...editingProject, title: e.target.value })}
-                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg"
                 />
               </Field>
 
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="Gewerk" required>
-                  <select
-                    value={editingProject.trade || "Elektro"}
-                    onChange={(e) => setEditingProject({ ...editingProject, trade: e.target.value as any })}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg"
-                  >
-                    {trades.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
+              <Field label="Gewerk" required>
+                <select
+                  value={editingProject.trade || "Elektro"}
+                  onChange={(e) => setEditingProject({ ...editingProject, trade: e.target.value as any })}
+                >
+                  {trades.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </Field>
 
-                <Field label="Status">
-                  <select
-                    value={editingProject.status || "in_arbeit"}
-                    onChange={(e) => setEditingProject({ ...editingProject, status: e.target.value as any })}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg"
-                  >
-                    <option value="geplant">Geplant</option>
-                    <option value="in_arbeit">In Arbeit</option>
-                    <option value="abnahmebereit">Abnahmebereit</option>
-                    <option value="abgeschlossen">Abgeschlossen</option>
-                  </select>
-                </Field>
-              </div>
+              <Field label="Status">
+                <select
+                  value={editingProject.status || "in_arbeit"}
+                  onChange={(e) => setEditingProject({ ...editingProject, status: e.target.value as any })}
+                >
+                  <option value="geplant">Geplant</option>
+                  <option value="in_arbeit">In Arbeit</option>
+                  <option value="abnahmebereit">Abnahmebereit</option>
+                  <option value="abgeschlossen">Abgeschlossen</option>
+                </select>
+              </Field>
 
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="Auftraggeber / Bauherr" required>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Dr. Thomas Bergmann"
-                    value={editingProject.customerName || ""}
-                    onChange={(e) => setEditingProject({ ...editingProject, customerName: e.target.value })}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg"
-                  />
-                </Field>
+              <Field label="Auftraggeber / Bauherr" required>
+                <input
+                  type="text"
+                  required
+                  placeholder="Dr. Thomas Bergmann"
+                  value={editingProject.customerName || ""}
+                  onChange={(e) => setEditingProject({ ...editingProject, customerName: e.target.value })}
+                />
+              </Field>
 
-                <Field label="Telefon Bauherr">
-                  <input
-                    type="tel"
-                    placeholder="+49 40 123456"
-                    value={editingProject.customerPhone || ""}
-                    onChange={(e) => setEditingProject({ ...editingProject, customerPhone: e.target.value })}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg"
-                  />
-                </Field>
-              </div>
+              <Field label="Telefon Bauherr">
+                <input
+                  type="tel"
+                  placeholder="+49 40 123456"
+                  value={editingProject.customerPhone || ""}
+                  onChange={(e) => setEditingProject({ ...editingProject, customerPhone: e.target.value })}
+                />
+              </Field>
 
-              <div className="grid grid-cols-3 gap-3">
-                <div className="col-span-2">
-                  <Field label="Baustellenadresse / Einsatzort" required>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Millerntorplatz 14"
-                      value={editingProject.siteAddress || ""}
-                      onChange={(e) => setEditingProject({ ...editingProject, siteAddress: e.target.value })}
-                      className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg"
-                    />
-                  </Field>
-                </div>
-                <Field label="PLZ / Ort">
-                  <input
-                    type="text"
-                    placeholder="20359 Hamburg"
-                    value={editingProject.siteCity || ""}
-                    onChange={(e) => setEditingProject({ ...editingProject, siteCity: e.target.value })}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg"
-                  />
-                </Field>
-              </div>
+              <Field label="Baustellenadresse / Einsatzort" required>
+                <input
+                  type="text"
+                  required
+                  placeholder="Millerntorplatz 14"
+                  value={editingProject.siteAddress || ""}
+                  onChange={(e) => setEditingProject({ ...editingProject, siteAddress: e.target.value })}
+                />
+              </Field>
 
-              <div className="grid grid-cols-3 gap-3">
-                <Field label="Montage-Start" required>
-                  <input
-                    type="date"
-                    required
-                    value={editingProject.startDate || ""}
-                    onChange={(e) => setEditingProject({ ...editingProject, startDate: e.target.value })}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg"
-                  />
-                </Field>
+              <Field label="PLZ / Ort">
+                <input
+                  type="text"
+                  placeholder="20359 Hamburg"
+                  value={editingProject.siteCity || ""}
+                  onChange={(e) => setEditingProject({ ...editingProject, siteCity: e.target.value })}
+                />
+              </Field>
 
-                <Field label="Zieltermin">
-                  <input
-                    type="date"
-                    value={editingProject.targetDate || ""}
-                    onChange={(e) => setEditingProject({ ...editingProject, targetDate: e.target.value })}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg"
-                  />
-                </Field>
+              <Field label="Montage-Start" required>
+                <input
+                  type="date"
+                  required
+                  value={editingProject.startDate || ""}
+                  onChange={(e) => setEditingProject({ ...editingProject, startDate: e.target.value })}
+                />
+              </Field>
 
-                <Field label="Budget (€ brutto)">
-                  <input
-                    type="number"
-                    step="100"
-                    value={editingProject.budgetGross || ""}
-                    onChange={(e) =>
-                      setEditingProject({ ...editingProject, budgetGross: parseFloat(e.target.value) || 0 })
-                    }
-                    className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg font-mono font-bold"
-                  />
-                </Field>
-              </div>
+              <Field label="Zieltermin">
+                <input
+                  type="date"
+                  value={editingProject.targetDate || ""}
+                  onChange={(e) => setEditingProject({ ...editingProject, targetDate: e.target.value })}
+                />
+              </Field>
 
-              <Field label="Baustellennotizen & Ausführungsdetails">
+              <Field label="Budget (€ brutto)">
+                <input
+                  type="number"
+                  step="100"
+                  value={editingProject.budgetGross || ""}
+                  onChange={(e) =>
+                    setEditingProject({ ...editingProject, budgetGross: parseFloat(e.target.value) || 0 })
+                  }
+                />
+              </Field>
+
+              <Field label="Baustellennotizen & Ausführungsdetails" wide>
                 <textarea
                   rows={3}
                   placeholder="Besonderheiten, Schlüsselübergabe, Zufahrtsregelung..."
                   value={editingProject.notes || ""}
                   onChange={(e) => setEditingProject({ ...editingProject, notes: e.target.value })}
-                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg"
                 />
               </Field>
+            </div>
 
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-xs text-slate-600 hover:bg-slate-100 rounded-lg"
-                >
-                  Abbrechen
-                </button>
-                <button
-                  type="submit"
-                  disabled={isBusy}
-                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold shadow-sm"
-                >
-                  Baustelle speichern
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+            <div className="row gap craft-dialog-actions">
+              <button type="button" onClick={() => setIsModalOpen(false)} className="button">
+                Abbrechen
+              </button>
+              <button type="submit" disabled={isBusy} className="button primary">
+                <Check size={18} /> Baustelle speichern
+              </button>
+            </div>
+          </form>
+        </Dialog>
       )}
     </div>
   );

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { api } from "../../api";
 import { Field } from "../../components";
+import { Dialog } from "../../pos/ui";
 import type {
   MenuItem,
   PrintDestination,
@@ -92,7 +93,7 @@ export function MenuTab({ menu, onRefresh }: MenuTabProps) {
     try {
       await api("/restaurant/menu", {
         method: "POST",
-        body: JSON.stringify(editingItem),
+        body: editingItem,
       });
       setIsModalOpen(false);
       onRefresh();
@@ -121,7 +122,7 @@ export function MenuTab({ menu, onRefresh }: MenuTabProps) {
     try {
       await api("/restaurant/menu", {
         method: "POST",
-        body: JSON.stringify({ ...item, isFavorite: !item.isFavorite }),
+        body: { ...item, isFavorite: !item.isFavorite },
       });
       onRefresh();
     } catch (err) {
@@ -132,287 +133,201 @@ export function MenuTab({ menu, onRefresh }: MenuTabProps) {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Top Controls */}
-      <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
-        {/* Category Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto">
-          {categories.map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setSelectedCategory(cat)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
-                selectedCategory === cat
-                  ? "bg-amber-600 text-white shadow-xs"
-                  : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200"
-              }`}
-            >
-              {cat === "alle" ? "Alle Kategorien" : cat}
-            </button>
-          ))}
-        </div>
+    <div className="stack">
+      <div className="restaurant-bar">
+        <label className="search restaurant-search">
+          <Search size={18} />
+          <input
+            type="text"
+            placeholder="Artikel suchen..."
+            aria-label="Artikel suchen"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </label>
+        <button onClick={handleOpenAdd} className="button primary">
+          <Plus size={18} />
+          Artikel anlegen
+        </button>
+      </div>
 
-        {/* Search & Add button */}
-        <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
-          <div className="relative w-full sm:w-48">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Artikel suchen..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg"
-            />
-          </div>
-
+      <div className="chips wrap" role="tablist">
+        {categories.map((cat) => (
           <button
-            onClick={handleOpenAdd}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors whitespace-nowrap"
+            key={cat}
+            role="tab"
+            aria-selected={selectedCategory === cat}
+            onClick={() => setSelectedCategory(cat)}
+            className={selectedCategory === cat ? "chip active" : "chip"}
           >
-            <Plus className="w-4 h-4" />
-            Artikel anlegen
+            {cat === "alle" ? "Alle Kategorien" : cat}
           </button>
-        </div>
+        ))}
       </div>
 
-      {/* Menu Items Table */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-500 border-b border-slate-200 dark:border-slate-800 uppercase font-mono tracking-wider">
-              <tr>
-                <th className="py-3 px-4">Art.-Nr.</th>
-                <th className="py-3 px-4">Bezeichnung & Kategorie</th>
-                <th className="py-3 px-4">Druckziel</th>
-                <th className="py-3 px-4">MwSt.-Satz</th>
-                <th className="py-3 px-4 text-right">Bruttopreis</th>
-                <th className="py-3 px-4 text-center">Schnellwahl</th>
-                <th className="py-3 px-4 text-right">Aktionen</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {filteredMenu.map((item) => (
-                <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
-                  <td className="py-3 px-4 font-mono text-slate-500 font-bold">
-                    {item.itemNumber}
-                  </td>
-                  <td className="py-3 px-4">
-                    <div className="font-semibold text-slate-900 dark:text-white text-sm">
-                      {item.name}
-                    </div>
-                    <div className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-2">
-                      <span>{item.category}</span>
-                      {item.allergens && item.allergens.length > 0 && (
-                        <span>· Allergene: {item.allergens.join(", ")}</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="py-3 px-4">
-                    <span
-                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                        item.destination === "bar"
-                          ? "bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300"
-                          : "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300"
-                      }`}
-                    >
-                      {item.destination === "bar" ? (
-                        <>
-                          <Coffee className="w-3 h-3" />
-                          Bar / Theke
-                        </>
-                      ) : (
-                        <>
-                          <Flame className="w-3 h-3" />
-                          Küche
-                        </>
-                      )}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 font-mono">
-                    <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded text-slate-700 dark:text-slate-300">
-                      {item.taxRate}%
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-right font-mono font-bold text-slate-900 dark:text-white text-sm">
-                    {fmtEuro(item.priceGross)}
-                  </td>
-                  <td className="py-3 px-4 text-center">
-                    <button
-                      onClick={() => handleToggleFavorite(item)}
-                      className={`p-1.5 rounded-lg transition-colors ${
-                        item.isFavorite
-                          ? "text-amber-500 hover:text-amber-600"
-                          : "text-slate-300 hover:text-slate-500"
-                      }`}
-                      title={item.isFavorite ? "Aus Schnellwahl entfernen" : "Zur Schnellwahl hinzufügen"}
-                    >
-                      <Star className={`w-4 h-4 ${item.isFavorite ? "fill-amber-500" : ""}`} />
-                    </button>
-                  </td>
-                  <td className="py-3 px-4 text-right space-x-1">
-                    <button
-                      onClick={() => handleOpenEdit(item)}
-                      className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
-                    >
-                      <Pencil className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(item.id)}
-                      className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Modal: Add / Edit Dish */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl">
-            <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-100 dark:border-slate-800">
-              <h3 className="font-bold text-slate-900 dark:text-white">
-                {editingItem.id ? "Artikel bearbeiten" : "Neues Gericht / Getränk anlegen"}
-              </h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-5 h-5" />
+      <section className="card list-card">
+        {filteredMenu.map((item) => (
+          <div key={item.id} className="list-row restaurant-menu-row">
+            <span className="restaurant-code restaurant-menu-number">{item.itemNumber}</span>
+            <span className="list-main">
+              <strong>{item.name}</strong>
+              <small className="muted">
+                {item.category}
+                {item.allergens && item.allergens.length > 0 && <> · Allergene: {item.allergens.join(", ")}</>}
+              </small>
+            </span>
+            <span className="restaurant-menu-meta">
+              <span className={`pill ${item.destination === "bar" ? "restaurant-pill-info" : "warn"}`}>
+                {item.destination === "bar" ? (
+                  <>
+                    <Coffee size={13} aria-hidden />
+                    Bar / Theke
+                  </>
+                ) : (
+                  <>
+                    <Flame size={13} aria-hidden />
+                    Küche
+                  </>
+                )}
+              </span>
+              <span className="pill">{item.taxRate}%</span>
+              <strong className="restaurant-amount">{fmtEuro(item.priceGross)}</strong>
+            </span>
+            <span className="restaurant-menu-actions">
+              <button
+                onClick={() => handleToggleFavorite(item)}
+                className={`icon-button restaurant-star ${item.isFavorite ? "on" : ""}`}
+                title={item.isFavorite ? "Aus Schnellwahl entfernen" : "Zur Schnellwahl hinzufügen"}
+                aria-label={item.isFavorite ? "Aus Schnellwahl entfernen" : "Zur Schnellwahl hinzufügen"}
+                aria-pressed={!!item.isFavorite}
+              >
+                <Star size={18} />
               </button>
-            </div>
+              <button onClick={() => handleOpenEdit(item)} className="icon-button" aria-label="Bearbeiten" title="Bearbeiten">
+                <Pencil size={18} />
+              </button>
+              <button onClick={() => handleDelete(item.id)} className="icon-button danger" aria-label="Löschen" title="Löschen">
+                <Trash2 size={18} />
+              </button>
+            </span>
+          </div>
+        ))}
+      </section>
 
-            <form onSubmit={handleSave} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="Artikel-Nummer" required>
-                  <input
-                    type="text"
-                    required
-                    value={editingItem.itemNumber || ""}
-                    onChange={(e) => setEditingItem({ ...editingItem, itemNumber: e.target.value })}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg font-mono"
-                  />
-                </Field>
-                <Field label="Kategorie" required>
-                  <select
-                    value={editingItem.category || "Hauptspeisen"}
-                    onChange={(e) => setEditingItem({ ...editingItem, category: e.target.value as any })}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg"
-                  >
-                    {categories.filter((c) => c !== "alle").map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-              </div>
+      {isModalOpen && (
+        <Dialog title={editingItem.id ? "Artikel bearbeiten" : "Neues Gericht / Getränk anlegen"} onClose={() => setIsModalOpen(false)} wide>
+          <form onSubmit={handleSave} className="restaurant-dialog stack">
+            <div className="grid form-grid">
+              <Field label="Artikel-Nummer" required>
+                <input
+                  type="text"
+                  required
+                  value={editingItem.itemNumber || ""}
+                  onChange={(e) => setEditingItem({ ...editingItem, itemNumber: e.target.value })}
+                />
+              </Field>
+              <Field label="Kategorie" required>
+                <select
+                  value={editingItem.category || "Hauptspeisen"}
+                  onChange={(e) => setEditingItem({ ...editingItem, category: e.target.value as any })}
+                >
+                  {categories.filter((c) => c !== "alle").map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </Field>
 
-              <Field label="Bezeichnung" required>
+              <Field label="Bezeichnung" required wide>
                 <input
                   type="text"
                   required
                   placeholder="z.B. Wiener Schnitzel vom Kalb"
                   value={editingItem.name || ""}
                   onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })}
-                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg"
                 />
               </Field>
 
-              <Field label="Beschreibung / Beilage">
+              <Field label="Beschreibung / Beilage" wide>
                 <input
                   type="text"
                   placeholder="z.B. mit lauwarmem Kartoffel-Gurken-Salat & Preiselbeeren"
                   value={editingItem.description || ""}
                   onChange={(e) => setEditingItem({ ...editingItem, description: e.target.value })}
-                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg"
+                />
+              </Field>
+            </div>
+
+            <div className="grid restaurant-three">
+              <Field label="Bruttopreis (€)" required>
+                <input
+                  type="number"
+                  step="0.10"
+                  min="0"
+                  required
+                  value={editingItem.priceGross || ""}
+                  onChange={(e) =>
+                    setEditingItem({ ...editingItem, priceGross: parseFloat(e.target.value) || 0 })
+                  }
                 />
               </Field>
 
-              <div className="grid grid-cols-3 gap-3">
-                <Field label="Bruttopreis (€)" required>
-                  <input
-                    type="number"
-                    step="0.10"
-                    min="0"
-                    required
-                    value={editingItem.priceGross || ""}
-                    onChange={(e) =>
-                      setEditingItem({ ...editingItem, priceGross: parseFloat(e.target.value) || 0 })
-                    }
-                    className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg font-mono font-bold"
-                  />
-                </Field>
-
-                <Field label="MwSt.-Satz">
-                  <select
-                    value={editingItem.taxRate || 19}
-                    onChange={(e) =>
-                      setEditingItem({ ...editingItem, taxRate: parseInt(e.target.value) || 19 })
-                    }
-                    className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg font-mono"
-                  >
-                    <option value="19">19% (Standard / In-Haus)</option>
-                    <option value="7">7% (Ermäßigt / To-Go)</option>
-                  </select>
-                </Field>
-
-                <Field label="Druckziel">
-                  <select
-                    value={editingItem.destination || "kueche"}
-                    onChange={(e) =>
-                      setEditingItem({ ...editingItem, destination: e.target.value as PrintDestination })
-                    }
-                    className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg"
-                  >
-                    <option value="kueche">Küche</option>
-                    <option value="bar">Bar / Theke</option>
-                  </select>
-                </Field>
-              </div>
-
-              <div className="flex items-center gap-6 pt-2">
-                <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={editingItem.isFavorite || false}
-                    onChange={(e) => setEditingItem({ ...editingItem, isFavorite: e.target.checked })}
-                    className="rounded text-amber-600 focus:ring-0"
-                  />
-                  <span>Schnellwahl / Bestseller</span>
-                </label>
-
-                <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={editingItem.active !== false}
-                    onChange={(e) => setEditingItem({ ...editingItem, active: e.target.checked })}
-                    className="rounded text-amber-600 focus:ring-0"
-                  />
-                  <span>Aktiv auf Karte</span>
-                </label>
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-xs text-slate-600 hover:bg-slate-100 rounded-lg"
+              <Field label="MwSt.-Satz">
+                <select
+                  value={editingItem.taxRate || 19}
+                  onChange={(e) =>
+                    setEditingItem({ ...editingItem, taxRate: parseInt(e.target.value) || 19 })
+                  }
                 >
-                  Abbrechen
-                </button>
-                <button
-                  type="submit"
-                  disabled={isBusy}
-                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold shadow-sm"
+                  <option value="19">19% (Standard / In-Haus)</option>
+                  <option value="7">7% (Ermäßigt / To-Go)</option>
+                </select>
+              </Field>
+
+              <Field label="Druckziel">
+                <select
+                  value={editingItem.destination || "kueche"}
+                  onChange={(e) =>
+                    setEditingItem({ ...editingItem, destination: e.target.value as PrintDestination })
+                  }
                 >
-                  Speichern
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+                  <option value="kueche">Küche</option>
+                  <option value="bar">Bar / Theke</option>
+                </select>
+              </Field>
+            </div>
+
+            <div className="row wrap gap">
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={editingItem.isFavorite || false}
+                  onChange={(e) => setEditingItem({ ...editingItem, isFavorite: e.target.checked })}
+                />
+                <span>Schnellwahl / Bestseller</span>
+              </label>
+
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={editingItem.active !== false}
+                  onChange={(e) => setEditingItem({ ...editingItem, active: e.target.checked })}
+                />
+                <span>Aktiv auf Karte</span>
+              </label>
+            </div>
+
+            <div className="row gap restaurant-form-actions">
+              <button type="button" onClick={() => setIsModalOpen(false)} className="button">
+                Abbrechen
+              </button>
+              <button type="submit" disabled={isBusy} className="button primary">
+                Speichern
+              </button>
+            </div>
+          </form>
+        </Dialog>
       )}
     </div>
   );

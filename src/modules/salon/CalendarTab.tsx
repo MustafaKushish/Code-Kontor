@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Plus, Clock, Scissors, CheckCircle, Play, X, User, Phone, Sparkles } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Clock, CheckCircle, Play, X, Sparkles } from "lucide-react";
 import { api } from "../../api";
 import { Field } from "../../components";
 import type { AppointmentStatus, SalonAppointment, SalonClient, SalonService, SalonStaff } from "../../../shared/salon";
 import { addMinutesToTime, timeToMinutes } from "../../../shared/salon";
 import { useSalonI18n } from "./i18n";
+import { Dialog } from "../../pos/ui";
 
 export function CalendarTab({
   isManager,
@@ -166,103 +167,68 @@ export function CalendarTab({
   const dayOfWeek = new Date(selectedDay + "T12:00:00").getDay() || 7;
   const activeStaff = staff.filter((st) => st.workingDays.includes(dayOfWeek));
 
+  const openNewAppointment = () => {
+    setForm({
+      clientId: "",
+      clientName: "",
+      clientPhone: "",
+      clientEmail: "",
+      staffId: staff[0]?.id || "",
+      serviceIds: services.length > 0 ? [services[0].id] : [],
+      day: selectedDay,
+      startTime: "10:00",
+      notes: "",
+    });
+    setErrorMsg("");
+    setModalOpen(true);
+  };
+
   return (
     <div className="stack">
       {/* Datumsauswahl & Schnellaktionen */}
-      <div className="toolbar" style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
-        <div className="row gap" style={{ alignItems: "center" }}>
-          <button className="icon-button" onClick={() => handleDayShift(-1)} title="Vorheriger Tag">
-            <ChevronLeft size={20} />
+      <div className="salon-toolbar">
+        <div className="salon-day">
+          <button className="icon-button" onClick={() => handleDayShift(-1)} title="Vorheriger Tag" aria-label="Vorheriger Tag">
+            <ChevronLeft size={20} className="flip-rtl" />
           </button>
-          <input
-            type="date"
-            className="input"
-            style={{ width: "auto", minWidth: "160px", fontWeight: 700 }}
-            value={selectedDay}
-            onChange={(e) => setSelectedDay(e.target.value)}
-          />
-          <button className="icon-button" onClick={() => handleDayShift(1)} title="Nächster Tag">
-            <ChevronRight size={20} />
+          <input type="date" value={selectedDay} onChange={(e) => setSelectedDay(e.target.value)} />
+          <button className="icon-button" onClick={() => handleDayShift(1)} title="Nächster Tag" aria-label="Nächster Tag">
+            <ChevronRight size={20} className="flip-rtl" />
           </button>
-          <button
-            className="button"
-            onClick={() => setSelectedDay(new Date().toISOString().slice(0, 10))}
-          >
+          <button className="button" onClick={() => setSelectedDay(new Date().toISOString().slice(0, 10))}>
             {s("calendar.today")}
           </button>
         </div>
-
-        <div className="row gap push-end">
-          <button
-            className="button primary"
-            onClick={() => {
-              setForm({
-                clientId: "",
-                clientName: "",
-                clientPhone: "",
-                clientEmail: "",
-                staffId: staff[0]?.id || "",
-                serviceIds: services.length > 0 ? [services[0].id] : [],
-                day: selectedDay,
-                startTime: "10:00",
-                notes: "",
-              });
-              setErrorMsg("");
-              setModalOpen(true);
-            }}
-          >
-            <Plus size={18} /> {s("actions.newAppointment")}
-          </button>
-        </div>
+        <button className="button primary push-end" onClick={openNewAppointment}>
+          <Plus size={18} /> {s("actions.newAppointment")}
+        </button>
       </div>
 
       {/* Kalenderraster */}
-      <div className="salon-calendar-wrap">
-        <div
-          className="salon-calendar"
-          style={{
-            gridTemplateColumns: `64px repeat(${Math.max(1, activeStaff.length)}, 1fr)`,
-          }}
-        >
+      <section className="card salon-cal-wrap">
+        <div className="salon-cal" style={{ gridTemplateColumns: `64px repeat(${Math.max(1, activeStaff.length)}, minmax(0, 1fr))` }}>
           {/* Kopfzeile: Stylisten */}
-          <div className="salon-calendar-header" style={{ gridColumn: `1 / -1`, display: "grid", gridTemplateColumns: `64px repeat(${Math.max(1, activeStaff.length)}, 1fr)` }}>
-            <div className="salon-calendar-col-header" style={{ justifyContent: "center" }}>
-              <Clock size={16} style={{ color: "var(--muted)" }} />
-            </div>
+          <div className="salon-cal-head">
+            <div><Clock size={16} /></div>
             {activeStaff.length === 0 ? (
-              <div className="salon-calendar-col-header" style={{ color: "var(--muted)" }}>
-                {s("calendar.noStaff")}
-              </div>
+              <div className="muted">{s("calendar.noStaff")}</div>
             ) : (
               activeStaff.map((st) => (
-                <div key={st.id} className="salon-calendar-col-header">
-                  <span
-                    style={{
-                      width: "12px",
-                      height: "12px",
-                      borderRadius: "50%",
-                      backgroundColor: st.colorHex || "var(--accent)",
-                      display: "inline-block",
-                      flex: "none",
-                    }}
-                  />
-                  <div>
+                <div key={st.id}>
+                  <span className="salon-dot" style={st.colorHex ? { background: st.colorHex } : undefined} />
+                  <span className="list-main">
                     <strong>{st.name}</strong>
-                    <small className="muted" style={{ display: "block", fontSize: "0.75rem", fontWeight: 400 }}>
-                      {st.title} ({st.workStart} - {st.workEnd})
-                    </small>
-                  </div>
+                    <small className="muted">{st.title} ({st.workStart} - {st.workEnd})</small>
+                  </span>
                 </div>
               ))
             )}
           </div>
 
           {/* Zeitleiste links */}
-          <div className="salon-time-col">
+          <div className="salon-cal-times">
             {timeSlots.map((ts) => (
-              <div key={ts} className="salon-time-slot">
-                {ts}
-              </div>
+              <div key={ts}>{ts}</div>
             ))}
           </div>
 
@@ -273,13 +239,15 @@ export function CalendarTab({
             );
 
             return (
-              <div key={st.id} className="salon-staff-col">
+              <div key={st.id} className="salon-cal-col">
                 {timeSlots.map((ts) => (
-                  <div
+                  <button
                     key={ts}
-                    className="salon-slot-cell"
+                    type="button"
+                    className="salon-cal-cell"
                     onClick={() => handleOpenSlot(st.id, ts)}
                     title={`Freier Termin um ${ts} bei ${st.name} buchen`}
+                    aria-label={`Freier Termin um ${ts} bei ${st.name} buchen`}
                   />
                 ))}
 
@@ -290,199 +258,119 @@ export function CalendarTab({
                   const topPx = ((startM - baseM) / 30) * 52;
                   const heightPx = Math.max(34, (app.durationMinutes / 30) * 52);
 
-                  let statusBg = "var(--panel)";
-                  let borderLeft = `4px solid ${st.colorHex || "var(--accent)"}`;
-                  if (app.status === "in_progress") statusBg = "color-mix(in srgb, var(--accent) 15%, var(--panel))";
-                  if (app.status === "completed") statusBg = "color-mix(in srgb, var(--success) 12%, var(--panel))";
-
                   return (
-                    <div
+                    <button
                       key={app.id}
-                      className="salon-appointment-block"
-                      style={{
-                        top: `${topPx}px`,
-                        height: `${heightPx}px`,
-                        backgroundColor: statusBg,
-                        borderLeft,
-                        border: "1px solid var(--line)",
-                      }}
+                      type="button"
+                      className={`salon-appt ${app.status}`}
+                      style={{ top: `${topPx}px`, height: `${heightPx}px`, ...(st.colorHex ? { borderInlineStartColor: st.colorHex } : {}) }}
                       onClick={() => setSelectedApp(app)}
                       title={`${app.clientName} (${app.startTime} - ${app.endTime})`}
                     >
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <strong style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                          {app.clientName}
-                        </strong>
-                        <span style={{ fontSize: "0.74rem", fontWeight: 700 }}>
-                          {app.startTime}
-                        </span>
-                      </div>
-                      <span className="muted" style={{ fontSize: "0.74rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {app.serviceNames.join(", ")}
+                      <span className="salon-appt-line">
+                        <strong>{app.clientName}</strong>
+                        <small>{app.startTime}</small>
                       </span>
+                      <small className="muted">{app.serviceNames.join(", ")}</small>
                       {heightPx > 50 && (
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "auto", fontSize: "0.72rem" }}>
-                          <span className={`pill ${app.status === "in_progress" ? "warning" : app.status === "completed" ? "success" : ""}`} style={{ padding: "1px 6px" }}>
+                        <span className="salon-appt-line">
+                          <span className={`pill ${app.status === "in_progress" ? "warn" : app.status === "completed" ? "pos" : ""}`}>
                             {s(`status.${app.status}`)}
                           </span>
                           <strong>{euro(app.totalCents)}</strong>
-                        </div>
+                        </span>
                       )}
-                    </div>
+                    </button>
                   );
                 })}
               </div>
             );
           })}
         </div>
-      </div>
+      </section>
 
-      {/* Modal: Neuer Termin buchen */}
+      {/* Dialog: Neuer Termin buchen */}
       {modalOpen && (
-        <div className="salon-modal-overlay" onClick={() => setModalOpen(false)}>
-          <div className="salon-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="salon-modal-head">
-              <h3 style={{ margin: 0, display: "flex", alignItems: "center", gap: "8px" }}>
-                <Scissors size={20} style={{ color: "var(--accent)" }} />
-                {s("actions.newAppointment")}
-              </h3>
-              <button className="icon-button" onClick={() => setModalOpen(false)}>
-                <X size={20} />
-              </button>
-            </div>
+        <Dialog title={s("actions.newAppointment")} onClose={() => setModalOpen(false)} wide>
+          <form onSubmit={handleSaveAppointment} className="salon-dialog stack">
+            {errorMsg && <p className="error" role="alert">{errorMsg}</p>}
 
-            {errorMsg && <div className="notice warning">{errorMsg}</div>}
+            <div className="grid form-grid">
+              <Field label="Stylist" required>
+                <select required value={form.staffId} onChange={(e) => setForm({ ...form, staffId: e.target.value })}>
+                  {staff.map((st) => (
+                    <option key={st.id} value={st.id}>
+                      {st.name} ({st.title})
+                    </option>
+                  ))}
+                </select>
+              </Field>
 
-            <form onSubmit={handleSaveAppointment} className="stack">
-              <div className="row-grid">
-                <Field label="Stylist" required>
-                  <select
-                    className="input"
-                    required
-                    value={form.staffId}
-                    onChange={(e) => setForm({ ...form, staffId: e.target.value })}
-                  >
-                    {staff.map((st) => (
-                      <option key={st.id} value={st.id}>
-                        {st.name} ({st.title})
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-
-                <Field label="Datum & Uhrzeit" required>
-                  <div className="row gap">
-                    <input
-                      type="date"
-                      className="input"
-                      required
-                      value={form.day}
-                      onChange={(e) => setForm({ ...form, day: e.target.value })}
-                    />
-                    <input
-                      type="time"
-                      className="input"
-                      required
-                      value={form.startTime}
-                      onChange={(e) => setForm({ ...form, startTime: e.target.value })}
-                    />
-                  </div>
-                </Field>
-              </div>
+              <Field label="Datum & Uhrzeit" required>
+                <div className="row gap">
+                  <input type="date" required value={form.day} onChange={(e) => setForm({ ...form, day: e.target.value })} />
+                  <input type="time" required value={form.startTime} onChange={(e) => setForm({ ...form, startTime: e.target.value })} />
+                </div>
+              </Field>
 
               {/* Kunde wählen oder neu eingeben */}
-              <div className="row-grid">
-                <Field label="Bestehender Kunde (optional)">
-                  <select
-                    className="input"
-                    value={form.clientId}
-                    onChange={(e) => {
-                      const c = clients.find((cl) => cl.id === e.target.value);
-                      if (c) {
-                        setForm({
-                          ...form,
-                          clientId: c.id,
-                          clientName: c.name,
-                          clientPhone: c.phone,
-                          clientEmail: c.email,
-                        });
-                      } else {
-                        setForm({ ...form, clientId: "" });
-                      }
-                    }}
-                  >
-                    <option value="">-- Neuer Kunde / Freie Eingabe --</option>
-                    {clients.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name} {c.phone ? `(${c.phone})` : ""}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
+              <Field label="Bestehender Kunde (optional)">
+                <select
+                  value={form.clientId}
+                  onChange={(e) => {
+                    const c = clients.find((cl) => cl.id === e.target.value);
+                    if (c) {
+                      setForm({
+                        ...form,
+                        clientId: c.id,
+                        clientName: c.name,
+                        clientPhone: c.phone,
+                        clientEmail: c.email,
+                      });
+                    } else {
+                      setForm({ ...form, clientId: "" });
+                    }
+                  }}
+                >
+                  <option value="">-- Neuer Kunde / Freie Eingabe --</option>
+                  {clients.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} {c.phone ? `(${c.phone})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </Field>
 
-                <Field label="Kundenname" required>
-                  <input
-                    type="text"
-                    required
-                    className="input"
-                    placeholder="Vor- und Nachname"
-                    value={form.clientName}
-                    onChange={(e) => setForm({ ...form, clientName: e.target.value })}
-                  />
-                </Field>
-              </div>
+              <Field label="Kundenname" required>
+                <input type="text" required placeholder="Vor- und Nachname" value={form.clientName} onChange={(e) => setForm({ ...form, clientName: e.target.value })} />
+              </Field>
 
-              <div className="row-grid">
-                <Field label="Telefonnummer">
-                  <input
-                    type="tel"
-                    className="input"
-                    placeholder="+49 171 1234567"
-                    value={form.clientPhone}
-                    onChange={(e) => setForm({ ...form, clientPhone: e.target.value })}
-                  />
-                </Field>
-                <Field label="E-Mail-Adresse">
-                  <input
-                    type="email"
-                    className="input"
-                    placeholder="kunde@example.de"
-                    value={form.clientEmail}
-                    onChange={(e) => setForm({ ...form, clientEmail: e.target.value })}
-                  />
-                </Field>
-              </div>
+              <Field label="Telefonnummer">
+                <input type="tel" placeholder="+49 171 1234567" value={form.clientPhone} onChange={(e) => setForm({ ...form, clientPhone: e.target.value })} />
+              </Field>
+              <Field label="E-Mail-Adresse">
+                <input type="email" placeholder="kunde@example.de" value={form.clientEmail} onChange={(e) => setForm({ ...form, clientEmail: e.target.value })} />
+              </Field>
 
               {/* Dienstleistungen auswählen */}
-              <Field label="Dienstleistungen auswählen (Mehrfachauswahl möglich)" required>
-                <div style={{ display: "grid", gap: "6px", maxHeight: "180px", overflowY: "auto", border: "1px solid var(--line)", padding: "8px", borderRadius: "var(--radius)" }}>
+              <Field label="Dienstleistungen auswählen (Mehrfachauswahl möglich)" required wide>
+                <div className="salon-picker">
                   {services.map((srv) => {
                     const checked = form.serviceIds.includes(srv.id);
                     return (
-                      <label
-                        key={srv.id}
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          padding: "6px 8px",
-                          borderRadius: "8px",
-                          background: checked ? "color-mix(in srgb, var(--accent) 10%, var(--panel))" : "transparent",
-                          cursor: "pointer",
-                        }}
-                      >
-                        <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setForm({ ...form, serviceIds: [...form.serviceIds, srv.id] });
-                              } else {
-                                setForm({ ...form, serviceIds: form.serviceIds.filter((id) => id !== srv.id) });
-                              }
-                            }}
-                          />
+                      <label key={srv.id} className={checked ? "list-row active" : "list-row"}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setForm({ ...form, serviceIds: [...form.serviceIds, srv.id] });
+                            } else {
+                              setForm({ ...form, serviceIds: form.serviceIds.filter((id) => id !== srv.id) });
+                            }
+                          }}
+                        />
+                        <span className="list-main">
                           <strong>{srv.name}</strong>
                           <small className="muted">({srv.durationMinutes} Min)</small>
                         </span>
@@ -493,103 +381,76 @@ export function CalendarTab({
                 </div>
               </Field>
 
-              <Field label="Notizen / Besonderheiten">
-                <input
-                  type="text"
-                  className="input"
-                  placeholder="z.B. Neukunde, Farbwunsch Blond, Getränkewunsch"
-                  value={form.notes}
-                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                />
+              <Field label="Notizen / Besonderheiten" wide>
+                <input type="text" placeholder="z.B. Neukunde, Farbwunsch Blond, Getränkewunsch" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
               </Field>
-
-              <div className="row gap" style={{ justifyContent: "flex-end", marginTop: "10px" }}>
-                <button type="button" className="button" onClick={() => setModalOpen(false)}>
-                  {s("actions.cancel")}
-                </button>
-                <button type="submit" className="button primary">
-                  <CheckCircle size={17} /> {s("actions.save")}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Modal: Termin-Details & Status ändern */}
-      {selectedApp && (
-        <div className="salon-modal-overlay" onClick={() => setSelectedApp(null)}>
-          <div className="salon-modal" style={{ maxWidth: "480px" }} onClick={(e) => e.stopPropagation()}>
-            <div className="salon-modal-head">
-              <div>
-                <h3 style={{ margin: 0 }}>{selectedApp.clientName}</h3>
-                <small className="muted">
-                  {formatDay(selectedApp.day)} · {selectedApp.startTime} - {selectedApp.endTime} ({selectedApp.durationMinutes} Min)
-                </small>
-              </div>
-              <button className="icon-button" onClick={() => setSelectedApp(null)}>
-                <X size={20} />
-              </button>
             </div>
 
-            <div className="card" style={{ padding: "14px", display: "grid", gap: "8px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span>Stylist:</span>
-                <strong>{selectedApp.staffName}</strong>
-              </div>
+            <div className="actions">
+              <button type="button" className="button" onClick={() => setModalOpen(false)}>
+                {s("actions.cancel")}
+              </button>
+              <button type="submit" className="button primary">
+                <CheckCircle size={17} /> {s("actions.save")}
+              </button>
+            </div>
+          </form>
+        </Dialog>
+      )}
+
+      {/* Dialog: Termin-Details & Status ändern */}
+      {selectedApp && (
+        <Dialog title={selectedApp.clientName} onClose={() => setSelectedApp(null)}>
+          <div className="salon-dialog stack">
+            <p className="muted">
+              {formatDay(selectedApp.day)} · {selectedApp.startTime} - {selectedApp.endTime} ({selectedApp.durationMinutes} Min)
+            </p>
+
+            <dl className="facts">
+              <dt>Stylist:</dt>
+              <dd>{selectedApp.staffName}</dd>
               {selectedApp.clientPhone && (
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span>Telefon:</span>
-                  <strong>{selectedApp.clientPhone}</strong>
-                </div>
+                <>
+                  <dt>Telefon:</dt>
+                  <dd>{selectedApp.clientPhone}</dd>
+                </>
               )}
-              <div style={{ borderTop: "1px solid var(--line)", paddingTop: "8px" }}>
-                <span className="muted" style={{ fontSize: "0.82rem" }}>Dienstleistungen:</span>
-                <ul style={{ margin: "4px 0", paddingLeft: "20px" }}>
-                  {selectedApp.serviceNames.map((n, i) => (
-                    <li key={i}><strong>{n}</strong></li>
-                  ))}
-                </ul>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid var(--line)", paddingTop: "8px", fontSize: "1.1rem" }}>
-                <span>Gesamtbetrag:</span>
-                <strong style={{ color: "var(--accent)" }}>{euro(selectedApp.totalCents)}</strong>
-              </div>
+              <dt>Dienstleistungen:</dt>
+              <dd>{selectedApp.serviceNames.join(", ")}</dd>
+            </dl>
+
+            <div className="salon-total">
+              <span>Gesamtbetrag:</span>
+              <strong>{euro(selectedApp.totalCents)}</strong>
             </div>
 
             {/* Status-Wechsler */}
             <div className="stack-sm">
-              <span className="small muted">Terminstatus ändern:</span>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+              <small className="muted">Terminstatus ändern:</small>
+              <div className="row wrap gap">
                 <button
-                  className={`button small ${selectedApp.status === "in_progress" ? "primary" : ""}`}
+                  className={`button small-button ${selectedApp.status === "in_progress" ? "primary" : ""}`}
                   onClick={() => handleUpdateStatus(selectedApp.id, "in_progress")}
                 >
                   <Play size={14} /> {s("status.in_progress")}
                 </button>
-                <button
-                  className={`button small success`}
-                  onClick={() => handleUpdateStatus(selectedApp.id, "completed")}
-                >
+                <button className="button small-button" onClick={() => handleUpdateStatus(selectedApp.id, "completed")}>
                   <CheckCircle size={14} /> {s("status.completed")}
                 </button>
-                <button
-                  className={`button small danger`}
-                  onClick={() => handleUpdateStatus(selectedApp.id, "canceled")}
-                >
+                <button className="button small-button danger" onClick={() => handleUpdateStatus(selectedApp.id, "canceled")}>
                   <X size={14} /> {s("status.canceled")}
                 </button>
               </div>
             </div>
 
-            {updateError && <div className="notice warning">{updateError}</div>}
+            {updateError && <p className="error" role="alert">{updateError}</p>}
 
             {/* Kassen-Abrechnung */}
-            <div className="row gap" style={{ justifyContent: "space-between", marginTop: "12px", borderTop: "1px solid var(--line)", paddingTop: "14px", flexWrap: "wrap" }}>
+            <div className="actions spread danger-zone">
               {deleteConfirmAppId === selectedApp.id ? (
-                <div className="row gap" style={{ alignItems: "center" }}>
+                <div className="row gap">
                   <button
-                    className="button danger small"
+                    className="button danger small-button"
                     onClick={async () => {
                       try {
                         await api(`/salon/appointments/${selectedApp.id}`, { method: "DELETE" });
@@ -603,18 +464,12 @@ export function CalendarTab({
                   >
                     Wirklich löschen
                   </button>
-                  <button
-                    className="button small"
-                    onClick={() => setDeleteConfirmAppId(null)}
-                  >
+                  <button className="button small-button" onClick={() => setDeleteConfirmAppId(null)}>
                     Abbrechen
                   </button>
                 </div>
               ) : (
-                <button
-                  className="button danger"
-                  onClick={() => setDeleteConfirmAppId(selectedApp.id)}
-                >
+                <button className="button danger" onClick={() => setDeleteConfirmAppId(selectedApp.id)}>
                   Löschen
                 </button>
               )}
@@ -631,11 +486,11 @@ export function CalendarTab({
                   }
                 }}
               >
-                <Sparkles size={16} /> {s("actions.checkout")}
+                <Sparkles size={17} /> {s("actions.checkout")}
               </button>
             </div>
           </div>
-        </div>
+        </Dialog>
       )}
     </div>
   );

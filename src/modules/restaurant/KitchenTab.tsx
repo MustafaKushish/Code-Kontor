@@ -68,7 +68,7 @@ export function KitchenTab({ orders, onRefresh }: KitchenTabProps) {
     try {
       await api(`/restaurant/orders/${orderId}/items/${itemId}/status`, {
         method: "POST",
-        body: JSON.stringify({ status: nextStatus }),
+        body: { status: nextStatus },
       });
       onRefresh();
     } catch (err) {
@@ -86,14 +86,14 @@ export function KitchenTab({ orders, onRefresh }: KitchenTabProps) {
         if (item.status !== "fertig" && item.status !== "serviert") {
           await api(`/restaurant/orders/${order.id}/items/${item.id}/status`, {
             method: "POST",
-            body: JSON.stringify({ status: "fertig" }),
+            body: { status: "fertig" },
           });
         }
       }
       // Update order status to fertig
       await api(`/restaurant/orders/${order.id}/status`, {
         method: "POST",
-        body: JSON.stringify({ status: "fertig" }),
+        body: { status: "fertig" },
       });
       onRefresh();
     } catch (err) {
@@ -109,77 +109,51 @@ export function KitchenTab({ orders, onRefresh }: KitchenTabProps) {
     return Math.floor(diffMs / 60000);
   };
 
+  const stations = [
+    { id: "alle" as const, label: "Alle Stationen", icon: null },
+    { id: "kueche" as const, label: "Warme Küche", icon: Flame },
+    { id: "bar" as const, label: "Schanktresen / Bar", icon: Coffee },
+  ];
+
   return (
-    <div className="space-y-6">
-      {/* Top Filter and Station Bar */}
-      <div className="bg-slate-900 text-white p-4 rounded-2xl shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
-        {/* Station Filter */}
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <button
-            onClick={() => setStationFilter("alle")}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-              stationFilter === "alle"
-                ? "bg-amber-500 text-slate-950 font-bold shadow-xs"
-                : "bg-slate-800 text-slate-300 hover:bg-slate-700"
-            }`}
-          >
-            Alle Stationen
-          </button>
-          <button
-            onClick={() => setStationFilter("kueche")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-              stationFilter === "kueche"
-                ? "bg-amber-500 text-slate-950 font-bold shadow-xs"
-                : "bg-slate-800 text-slate-300 hover:bg-slate-700"
-            }`}
-          >
-            <Flame className="w-3.5 h-3.5" />
-            Warme Küche
-          </button>
-          <button
-            onClick={() => setStationFilter("bar")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-              stationFilter === "bar"
-                ? "bg-amber-500 text-slate-950 font-bold shadow-xs"
-                : "bg-slate-800 text-slate-300 hover:bg-slate-700"
-            }`}
-          >
-            <Coffee className="w-3.5 h-3.5" />
-            Schanktresen / Bar
-          </button>
+    <div className="stack restaurant-kds">
+      <div className="restaurant-bar">
+        <div className="chips" role="tablist">
+          {stations.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              role="tab"
+              aria-selected={stationFilter === id}
+              onClick={() => setStationFilter(id)}
+              className={stationFilter === id ? "chip active" : "chip"}
+            >
+              {Icon && <Icon size={15} aria-hidden />}
+              {label}
+            </button>
+          ))}
         </div>
 
-        {/* Status Mode & Quick Refresh */}
-        <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
-          <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+        <div className="row gap">
+          <label className="check">
             <input
               type="checkbox"
               checked={showCompleted}
               onChange={(e) => setShowCompleted(e.target.checked)}
-              className="rounded bg-slate-800 border-slate-700 text-amber-500 focus:ring-0"
             />
             <span>Auch servierte Bons zeigen</span>
           </label>
-
-          <button
-            onClick={onRefresh}
-            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
-            title="Aktualisieren"
-          >
-            <RefreshCw className="w-4 h-4" />
+          <button onClick={onRefresh} className="icon-button" title="Aktualisieren" aria-label="Aktualisieren">
+            <RefreshCw size={18} />
           </button>
         </div>
       </div>
 
-      {/* Ticket Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      <div className="restaurant-tickets">
         {kdsOrders.length === 0 ? (
-          <div className="col-span-full py-20 text-center bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-slate-400">
-            <CheckCircle2 className="w-12 h-12 mx-auto mb-3 text-emerald-500/60" />
-            <h4 className="font-bold text-base text-slate-900 dark:text-white">
-              Alle Bons sind abgearbeitet!
-            </h4>
-            <p className="text-xs text-slate-500 mt-1">
+          <div className="card restaurant-empty wide-card">
+            <span className="restaurant-success-icon"><CheckCircle2 size={30} /></span>
+            <strong>Alle Bons sind abgearbeitet!</strong>
+            <p className="muted small">
               Sobald Bestellungen am Kundenschalter, Tisch oder Abholschalter eingehen, erscheinen sie hier.
             </p>
           </div>
@@ -199,65 +173,30 @@ export function KitchenTab({ orders, onRefresh }: KitchenTabProps) {
             return (
               <div
                 key={order.id}
-                className={`bg-white dark:bg-slate-900 rounded-2xl border flex flex-col justify-between overflow-hidden shadow-sm transition-all ${
-                  isCritical
-                    ? "border-red-500 dark:border-red-600 ring-2 ring-red-500/20"
-                    : isWarning
-                    ? "border-amber-400 dark:border-amber-600"
-                    : "border-slate-200 dark:border-slate-800"
-                }`}
+                className={`card restaurant-ticket ${isCritical ? "critical" : isWarning ? "warning" : ""}`}
               >
-                {/* Header Ticket Header */}
-                <div
-                  className={`p-3.5 flex items-start justify-between border-b ${
-                    isCritical
-                      ? "bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-900 text-red-900 dark:text-red-200"
-                      : isWarning
-                      ? "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900 text-amber-900 dark:text-amber-200"
-                      : "bg-slate-100 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
-                  }`}
-                >
-                  <div>
-                    <div className="flex items-center gap-2">
+                <div className="restaurant-ticket-head">
+                  <span className="list-main">
+                    <span className="restaurant-ticket-title">
                       {order.type === "tisch" ? (
-                        <span className="font-mono font-bold text-sm tracking-tight uppercase">
-                          {order.tableName || `Tisch ${order.tableId}`}
-                        </span>
+                        <strong>{order.tableName || `Tisch ${order.tableId}`}</strong>
                       ) : order.type === "abholung" ? (
-                        <span className="font-mono font-black text-sm text-amber-600 dark:text-amber-400">
-                          Abholung #{order.pickupNumber || "?"}
-                        </span>
+                        <strong className="restaurant-accent">Abholung #{order.pickupNumber || "?"}</strong>
                       ) : (
-                        <span className="font-mono font-bold text-sm">Theke</span>
+                        <strong>Theke</strong>
                       )}
-                      <span className="text-[10px] text-slate-500 font-mono">
-                        ({order.orderNumber})
-                      </span>
-                    </div>
-                    {order.customerName && (
-                      <span className="text-[11px] font-medium text-slate-600 dark:text-slate-300 block">
-                        {order.customerName}
-                      </span>
-                    )}
-                  </div>
+                      <small className="muted restaurant-code">({order.orderNumber})</small>
+                    </span>
+                    {order.customerName && <small className="muted">{order.customerName}</small>}
+                  </span>
 
-                  {/* Elapsed Timer */}
-                  <div
-                    className={`flex items-center gap-1 font-mono text-xs font-bold px-2 py-0.5 rounded-lg ${
-                      isCritical
-                        ? "bg-red-600 text-white animate-pulse"
-                        : isWarning
-                        ? "bg-amber-500 text-slate-950"
-                        : "bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200"
-                    }`}
-                  >
-                    <Clock className="w-3 h-3" />
-                    <span>{elapsed}m</span>
-                  </div>
+                  <span className="restaurant-timer">
+                    <Clock size={14} aria-hidden />
+                    {elapsed}m
+                  </span>
                 </div>
 
-                {/* Items in ticket */}
-                <div className="p-3.5 flex-1 divide-y divide-slate-100 dark:divide-slate-800 space-y-2">
+                <div className="restaurant-ticket-items">
                   {relevantItems.map((item) => {
                     const isItemDone = item.status === "fertig" || item.status === "serviert";
                     const isItemCooking = item.status === "in_arbeit";
@@ -266,80 +205,44 @@ export function KitchenTab({ orders, onRefresh }: KitchenTabProps) {
                       <div
                         key={item.id}
                         onClick={() => handleToggleItemStatus(order.id, item.id, item.status)}
-                        className={`pt-2 cursor-pointer select-none transition-opacity ${
-                          isItemDone ? "opacity-40" : "opacity-100"
-                        }`}
+                        className={`restaurant-ticket-item ${isItemDone ? "done" : isItemCooking ? "cooking" : ""}`}
                       >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-start gap-2.5">
-                            <div
-                              className={`w-5 h-5 rounded flex items-center justify-center text-xs mt-0.5 border ${
-                                isItemDone
-                                  ? "bg-emerald-600 border-emerald-600 text-white"
-                                  : isItemCooking
-                                  ? "bg-amber-500 border-amber-500 text-white"
-                                  : "border-slate-300 dark:border-slate-600 hover:border-amber-500"
-                              }`}
-                            >
-                              {isItemDone ? <Check className="w-3.5 h-3.5" /> : null}
-                            </div>
-                            <div>
-                              <div className="flex items-center gap-1.5">
-                                <span className="font-mono font-bold text-sm text-slate-900 dark:text-white">
-                                  {item.quantity}x
-                                </span>
-                                <span
-                                  className={`font-semibold text-xs text-slate-800 dark:text-slate-200 ${
-                                    isItemDone ? "line-through text-slate-400" : ""
-                                  }`}
-                                >
-                                  {item.name}
-                                </span>
-                              </div>
-                              <span className="text-[10px] text-slate-400 font-mono block">
-                                {item.course} · {item.destination === "bar" ? "Bar" : "Küche"}
-                              </span>
-                              {item.note && (
-                                <p className="text-[11px] font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 px-1.5 py-0.5 rounded mt-1 inline-block">
-                                  {item.note}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-
-                          <span
-                            className={`text-[9px] uppercase font-bold font-mono px-1.5 py-0.5 rounded ${
-                              isItemDone
-                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-                                : isItemCooking
-                                ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
-                                : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
-                            }`}
-                          >
-                            {item.status}
+                        <span className="restaurant-checkbox">
+                          {isItemDone ? <Check size={15} /> : null}
+                        </span>
+                        <span className="list-main">
+                          <span className="restaurant-ticket-name">
+                            <strong>{item.quantity}x</strong> <span>{item.name}</span>
                           </span>
-                        </div>
+                          <small className="muted">
+                            {item.course} · {item.destination === "bar" ? "Bar" : "Küche"}
+                          </small>
+                          {item.note && <span className="restaurant-wish">{item.note}</span>}
+                        </span>
+                        <span className={`pill ${isItemDone ? "pos" : isItemCooking ? "warn" : ""}`}>
+                          {item.status}
+                        </span>
                       </div>
                     );
                   })}
                 </div>
 
-                {/* Footer Actions */}
-                <div className="p-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 flex items-center justify-between gap-2">
+                <div className="restaurant-ticket-foot">
                   <button
                     onClick={() => setActivePrintOrder(order)}
-                    className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200/50"
+                    className="icon-button"
                     title="Küchenbon erneut drucken"
+                    aria-label="Küchenbon erneut drucken"
                   >
-                    <Printer className="w-4 h-4" />
+                    <Printer size={18} />
                   </button>
 
                   <button
                     onClick={() => handleMarkAllFinished(order)}
                     disabled={isBusy || isReady}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white rounded-xl text-xs font-bold shadow-xs transition-colors"
+                    className="button primary"
                   >
-                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <CheckCircle2 size={18} />
                     {isReady ? "Bereits fertig" : "Alle fertigstellen"}
                   </button>
                 </div>
@@ -349,7 +252,6 @@ export function KitchenTab({ orders, onRefresh }: KitchenTabProps) {
         )}
       </div>
 
-      {/* Print Overlay */}
       {activePrintOrder && (
         <RestaurantPrint
           order={activePrintOrder}
