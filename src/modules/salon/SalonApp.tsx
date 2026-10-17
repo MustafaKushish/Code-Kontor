@@ -63,8 +63,8 @@ export default function SalonApp({ me, path }: { me: Me; path: string }) {
         </div>
         <div className="row gap push-end">
           {hasPos && (
-            <Link to="/kasse" className="button" title="Zur Kasse wechseln">
-              <ShoppingCart size={18} /> Kasse
+            <Link to="/kasse" className="button" title={s("head.toPos")}>
+              <ShoppingCart size={18} /> {s("head.pos")}
             </Link>
           )}
           <button className="button primary" onClick={() => navigate(BASE)}>

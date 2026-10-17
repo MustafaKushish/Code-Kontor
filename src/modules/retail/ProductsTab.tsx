@@ -10,7 +10,7 @@ import { Dialog } from "../../pos/ui";
 import { currencySymbol } from "../../money";
 
 export function ProductsTab({ isManager }: { isManager: boolean }) {
-  const { r, euro } = useRetailI18n();
+  const { r, euro, unit, lang, retailError } = useRetailI18n();
   const [products, setProducts] = useState<RetailProduct[]>([]);
   const [suppliers, setSuppliers] = useState<RetailSupplier[]>([]);
   const [loading, setLoading] = useState(true);
@@ -138,7 +138,7 @@ export function ProductsTab({ isManager }: { isManager: boolean }) {
       setModalOpen(false);
       await loadData();
     } catch (err: any) {
-      setErrorMsg(err?.message || "Fehler beim Speichern des Artikels");
+      setErrorMsg(retailError(err, r("products.errors.save")));
     }
   };
 
@@ -148,7 +148,7 @@ export function ProductsTab({ isManager }: { isManager: boolean }) {
       setDeleteConfirmId(null);
       await loadData();
     } catch (err: any) {
-      setErrorMsg(err?.message || "Fehler beim Löschen");
+      setErrorMsg(retailError(err, r("products.errors.delete")));
     }
   };
 
@@ -168,7 +168,7 @@ export function ProductsTab({ isManager }: { isManager: boolean }) {
       setStockModalProduct(null);
       await loadData();
     } catch (err: any) {
-      setErrorMsg(err?.message || "Fehler beim Anpassen des Bestands");
+      setErrorMsg(retailError(err, r("products.errors.stock")));
     }
   };
 
@@ -197,19 +197,19 @@ export function ProductsTab({ isManager }: { isManager: boolean }) {
           <span className="stat-icon"><Layers size={18} /></span>
           <strong>{products.length}</strong>
           <small>{r("stats.totalProducts")}</small>
-          <small>Im aktiven Sortiment</small>
+          <small>{r("stats.totalProductsHint")}</small>
         </div>
         <div className="tile stat-tile">
           <span className="stat-icon"><Tag size={18} /></span>
           <strong>{euro(totalStockValueCents)}</strong>
           <small>{r("stats.stockValue")}</small>
-          <small>Gebundenes Einkaufskapital</small>
+          <small>{r("stats.stockValueHint")}</small>
         </div>
         <div className="tile stat-tile">
           <span className={lowStockCount > 0 ? "stat-icon warn" : "stat-icon"}><AlertTriangle size={18} /></span>
           <strong>{lowStockCount}</strong>
           <small>{r("stats.lowStock")}</small>
-          <small>Bestand ≤ Mindestmenge</small>
+          <small>{r("stats.lowStockHint")}</small>
         </div>
       </div>
 
@@ -226,13 +226,13 @@ export function ProductsTab({ isManager }: { isManager: boolean }) {
           <button
             className={`button ${lowStockFilter ? "primary" : ""}`}
             onClick={() => setLowStockFilter(!lowStockFilter)}
-            title="Filter: Nur nachzubestellende Artikel"
+            title={r("products.lowStockFilterTitle")}
           >
-            <AlertTriangle size={17} /> Nachbestellen ({lowStockCount})
+            <AlertTriangle size={17} /> {r("products.lowStockFilter", { n: lowStockCount })}
           </button>
 
-          <button className="button" onClick={() => setPrintOpen(true)} title="Etiketten drucken">
-            <Printer size={17} /> Etiketten
+          <button className="button" onClick={() => setPrintOpen(true)} title={r("actions.printLabels")}>
+            <Printer size={17} /> {r("products.labels")}
           </button>
 
           {isManager && (
@@ -270,12 +270,12 @@ export function ProductsTab({ isManager }: { isManager: boolean }) {
 
       {/* Artikelliste */}
       {loading ? (
-        <p className="muted">Lade Sortiment...</p>
+        <p className="muted">{r("products.loading")}</p>
       ) : (
         <section className="card list-card">
           {products.length === 0 && (
             <p className="empty muted">
-              <strong>Keine Artikel gefunden</strong> · Passen Sie Ihre Suche an oder legen Sie den ersten Artikel an.
+              <strong>{r("products.emptyTitle")}</strong> · {r("products.emptyText")}
             </p>
           )}
           {products.map((p) => {
@@ -285,16 +285,16 @@ export function ProductsTab({ isManager }: { isManager: boolean }) {
             return (
               <div key={p.id} className="list-row retail-row">
                 <span className="retail-number">
-                  <code title="EAN / Barcode"><Barcode size={13} /> {p.ean}</code>
+                  <code title={r("products.eanTitle")}><Barcode size={13} /> {p.ean}</code>
                   <small className="muted">#{p.number}</small>
                 </span>
                 <span className="list-main">
                   <strong>{p.name}</strong>
                   <small className="muted">
-                    {[p.brand ? `Marke: ${p.brand}` : "", r(`categories.${p.category}`), `Lagerort: ${p.location || "–"}`].filter(Boolean).join(" · ")}
+                    {[p.brand ? r("products.brand", { brand: p.brand }) : "", r(`categories.${p.category}`), r("products.location", { location: p.location || "–" })].filter(Boolean).join(" · ")}
                   </small>
                   <small className="muted">
-                    EK Netto {euro(p.purchasePriceCents)} · Spanne <span className={marginClass(margin)}>{margin}%</span> · {p.vatRate}% MwSt.
+                    {r("products.purchaseNet", { price: euro(p.purchasePriceCents) })} · {r("products.margin")} <span className={marginClass(margin)}>{margin}%</span> · {r("products.vat", { rate: p.vatRate })}
                   </small>
                 </span>
                 <span className="retail-row-meta">
@@ -303,12 +303,12 @@ export function ProductsTab({ isManager }: { isManager: boolean }) {
                   <button
                     className={`pill retail-stock ${isLow ? "neg" : "pos"}`}
                     onClick={() => openStock(p)}
-                    title="Klicken für schnelle Bestandskorrektur"
+                    title={r("products.stockPillTitle")}
                   >
                     {isLow && <AlertTriangle size={13} />}
-                    {p.stockQty} {p.unit} · Min: {p.minStockQty}
+                    {r("products.stockPill", { qty: p.stockQty, unit: unit(p.unit), min: p.minStockQty })}
                   </button>
-                    <button className="button small-button" onClick={() => openStock(p)} title="Bestand anpassen">
+                    <button className="button small-button" onClick={() => openStock(p)} title={r("actions.adjustStock")} aria-label={r("actions.adjustStock")}>
                       <ArrowUpDown size={14} /> ±
                     </button>
                     {isManager && (
@@ -319,11 +319,11 @@ export function ProductsTab({ isManager }: { isManager: boolean }) {
                     {isManager && (
                       deleteConfirmId === p.id ? (
                         <>
-                          <button className="button danger small-button" onClick={() => handleDelete(p.id)} title="Unwiderruflich deaktivieren">
-                            Löschen
+                          <button className="button danger small-button" onClick={() => handleDelete(p.id)} title={r("products.deleteTitle")}>
+                            {r("actions.delete")}
                           </button>
                           <button className="button small-button" onClick={() => setDeleteConfirmId(null)}>
-                            Abbr.
+                            {r("actions.cancelShort")}
                           </button>
                         </>
                       ) : (
@@ -342,17 +342,17 @@ export function ProductsTab({ isManager }: { isManager: boolean }) {
 
       {/* Dialog: Artikel anlegen / bearbeiten */}
       {modalOpen && (
-        <Dialog title={editingProduct ? "Artikel bearbeiten" : r("actions.newProduct")} onClose={() => setModalOpen(false)} wide>
+        <Dialog title={editingProduct ? r("productForm.editTitle") : r("actions.newProduct")} onClose={() => setModalOpen(false)} wide>
           <form onSubmit={handleSave} className="retail-dialog stack">
             <div className="grid form-grid">
-              <Field label="Artikelbezeichnung" required wide>
-                <input type="text" required placeholder="z.B. Bio-Olivenöl Extra Vergine 500ml" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <Field label={r("productForm.name")} required wide>
+                <input type="text" required placeholder={r("productForm.namePlaceholder")} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
               </Field>
 
-              <Field label="Marke / Hersteller">
-                <input type="text" placeholder="z.B. Terre Di Olio" value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} />
+              <Field label={r("productForm.brand")}>
+                <input type="text" placeholder={r("productForm.brandPlaceholder")} value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} />
               </Field>
-              <Field label="Kategorie" required>
+              <Field label={r("productForm.category")} required>
                 <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value as ProductCategory })}>
                   <option value="lebensmittel">{r("categories.lebensmittel")}</option>
                   <option value="getraenke">{r("categories.getraenke")}</option>
@@ -365,53 +365,53 @@ export function ProductsTab({ isManager }: { isManager: boolean }) {
                 </select>
               </Field>
 
-              <Field label="EAN / Barcode (13-stellig)" hint="Für Barcode-Scanner">
+              <Field label={r("productForm.ean")} hint={r("productForm.eanHint")}>
                 <div className="retail-ean">
-                  <input type="text" placeholder="z.B. 4012345678901" value={form.ean} onChange={(e) => setForm({ ...form, ean: e.target.value })} />
+                  <input type="text" placeholder={r("productForm.eanPlaceholder")} value={form.ean} onChange={(e) => setForm({ ...form, ean: e.target.value })} />
                   <button
                     type="button"
                     className="button"
                     onClick={() => setForm({ ...form, ean: generateInternalEan("200", Date.now() % 100000) })}
-                    title="Interne 200-EAN mit Prüfziffer generieren"
+                    title={r("productForm.eanGenerateTitle")}
                   >
-                    <Sparkles size={17} /> Neu
+                    <Sparkles size={17} /> {r("productForm.eanGenerate")}
                   </button>
                 </div>
               </Field>
-              <Field label="Verkaufseinheit">
+              <Field label={r("productForm.unit")}>
                 <select value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value as ProductUnit })}>
-                  <option value="Stk">Stück (Stk)</option>
-                  <option value="kg">Kilogramm (kg)</option>
-                  <option value="g">Gramm (g)</option>
-                  <option value="l">Liter (l)</option>
-                  <option value="ml">Milliliter (ml)</option>
-                  <option value="Pck">Packung (Pck)</option>
-                  <option value="Set">Set</option>
+                  <option value="Stk">{r("units.long.Stk")}</option>
+                  <option value="kg">{r("units.long.kg")}</option>
+                  <option value="g">{r("units.long.g")}</option>
+                  <option value="l">{r("units.long.l")}</option>
+                  <option value="ml">{r("units.long.ml")}</option>
+                  <option value="Pck">{r("units.long.Pck")}</option>
+                  <option value="Set">{r("units.long.Set")}</option>
                 </select>
               </Field>
             </div>
 
             {/* Preiskalkulation & Marge */}
             <div className="retail-calc">
-              <strong>Preiskalkulation & Margenberechnung</strong>
+              <strong>{r("productForm.calcTitle")}</strong>
               <div className="grid form-grid">
-                <Field label={`Einkaufspreis Netto (${currencySymbol("de-DE")})`}>
+                <Field label={r("productForm.purchasePrice", { symbol: currencySymbol(lang) })}>
                   <input type="text" value={form.purchasePriceEuro} onChange={(e) => setForm({ ...form, purchasePriceEuro: e.target.value })} />
                 </Field>
-                <Field label={`Verkaufspreis Brutto (${currencySymbol("de-DE")})`} required>
+                <Field label={r("productForm.sellingPrice", { symbol: currencySymbol(lang) })} required>
                   <input type="text" required value={form.sellingPriceEuro} onChange={(e) => setForm({ ...form, sellingPriceEuro: e.target.value })} />
                 </Field>
-                <Field label="MwSt.-Satz">
+                <Field label={r("productForm.vatRate")}>
                   <select value={form.vatRate} onChange={(e) => setForm({ ...form, vatRate: parseFloat(e.target.value) })}>
-                    <option value="19">19% (Regelsatz)</option>
-                    <option value="7">7% (Ermäßigt - Lebensmittel/Bücher)</option>
-                    <option value="0">0% (Steuerfrei)</option>
+                    <option value="19">{r("productForm.vatStandard", { rate: 19 })}</option>
+                    <option value="7">{r("productForm.vatReduced", { rate: 7 })}</option>
+                    <option value="0">{r("productForm.vatFree", { rate: 0 })}</option>
                   </select>
                 </Field>
               </div>
               <div className="retail-total">
-                <span>Kalkulierte Handelsspanne:</span>
-                <strong className={marginClass(liveMargin)}>{liveMargin}% Rohertrag</strong>
+                <span>{r("productForm.marginLabel")}</span>
+                <strong className={marginClass(liveMargin)}>{r("productForm.marginValue", { margin: liveMargin })}</strong>
               </div>
             </div>
 
@@ -419,27 +419,27 @@ export function ProductsTab({ isManager }: { isManager: boolean }) {
             <div className="grid form-grid">
               {/* Später ändert sich der Bestand nur über „±“ (Buchung mit Grund), damit nichts überschrieben wird */}
               {!editingProduct && (
-                <Field label="Anfangsbestand">
+                <Field label={r("productForm.initialStock")}>
                   <input type="number" min="0" value={form.stockQty} onChange={(e) => setForm({ ...form, stockQty: parseInt(e.target.value, 10) || 0 })} />
                 </Field>
               )}
-              <Field label="Mindestbestand (Meldebestand)">
+              <Field label={r("productForm.minStock")}>
                 <input type="number" min="0" value={form.minStockQty} onChange={(e) => setForm({ ...form, minStockQty: parseInt(e.target.value, 10) || 0 })} />
               </Field>
-              <Field label="Regalplatz / Lagerort" wide>
-                <input type="text" placeholder="z.B. A-02-3" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
+              <Field label={r("productForm.location")} wide>
+                <input type="text" placeholder={r("productForm.locationPlaceholder")} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
               </Field>
 
-              <Field label="Hauptlieferant">
+              <Field label={r("productForm.supplier")}>
                 <select value={form.supplierId} onChange={(e) => setForm({ ...form, supplierId: e.target.value })}>
-                  <option value="">Kein Lieferant zugeordnet</option>
+                  <option value="">{r("productForm.noSupplier")}</option>
                   {suppliers.map((s) => (
                     <option key={s.id} value={s.id}>{s.name}</option>
                   ))}
                 </select>
               </Field>
-              <Field label="Lieferanten-Art.-Nr.">
-                <input type="text" placeholder="z.B. REF-8819" value={form.supplierArticleNo} onChange={(e) => setForm({ ...form, supplierArticleNo: e.target.value })} />
+              <Field label={r("productForm.supplierArticleNo")}>
+                <input type="text" placeholder={r("productForm.supplierArticleNoPlaceholder")} value={form.supplierArticleNo} onChange={(e) => setForm({ ...form, supplierArticleNo: e.target.value })} />
               </Field>
             </div>
 
@@ -457,16 +457,16 @@ export function ProductsTab({ isManager }: { isManager: boolean }) {
 
       {/* Dialog: Schnelle Bestandskorrektur */}
       {stockModalProduct && (
-        <Dialog title="Bestand anpassen" onClose={() => setStockModalProduct(null)}>
+        <Dialog title={r("actions.adjustStock")} onClose={() => setStockModalProduct(null)}>
           <form onSubmit={handleSaveStockAdjustment} className="retail-dialog stack">
             <span className="list-main">
               <strong>{stockModalProduct.name}</strong>
               <small className="muted">
-                Aktueller Bestand: <strong>{stockModalProduct.stockQty} {stockModalProduct.unit}</strong>
+                {r("stockDialog.current")} <strong>{stockModalProduct.stockQty} {unit(stockModalProduct.unit)}</strong>
               </small>
             </span>
 
-            <Field label="Bestandsänderung (+Zugang oder -Abgang)" required>
+            <Field label={r("stockDialog.delta")} required>
               <div className="retail-delta">
                 <button type="button" className="button" onClick={() => setStockDelta((d) => d - 1)}>
                   -1
@@ -479,20 +479,20 @@ export function ProductsTab({ isManager }: { isManager: boolean }) {
             </Field>
 
             <p className="notice">
-              Neuer Bestand: <strong>{Math.max(0, stockModalProduct.stockQty + stockDelta)} {stockModalProduct.unit}</strong>
+              {r("stockDialog.next")} <strong>{Math.max(0, stockModalProduct.stockQty + stockDelta)} {unit(stockModalProduct.unit)}</strong>
             </p>
 
-            <Field label="Grund der Buchung">
+            <Field label={r("stockDialog.reason")}>
               <select value={stockReason} onChange={(e) => setStockReason(e.target.value)}>
-                <option value="correction">Manuelle Inventur / Zählung</option>
-                <option value="loss">Bruch / Verderb / Schwund</option>
-                <option value="purchase">Wareneingang ohne Bestellung</option>
-                <option value="return">Kundenrückgabe</option>
+                <option value="correction">{r("stockDialog.reasonCorrection")}</option>
+                <option value="loss">{r("stockDialog.reasonLoss")}</option>
+                <option value="purchase">{r("stockDialog.reasonPurchase")}</option>
+                <option value="return">{r("stockDialog.reasonReturn")}</option>
               </select>
             </Field>
 
-            <Field label="Bemerkung">
-              <input type="text" placeholder="z.B. Flasche beim Einräumen zerbrochen" value={stockNote} onChange={(e) => setStockNote(e.target.value)} />
+            <Field label={r("stockDialog.note")}>
+              <input type="text" placeholder={r("stockDialog.notePlaceholder")} value={stockNote} onChange={(e) => setStockNote(e.target.value)} />
             </Field>
 
             <div className="actions">
@@ -500,7 +500,7 @@ export function ProductsTab({ isManager }: { isManager: boolean }) {
                 {r("actions.cancel")}
               </button>
               <button type="submit" className="button primary">
-                Buchung durchführen
+                {r("stockDialog.submit")}
               </button>
             </div>
           </form>

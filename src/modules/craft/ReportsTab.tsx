@@ -28,7 +28,8 @@ import type {
 } from "../../../shared/craft";
 import { SignaturePad } from "./SignaturePad";
 import { CraftPrint } from "./CraftPrint";
-import { currency as companyCurrency, currencySymbol, standardVat } from "../../money";
+import { standardVat } from "../../money";
+import { useCraftI18n } from "./i18n";
 
 interface ReportsTabProps {
   isManager: boolean;
@@ -38,6 +39,7 @@ interface ReportsTabProps {
 }
 
 export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsTabProps) {
+  const { t, money, symbol, num, day, itemTypeLabel, unitLabel, paymentLabel } = useCraftI18n();
   const [filterStatus, setFilterStatus] = useState<string>("alle");
   const [search, setSearch] = useState("");
   const [signingReport, setSigningReport] = useState<CraftReport | null>(null);
@@ -47,16 +49,16 @@ export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsT
 
   // New Report Form State
   const [newProjectId, setNewProjectId] = useState(projects[0]?.id || "");
-  const [newWorkerName, setNewWorkerName] = useState("Markus Krause (Meister)");
+  const [newWorkerName, setNewWorkerName] = useState(() => t("reports.defaultWorker"));
   const [newDate, setNewDate] = useState(new Date().toISOString().slice(0, 10));
   const [newHours, setNewHours] = useState(8);
   const [newTravelKm, setNewTravelKm] = useState(15);
   const [newWorkDescription, setNewWorkDescription] = useState("");
-  const [newItems, setNewItems] = useState<CraftReportItem[]>([
+  const [newItems, setNewItems] = useState<CraftReportItem[]>(() => [
     {
       id: "item-1",
       type: "lohn",
-      name: "Monteurstunden Elektro- / Sanitärinstallation",
+      name: t("reports.defaultWageItem"),
       quantity: 8,
       unit: "Std.",
       unitPriceNet: 68.0,
@@ -66,7 +68,7 @@ export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsT
     {
       id: "item-2",
       type: "fahrt",
-      name: "An- und Abfahrt Baustelle",
+      name: t("reports.defaultTravelItem"),
       quantity: 15,
       unit: "km",
       unitPriceNet: 1.6,
@@ -75,8 +77,7 @@ export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsT
     },
   ]);
 
-  const fmtEuro = (amount?: number) =>
-    new Intl.NumberFormat("de-DE", { style: "currency", currency: companyCurrency() }).format(amount || 0);
+  const fmtEuro = money;
 
   const filteredReports = reports.filter((r) => {
     const matchesStatus = filterStatus === "alle" || r.status === filterStatus;
@@ -113,7 +114,7 @@ export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsT
   const [paying, setPaying] = useState<string | null>(null);
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Arbeitsbericht wirklich löschen?")) return;
+    if (!confirm(t("reports.confirmDelete"))) return;
     setIsBusy(true);
     try {
       await api(`/craft/reports/${id}`, { method: "DELETE" });
@@ -130,7 +131,7 @@ export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsT
     const newItem: CraftReportItem = {
       id: "item-" + Math.random().toString(36).slice(2, 9),
       type,
-      name: type === "material" ? "Materialposition" : type === "lohn" ? "Zusatzstunden" : "Fahrstrecke",
+      name: type === "material" ? t("reports.newMaterialItem") : type === "lohn" ? t("reports.newWageItem") : t("reports.newTravelItem"),
       quantity: 1,
       unit: type === "lohn" ? "Std." : type === "fahrt" ? "km" : "Stk.",
       unitPriceNet: type === "lohn" ? 68.0 : type === "fahrt" ? 1.6 : 25.0,
@@ -189,22 +190,22 @@ export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsT
             <Search size={18} />
             <input
               type="search"
-              placeholder="Bericht, Bauherr, Monteur..."
-              aria-label="Bericht, Bauherr, Monteur..."
+              placeholder={t("reports.searchPlaceholder")}
+              aria-label={t("reports.searchPlaceholder")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </label>
           <button onClick={() => setIsNewModalOpen(true)} className="button primary">
-            <Plus size={18} /> Neuer Rapportzettel
+            <Plus size={18} /> {t("reports.add")}
           </button>
         </div>
         <div className="chips" role="tablist">
           {[
-            { id: "alle", label: `Alle (${reports.length})` },
-            { id: "entwurf", label: "Ausstehende Unterschrift" },
-            { id: "unterschrieben", label: "Unterschrieben" },
-            { id: "abgerechnet", label: "Abgerechnet" },
+            { id: "alle", label: t("reports.filterAll", { n: reports.length }) },
+            { id: "entwurf", label: t("reports.filterPending") },
+            { id: "unterschrieben", label: t("reports.filterSigned") },
+            { id: "abgerechnet", label: t("reports.filterBilled") },
           ].map((s) => (
             <button
               key={s.id}
@@ -222,9 +223,9 @@ export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsT
       {filteredReports.length === 0 ? (
         <section className="card craft-empty">
           <FileText size={40} aria-hidden />
-          <strong>Keine Arbeitsberichte gefunden</strong>
+          <strong>{t("reports.emptyTitle")}</strong>
           <p className="muted small">
-            Erstelle einen neuen Rapportzettel mit Stunden und Material für die Vor-Ort-Abnahme.
+            {t("reports.emptyText")}
           </p>
         </section>
       ) : (
@@ -242,15 +243,15 @@ export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsT
                 <div className="craft-card-top">
                   <span className="craft-number">{report.reportNumber}</span>
                   <span className={`pill craft-status ${isDraft ? "warn" : isSigned ? "tone-info" : "pos"}`}>
-                    {isDraft ? "Unterschrift ausstehend" : isSigned ? "Unterzeichnet" : "Abgerechnet"}
+                    {t(isDraft ? "reportStatus.entwurf" : isSigned ? "reportStatus.unterschrieben" : "reportStatus.abgerechnet")}
                   </span>
                 </div>
 
                 <div className="craft-card-title">
                   <h3>{report.projectTitle}</h3>
                   <small className="muted craft-split">
-                    <span>Bauherr: {report.customerName}</span>
-                    <span>{new Date(report.date).toLocaleDateString("de-DE")}</span>
+                    <span>{t("common.client", { name: report.customerName })}</span>
+                    <span>{day(report.date)}</span>
                   </small>
                 </div>
 
@@ -258,32 +259,32 @@ export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsT
 
                 <div className="craft-sums">
                   <p>
-                    <span>Lohnanteil (§ 35a):</span>
+                    <span>{t("reports.wageShare")}</span>
                     <span>{fmtEuro(report.totalWageNet * 1.19)}</span>
                   </p>
                   <p>
-                    <span>Materialanteil:</span>
+                    <span>{t("reports.materialShare")}</span>
                     <span>{fmtEuro(report.totalMaterialNet * 1.19)}</span>
                   </p>
                   <p className="grand">
-                    <strong>Gesamtbetrag:</strong>
+                    <strong>{t("reports.total")}</strong>
                     <strong>{fmtEuro(report.totalGross)}</strong>
                   </p>
                 </div>
 
                 {report.signatureDataUrl ? (
                   <div className="craft-signed">
-                    <img src={report.signatureDataUrl} alt="Signatur" />
+                    <img src={report.signatureDataUrl} alt={t("reports.signatureAlt")} />
                     <span>
-                      <strong>Digital unterzeichnet</strong>
+                      <strong>{t("reports.signedDigitally")}</strong>
                       <small className="muted">
-                        {report.signedAt ? new Date(report.signedAt).toLocaleDateString("de-DE") : ""}
+                        {day(report.signedAt)}
                       </small>
                     </span>
                   </div>
                 ) : (
                   <button onClick={() => setSigningReport(report)} className="button primary block">
-                    <PenTool size={18} /> Jetzt digital unterschreiben lassen
+                    <PenTool size={18} /> {t("reports.requestSignature")}
                   </button>
                 )}
 
@@ -292,8 +293,8 @@ export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsT
                     <button
                       onClick={() => setPrintingReport(report)}
                       className="icon-button"
-                      title="Rapportzettel drucken"
-                      aria-label="Rapportzettel drucken"
+                      title={t("reports.print")}
+                      aria-label={t("reports.print")}
                     >
                       <Printer size={17} />
                     </button>
@@ -301,8 +302,8 @@ export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsT
                       <button
                         onClick={() => handleDelete(report.id)}
                         className="icon-button danger"
-                        title="Löschen"
-                        aria-label="Löschen"
+                        title={t("common.delete")}
+                        aria-label={t("common.delete")}
                       >
                         <Trash2 size={17} />
                       </button>
@@ -312,7 +313,7 @@ export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsT
                   {isSigned && (
                     <div className="row gap craft-pay">
                       <button onClick={() => setPaying(report.id)} disabled={isBusy} className="button small-button primary">
-                        <Banknote size={15} /> Bezahlen
+                        <Banknote size={15} /> {t("reports.pay")}
                       </button>
                     </div>
                   )}
@@ -320,7 +321,7 @@ export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsT
                   {isCompleted && (
                     <span className="pill pos craft-pill-icon">
                       <CheckCircle2 size={14} />
-                      Bezahlt ({report.paymentMethod || "Kasse"})
+                      {t("reports.paid", { method: paymentLabel(report.paymentMethod || "pos") })}
                     </span>
                   )}
                 </div>
@@ -346,10 +347,10 @@ export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsT
       )}
 
       {isNewModalOpen && (
-        <Dialog title="Neuen Arbeitsbericht / Rapportzettel anlegen" onClose={() => setIsNewModalOpen(false)} wide>
+        <Dialog title={t("reports.dialogTitle")} onClose={() => setIsNewModalOpen(false)} wide>
           <form onSubmit={handleCreateReport} className="stack">
             <div className="grid form-grid craft-form-three">
-              <Field label="Bauvorhaben / Baustelle" required wide>
+              <Field label={t("common.projectOrSite")} required wide>
                 <select
                   required
                   value={newProjectId}
@@ -363,7 +364,7 @@ export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsT
                 </select>
               </Field>
 
-              <Field label="Monteur vor Ort" required>
+              <Field label={t("reports.fieldWorker")} required>
                 <input
                   type="text"
                   required
@@ -372,7 +373,7 @@ export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsT
                 />
               </Field>
 
-              <Field label="Datum" required>
+              <Field label={t("common.date")} required>
                 <input
                   type="date"
                   required
@@ -381,7 +382,7 @@ export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsT
                 />
               </Field>
 
-              <Field label="Arbeitsstunden">
+              <Field label={t("reports.fieldHours")}>
                 <input
                   type="number"
                   step="0.5"
@@ -391,11 +392,11 @@ export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsT
                 />
               </Field>
 
-              <Field label="Ausgeführte Arbeiten & Leistungen" required wide>
+              <Field label={t("reports.fieldWork")} required wide>
                 <textarea
                   rows={3}
                   required
-                  placeholder="z.B. Kabelzug im EG abgeschlossen, Verteilerkasten neu verdrahtet, Isolationsmessung durchgeführt..."
+                  placeholder={t("reports.workPlaceholder")}
                   value={newWorkDescription}
                   onChange={(e) => setNewWorkDescription(e.target.value)}
                 />
@@ -404,13 +405,13 @@ export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsT
 
             <div className="stack-sm">
               <div className="section-head">
-                <span className="field-label">Positionen (Lohn, Fahrt & Material):</span>
+                <span className="field-label">{t("reports.itemsLabel")}</span>
                 <div className="row gap">
                   <button type="button" onClick={() => addItemRow("lohn")} className="button small-button">
-                    + Lohn
+                    {t("reports.addWage")}
                   </button>
                   <button type="button" onClick={() => addItemRow("material")} className="button small-button">
-                    + Material
+                    {t("reports.addMaterial")}
                   </button>
                 </div>
               </div>
@@ -419,12 +420,12 @@ export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsT
                 {newItems.map((item, idx) => (
                   <div key={item.id} className="craft-item-row">
                     <span className={`pill craft-tag ${item.type === "lohn" || item.type === "fahrt" ? "warn" : ""}`}>
-                      {item.type}
+                      {itemTypeLabel(item.type)}
                     </span>
                     <input
                       type="text"
                       value={item.name}
-                      aria-label="Bezeichnung"
+                      aria-label={t("reports.itemName")}
                       onChange={(e) => updateItemRow(idx, "name", e.target.value)}
                       className="craft-item-name"
                     />
@@ -432,22 +433,22 @@ export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsT
                       type="number"
                       step="0.5"
                       value={item.quantity}
-                      aria-label="Menge"
+                      aria-label={t("reports.itemQuantity")}
                       onChange={(e) => updateItemRow(idx, "quantity", e.target.value)}
                     />
-                    <small className="muted">{item.unit}</small>
+                    <small className="muted">{unitLabel(item.unit)}</small>
                     <input
                       type="number"
                       step="0.5"
                       value={item.unitPriceNet}
-                      aria-label={`Einzel (${currencySymbol("de-DE")})`}
+                      aria-label={t("reports.itemUnitPrice", { currency: symbol() })}
                       onChange={(e) => updateItemRow(idx, "unitPriceNet", e.target.value)}
                     />
                     <button
                       type="button"
                       onClick={() => removeItemRow(idx)}
                       className="icon-button danger"
-                      aria-label="Entfernen"
+                      aria-label={t("common.remove")}
                     >
                       <X size={16} />
                     </button>
@@ -458,10 +459,10 @@ export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsT
 
             <div className="row gap craft-dialog-actions">
               <button type="button" onClick={() => setIsNewModalOpen(false)} className="button">
-                Abbrechen
+                {t("common.cancel")}
               </button>
               <button type="submit" disabled={isBusy} className="button primary">
-                Bericht erstellen
+                {t("reports.create")}
               </button>
             </div>
           </form>

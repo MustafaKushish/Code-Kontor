@@ -4,7 +4,8 @@ import { api } from "../../api";
 import { Field } from "../../components";
 import { Dialog } from "../../pos/ui";
 import type { SparePart } from "../../../shared/workshop";
-import { currency as companyCurrency, currencySymbol, standardVat } from "../../money";
+import { standardVat } from "../../money";
+import { useWorkshopI18n } from "./i18n";
 
 interface PartsTabProps {
   isManager: boolean;
@@ -24,6 +25,7 @@ const CATEGORIES: SparePart["category"][] = [
 ];
 
 export function PartsTab({ parts, onPartsChanged, isManager }: PartsTabProps) {
+  const { t, workshopError, euro: fmtEuro, symbol, category } = useWorkshopI18n();
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [lowStockOnly, setLowStockOnly] = useState(false);
@@ -49,8 +51,6 @@ export function PartsTab({ parts, onPartsChanged, isManager }: PartsTabProps) {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
 
-  const fmtEuro = (amount: number) =>
-    new Intl.NumberFormat("de-DE", { style: "currency", currency: companyCurrency() }).format(amount);
 
   const filtered = parts.filter((p) => {
     if (lowStockOnly && p.stock > p.minStock) return false;
@@ -81,7 +81,7 @@ export function PartsTab({ parts, onPartsChanged, isManager }: PartsTabProps) {
       purchasePriceNet: 12.0,
       salePriceNet: 28.0,
       taxRate: standardVat(),
-      storageBin: "Regal A-01",
+      storageBin: t("parts.defaultBin"),
     });
     setModalOpen(true);
   };
@@ -107,7 +107,7 @@ export function PartsTab({ parts, onPartsChanged, isManager }: PartsTabProps) {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.partNumber.trim() || !form.name.trim()) {
-      setErrorMsg("Bitte mindestens Teilenummer und Bezeichnung ausfüllen.");
+      setErrorMsg(t("parts.required"));
       return;
     }
 
@@ -139,8 +139,8 @@ export function PartsTab({ parts, onPartsChanged, isManager }: PartsTabProps) {
         onPartsChanged([...parts, saved]);
       }
       setModalOpen(false);
-    } catch (err: any) {
-      setErrorMsg(err.message || "Fehler beim Speichern des Teils.");
+    } catch (err: unknown) {
+      setErrorMsg(workshopError(err, t("parts.saveError")));
     } finally {
       setSaving(false);
     }
@@ -153,8 +153,8 @@ export function PartsTab({ parts, onPartsChanged, isManager }: PartsTabProps) {
         body: { diff },
       });
       onPartsChanged(parts.map((p) => (p.id === updated.id ? updated : p)));
-    } catch (err: any) {
-      setErrorMsg(err.message || "Fehler beim Anpassen des Bestands.");
+    } catch (err: unknown) {
+      setErrorMsg(workshopError(err, t("parts.stockError")));
     }
   };
 
@@ -163,8 +163,8 @@ export function PartsTab({ parts, onPartsChanged, isManager }: PartsTabProps) {
       await api(`/workshop/parts/${id}`, { method: "DELETE" });
       onPartsChanged(parts.filter((p) => p.id !== id));
       setDeleteConfirmId(null);
-    } catch (err: any) {
-      setErrorMsg(err.message || "Fehler beim Löschen des Teils.");
+    } catch (err: unknown) {
+      setErrorMsg(workshopError(err, t("parts.deleteError")));
     }
   };
 
@@ -176,18 +176,18 @@ export function PartsTab({ parts, onPartsChanged, isManager }: PartsTabProps) {
           <Search size={18} />
           <input
             type="search"
-            placeholder="Teilenummer, OEM, Name, Hersteller..."
-            aria-label="Teilenummer, OEM, Name, Hersteller..."
+            placeholder={t("parts.searchPlaceholder")}
+            aria-label={t("parts.searchPlaceholder")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </label>
 
-        <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="workshop-select" aria-label="Warengruppe">
-          <option value="all">Alle Warengruppen</option>
+        <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="workshop-select" aria-label={t("parts.categoryFilter")}>
+          <option value="all">{t("parts.allCategories")}</option>
           {CATEGORIES.map((c) => (
             <option key={c} value={c}>
-              {c}
+              {category(c)}
             </option>
           ))}
         </select>
@@ -195,12 +195,12 @@ export function PartsTab({ parts, onPartsChanged, isManager }: PartsTabProps) {
         <div className="row gap workshop-toolbar-end">
           <button type="button" onClick={() => setLowStockOnly(!lowStockOnly)} className={lowStockOnly ? "chip active" : "chip"}>
             <AlertTriangle size={15} />
-            Nur Mindestbestand
+            {t("parts.lowStockOnly")}
           </button>
           {isManager && (
             <button onClick={openNewModal} className="button primary">
               <Plus size={18} />
-              Teil anlegen
+              {t("parts.add")}
             </button>
           )}
         </div>
@@ -211,7 +211,7 @@ export function PartsTab({ parts, onPartsChanged, isManager }: PartsTabProps) {
       {/* Teileliste */}
       <section className="card list-card">
         {filtered.length === 0 ? (
-          <p className="empty muted">Keine Ersatzteile gefunden.</p>
+          <p className="empty muted">{t("parts.empty")}</p>
         ) : (
           filtered.map((p) => {
             const isLow = p.stock <= p.minStock;
@@ -220,45 +220,45 @@ export function PartsTab({ parts, onPartsChanged, isManager }: PartsTabProps) {
                 <span className="list-main">
                   <strong>{p.name}</strong>
                   <small className="muted">
-                    <span className="workshop-mono">{p.partNumber}</span> · {p.manufacturer || "OEM"} · {p.category} · <span className="workshop-mono">{p.storageBin || "–"}</span>
+                    <span className="workshop-mono">{p.partNumber}</span> · {p.manufacturer || "OEM"} · {category(p.category)} · <span className="workshop-mono">{p.storageBin || "–"}</span>
                   </small>
                 </span>
 
                 <span className="workshop-stock">
                   <span className="workshop-stepper">
-                    <button onClick={() => handleStockAdjust(p.id, -1)} disabled={p.stock <= 0} aria-label="Bestand verringern">
+                    <button onClick={() => handleStockAdjust(p.id, -1)} disabled={p.stock <= 0} aria-label={t("parts.decrease")}>
                       -
                     </button>
                     <strong className={isLow ? "pill warn workshop-num" : "workshop-num"}>{p.stock}</strong>
-                    <button onClick={() => handleStockAdjust(p.id, 1)} aria-label="Bestand erhöhen">
+                    <button onClick={() => handleStockAdjust(p.id, 1)} aria-label={t("parts.increase")}>
                       +
                     </button>
                   </span>
-                  {isLow && <small className="muted">Meldebestand: {p.minStock}</small>}
+                  {isLow && <small className="muted">{t("parts.minStock", { n: p.minStock })}</small>}
                 </span>
 
                 <span className="workshop-row-meta">
                   <strong className="workshop-num">{fmtEuro(p.salePriceNet)}</strong>
-                  <small className="muted workshop-num">EK {fmtEuro(p.purchasePriceNet)}</small>
+                  <small className="muted workshop-num">{t("parts.purchase", { price: fmtEuro(p.purchasePriceNet) })}</small>
                 </span>
 
                 <span className="row workshop-row-actions">
                   {isManager && (
-                    <button onClick={() => openEditModal(p)} className="icon-button" title="Bearbeiten" aria-label="Bearbeiten">
+                    <button onClick={() => openEditModal(p)} className="icon-button" title={t("common.edit")} aria-label={t("common.edit")}>
                       <Pencil size={17} />
                     </button>
                   )}
                   {!isManager ? null : deleteConfirmId === p.id ? (
                     <>
                       <button onClick={() => handleDelete(p.id)} className="button danger small-button">
-                        Ja
+                        {t("common.yes")}
                       </button>
                       <button onClick={() => setDeleteConfirmId(null)} className="text-button">
-                        Nein
+                        {t("common.no")}
                       </button>
                     </>
                   ) : (
-                    <button onClick={() => setDeleteConfirmId(p.id)} className="icon-button danger" title="Löschen" aria-label="Löschen">
+                    <button onClick={() => setDeleteConfirmId(p.id)} className="icon-button danger" title={t("common.delete")} aria-label={t("common.delete")}>
                       <Trash2 size={17} />
                     </button>
                   )}
@@ -271,51 +271,51 @@ export function PartsTab({ parts, onPartsChanged, isManager }: PartsTabProps) {
 
       {/* Dialog: Teil anlegen / bearbeiten */}
       {modalOpen && (
-        <Dialog title={editingPart ? "Ersatzteil bearbeiten" : "Neues Ersatzteil anlegen"} onClose={() => setModalOpen(false)} wide>
+        <Dialog title={editingPart ? t("parts.editTitle") : t("parts.newTitle")} onClose={() => setModalOpen(false)} wide>
           <form onSubmit={handleSave} className="stack workshop-dialog">
             {errorMsg && <p className="error" role="alert">{errorMsg}</p>}
             <div className="grid form-grid">
-              <Field label="Teilenummer *">
+              <Field label={t("parts.partNumber")}>
                 <input
                   type="text"
                   required
-                  placeholder="z. B. 04L 115 562"
+                  placeholder={t("parts.partNumberPlaceholder")}
                   value={form.partNumber}
                   onChange={(e) => setForm({ ...form, partNumber: e.target.value })}
                   className="workshop-mono"
                 />
               </Field>
-              <Field label="OEM / Vergleichsnummer">
+              <Field label={t("parts.oem")}>
                 <input
                   type="text"
-                  placeholder="Herstellernummer (optional)"
+                  placeholder={t("parts.oemPlaceholder")}
                   value={form.oemNumber}
                   onChange={(e) => setForm({ ...form, oemNumber: e.target.value })}
                   className="workshop-mono"
                 />
               </Field>
-              <Field label="Artikelbezeichnung *" wide>
-                <input type="text" required placeholder="z. B. Ölfiltereinsatz VAG 2.0 TDI" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <Field label={t("parts.name")} wide>
+                <input type="text" required placeholder={t("parts.namePlaceholder")} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
               </Field>
-              <Field label="Hersteller / Marke">
-                <input type="text" placeholder="z. B. Mann-Filter, ATE, Bosch" value={form.manufacturer} onChange={(e) => setForm({ ...form, manufacturer: e.target.value })} />
+              <Field label={t("common.brand")}>
+                <input type="text" placeholder={t("parts.manufacturerPlaceholder")} value={form.manufacturer} onChange={(e) => setForm({ ...form, manufacturer: e.target.value })} />
               </Field>
-              <Field label="Warengruppe">
+              <Field label={t("parts.category")}>
                 <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value as any })}>
                   {CATEGORIES.map((c) => (
                     <option key={c} value={c}>
-                      {c}
+                      {category(c)}
                     </option>
                   ))}
                 </select>
               </Field>
-              <Field label="Lagerplatz / Fach">
-                <input type="text" placeholder="z. B. Regal A-02" value={form.storageBin} onChange={(e) => setForm({ ...form, storageBin: e.target.value })} />
+              <Field label={t("parts.bin")}>
+                <input type="text" placeholder={t("parts.binPlaceholder")} value={form.storageBin} onChange={(e) => setForm({ ...form, storageBin: e.target.value })} />
               </Field>
-              <Field label="Aktueller Lagerbestand">
+              <Field label={t("parts.stock")}>
                 <input type="number" value={form.stock} onChange={(e) => setForm({ ...form, stock: Number(e.target.value) })} className="workshop-mono" />
               </Field>
-              <Field label={`Einkaufspreis Netto (${currencySymbol("de-DE")})`}>
+              <Field label={t("parts.purchasePrice", { symbol: symbol() })}>
                 <input
                   type="number"
                   step="0.01"
@@ -324,7 +324,7 @@ export function PartsTab({ parts, onPartsChanged, isManager }: PartsTabProps) {
                   className="workshop-mono"
                 />
               </Field>
-              <Field label={`Verkaufspreis Netto (${currencySymbol("de-DE")})`}>
+              <Field label={t("parts.salePrice", { symbol: symbol() })}>
                 <input
                   type="number"
                   step="0.01"
@@ -337,11 +337,11 @@ export function PartsTab({ parts, onPartsChanged, isManager }: PartsTabProps) {
 
             <div className="row gap workshop-dialog-actions">
               <button type="button" onClick={() => setModalOpen(false)} className="button">
-                Abbrechen
+                {t("common.cancel")}
               </button>
               <button type="submit" disabled={saving} className="button primary">
                 <Check size={18} />
-                {saving ? "Wird gespeichert..." : "Teil speichern"}
+                {saving ? t("common.saving") : t("parts.save")}
               </button>
             </div>
           </form>

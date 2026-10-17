@@ -7,7 +7,7 @@ import { useRetailI18n } from "./i18n";
 import { Dialog } from "../../pos/ui";
 
 export function OrdersTab({ isManager }: { isManager: boolean }) {
-  const { r, euro, day: formatDay } = useRetailI18n();
+  const { r, euro, day: formatDay, unit, retailError } = useRetailI18n();
   const [orders, setOrders] = useState<RetailPurchaseOrder[]>([]);
   const [suppliers, setSuppliers] = useState<RetailSupplier[]>([]);
   const [products, setProducts] = useState<RetailProduct[]>([]);
@@ -89,13 +89,13 @@ export function OrdersTab({ isManager }: { isManager: boolean }) {
   const handleSaveOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (orderItems.length === 0) {
-      setErrorMsg("Bitte fügen Sie mindestens einen Artikel zur Bestellung hinzu.");
+      setErrorMsg(r("orders.errors.noItems"));
       return;
     }
 
     const sup = suppliers.find((s) => s.id === selectedSupplierId);
     if (!sup) {
-      setErrorMsg("Bitte wählen Sie einen Lieferanten.");
+      setErrorMsg(r("orders.errors.noSupplier"));
       return;
     }
 
@@ -116,7 +116,7 @@ export function OrdersTab({ isManager }: { isManager: boolean }) {
       setModalOpen(false);
       await loadData();
     } catch (err: any) {
-      setErrorMsg(err?.message || "Fehler beim Anlegen der Bestellung");
+      setErrorMsg(retailError(err, r("orders.errors.create")));
     }
   };
 
@@ -148,7 +148,7 @@ export function OrdersTab({ isManager }: { isManager: boolean }) {
       setReceivingOrder(null);
       await loadData();
     } catch (err: any) {
-      setErrorMsg(err?.message || "Fehler beim Einbuchen des Wareneingangs");
+      setErrorMsg(retailError(err, r("orders.errors.receive")));
     }
   };
 
@@ -158,7 +158,7 @@ export function OrdersTab({ isManager }: { isManager: boolean }) {
       setDeleteConfirmId(null);
       await loadData();
     } catch (err: any) {
-      setErrorMsg(err?.message || "Fehler beim Löschen der Bestellung");
+      setErrorMsg(retailError(err, r("orders.errors.delete")));
     }
   };
 
@@ -180,7 +180,7 @@ export function OrdersTab({ isManager }: { isManager: boolean }) {
               className={statusFilter === st ? "chip active" : "chip"}
               onClick={() => setStatusFilter(st)}
             >
-              {st === "all" ? "Alle Bestellungen" : r(`orderStatus.${st}`)}
+              {r(`orderStatus.${st}`)}
             </button>
           ))}
         </div>
@@ -194,12 +194,12 @@ export function OrdersTab({ isManager }: { isManager: boolean }) {
 
       {/* Bestellungen */}
       {loading ? (
-        <p className="muted">Lade Bestellungen...</p>
+        <p className="muted">{r("orders.loading")}</p>
       ) : (
         <section className="card list-card">
           {orders.length === 0 && (
             <p className="empty muted">
-              <strong>Keine Bestellungen vorhanden</strong> · Erstellen Sie eine Einkaufsbestellung für Ihre Lieferanten.
+              <strong>{r("orders.emptyTitle")}</strong> · {r("orders.emptyText")}
             </p>
           )}
           {orders.map((o) => {
@@ -209,15 +209,15 @@ export function OrdersTab({ isManager }: { isManager: boolean }) {
             return (
               <div key={o.id} className="list-row retail-row">
                 <span className="retail-number">
-                  <strong>Bestellung #{o.number}</strong>
+                  <strong>{r("orders.number", { number: o.number })}</strong>
                   <small className="muted">{formatDay(o.date)}</small>
                 </span>
                 <span className="list-main">
                   <strong>{o.supplierName}{o.supplierEmail ? ` · ${o.supplierEmail}` : ""}</strong>
                   <small className="muted">
-                    {o.items.length} Artikel ({receivedQty} von {totalQty} geliefert) · {o.items.map((i) => i.name).join(", ")}
+                    {r("orders.itemsSummary", { count: o.items.length, received: receivedQty, total: totalQty })} · {o.items.map((i) => i.name).join(", ")}
                   </small>
-                  <small className="muted"><Calendar size={13} /> Liefertermin: {o.expectedDeliveryDate ? formatDay(o.expectedDeliveryDate) : "–"}</small>
+                  <small className="muted"><Calendar size={13} /> {r("orders.delivery", { date: o.expectedDeliveryDate ? formatDay(o.expectedDeliveryDate) : "–" })}</small>
                 </span>
                 <span className="retail-row-meta">
                   <span className={statusPill(o.status)}>{r(`orderStatus.${o.status}`)}</span>
@@ -227,20 +227,20 @@ export function OrdersTab({ isManager }: { isManager: boolean }) {
                       <button
                         className="button small-button primary"
                         onClick={() => openReceiveModal(o)}
-                        title="Lieferschein abgleichen und Wareneingang ins Lager buchen"
+                        title={r("orders.receiveTitle")}
                       >
-                        <Truck size={14} /> Wareneingang
+                        <Truck size={14} /> {r("orders.receive")}
                       </button>
                     )}
 
                     {isManager && (
                       deleteConfirmId === o.id ? (
                         <>
-                          <button className="button danger small-button" onClick={() => handleDelete(o.id)} title="Unwiderruflich löschen">
-                            Löschen
+                          <button className="button danger small-button" onClick={() => handleDelete(o.id)} title={r("orders.deleteTitle")}>
+                            {r("actions.delete")}
                           </button>
                           <button className="button small-button" onClick={() => setDeleteConfirmId(null)}>
-                            Abbr.
+                            {r("actions.cancelShort")}
                           </button>
                         </>
                       ) : (
@@ -264,17 +264,17 @@ export function OrdersTab({ isManager }: { isManager: boolean }) {
             {errorMsg && <p className="error" role="alert">{errorMsg}</p>}
 
             <div className="grid form-grid">
-              <Field label="Lieferant" required wide>
+              <Field label={r("orderForm.supplier")} required wide>
                 <select value={selectedSupplierId} onChange={(e) => setSelectedSupplierId(e.target.value)}>
                   {suppliers.map((s) => (
                     <option key={s.id} value={s.id}>{s.name}</option>
                   ))}
                 </select>
               </Field>
-              <Field label="Bestelldatum" required>
+              <Field label={r("orderForm.orderDate")} required>
                 <input type="date" required value={orderDate} onChange={(e) => setOrderDate(e.target.value)} />
               </Field>
-              <Field label="Erwarteter Liefertermin">
+              <Field label={r("orderForm.expectedDate")}>
                 <input type="date" value={expectedDate} onChange={(e) => setExpectedDate(e.target.value)} />
               </Field>
             </div>
@@ -282,8 +282,8 @@ export function OrdersTab({ isManager }: { isManager: boolean }) {
             {/* Artikel zur Bestellung hinzufügen */}
             <div className="retail-calc">
               <div className="section-head">
-                <strong>Artikel zur Bestellung hinzufügen</strong>
-                <small className="muted">Aus Sortiment wählen</small>
+                <strong>{r("orderForm.addTitle")}</strong>
+                <small className="muted">{r("orderForm.addHint")}</small>
               </div>
 
               <select
@@ -294,12 +294,12 @@ export function OrdersTab({ isManager }: { isManager: boolean }) {
                   }
                 }}
                 defaultValue=""
-                aria-label="Artikel auswählen"
+                aria-label={r("orderForm.selectProduct")}
               >
-                <option value="" disabled>+ Artikel auswählen...</option>
+                <option value="" disabled>{r("orderForm.selectProductOption")}</option>
                 {products.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.name} (Bestand: {p.stockQty} {p.unit} / Min: {p.minStockQty}) – EK: {euro(p.purchasePriceCents)}
+                    {r("orderForm.productOption", { name: p.name, qty: p.stockQty, unit: unit(p.unit), min: p.minStockQty, price: euro(p.purchasePriceCents) })}
                   </option>
                 ))}
               </select>
@@ -316,8 +316,8 @@ export function OrdersTab({ isManager }: { isManager: boolean }) {
                       <input
                         type="number"
                         min="1"
-                        aria-label="Menge"
-                        title="Menge"
+                        aria-label={r("orderForm.qty")}
+                        title={r("orderForm.qty")}
                         value={item.qtyOrdered}
                         onChange={(e) => {
                           const val = parseInt(e.target.value, 10) || 1;
@@ -327,8 +327,8 @@ export function OrdersTab({ isManager }: { isManager: boolean }) {
                       <input
                         type="number"
                         step="0.01"
-                        aria-label="EK Netto"
-                        title="EK Netto"
+                        aria-label={r("orderForm.purchaseNet")}
+                        title={r("orderForm.purchaseNet")}
                         value={(item.purchasePriceCents / 100).toFixed(2)}
                         onChange={(e) => {
                           const valCents = Math.round(parseFloat(e.target.value) * 100) || 0;
@@ -348,21 +348,21 @@ export function OrdersTab({ isManager }: { isManager: boolean }) {
                   ))}
                 </div>
               ) : (
-                <p className="small muted">Noch keine Positionen hinzugefügt.</p>
+                <p className="small muted">{r("orderForm.noLines")}</p>
               )}
 
               {orderItems.length > 0 && (
                 <div className="retail-total">
-                  <span>Gesamtwert Netto:</span>
+                  <span>{r("orderForm.totalNet")}</span>
                   <strong>{euro(orderItems.reduce((s, i) => s + i.qtyOrdered * i.purchasePriceCents, 0))}</strong>
                 </div>
               )}
             </div>
 
-            <Field label="Notizen / Hinweise für Lieferant">
+            <Field label={r("orderForm.notes")}>
               <textarea
                 rows={2}
-                placeholder="z.B. Anlieferung bitte bis 12 Uhr, Hubwagen erforderlich"
+                placeholder={r("orderForm.notesPlaceholder")}
                 value={orderNotes}
                 onChange={(e) => setOrderNotes(e.target.value)}
               />
@@ -373,7 +373,7 @@ export function OrdersTab({ isManager }: { isManager: boolean }) {
                 {r("actions.cancel")}
               </button>
               <button type="submit" className="button primary">
-                Bestellung aufgeben
+                {r("orderForm.submit")}
               </button>
             </div>
           </form>
@@ -382,12 +382,12 @@ export function OrdersTab({ isManager }: { isManager: boolean }) {
 
       {/* Dialog: Wareneingang erfassen */}
       {receivingOrder && (
-        <Dialog title={`Wareneingang erfassen (Bestellung #${receivingOrder.number})`} onClose={() => setReceivingOrder(null)} wide>
+        <Dialog title={r("receiveDialog.title", { number: receivingOrder.number })} onClose={() => setReceivingOrder(null)} wide>
           <form onSubmit={handleConfirmReceive} className="retail-dialog stack">
-            <p className="muted">Lieferant: {receivingOrder.supplierName}</p>
+            <p className="muted">{r("receiveDialog.supplier", { name: receivingOrder.supplierName })}</p>
             <div className="section-head">
               <p className="small muted">
-                Gleichen Sie die Lieferscheinmengen ab. Bestände werden automatisch im Lager zugebucht.
+                {r("receiveDialog.intro")}
               </p>
               <button
                 type="button"
@@ -398,7 +398,7 @@ export function OrdersTab({ isManager }: { isManager: boolean }) {
                   setReceivedQtyMap(full);
                 }}
               >
-                <CheckCircle2 size={14} /> Alles vollständig
+                <CheckCircle2 size={14} /> {r("receiveDialog.allComplete")}
               </button>
             </div>
 
@@ -409,13 +409,13 @@ export function OrdersTab({ isManager }: { isManager: boolean }) {
                     <strong>{item.name}</strong>
                     <small className="muted">{item.ean}</small>
                   </span>
-                  <small className="muted">Bestellt {item.qtyOrdered} · Bereits da {item.qtyReceived}</small>
+                  <small className="muted">{r("receiveDialog.lineInfo", { ordered: item.qtyOrdered, received: item.qtyReceived })}</small>
                   <input
                     type="number"
                     min={item.qtyReceived}
                     max={item.qtyOrdered * 2}
-                    aria-label="Neu geliefert (Ist)"
-                    title="Neu geliefert (Ist)"
+                    aria-label={r("receiveDialog.delivered")}
+                    title={r("receiveDialog.delivered")}
                     value={receivedQtyMap[item.productId] ?? item.qtyReceived}
                     onChange={(e) => {
                       const val = parseInt(e.target.value, 10) || 0;
@@ -430,7 +430,7 @@ export function OrdersTab({ isManager }: { isManager: boolean }) {
             </div>
 
             <p className="notice success">
-              <Check size={16} /> Bestände der erfassten Artikel werden sofort im Lager erhöht und im Journal protokolliert.
+              <Check size={16} /> {r("receiveDialog.notice")}
             </p>
 
             <div className="actions">
@@ -438,7 +438,7 @@ export function OrdersTab({ isManager }: { isManager: boolean }) {
                 {r("actions.cancel")}
               </button>
               <button type="submit" className="button primary">
-                Wareneingang einbuchen
+                {r("receiveDialog.submit")}
               </button>
             </div>
           </form>

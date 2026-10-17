@@ -27,7 +27,7 @@ import type {
 import { Dialog } from "../../pos/ui";
 import { ModuleCheckout } from "../../pos/ModuleCheckout";
 import { RestaurantPrint } from "./RestaurantPrint";
-import { currency as companyCurrency } from "../../money";
+import { useRestaurantI18n } from "./i18n";
 
 interface PickupTabProps {
   orders: RestaurantOrder[];
@@ -37,6 +37,7 @@ interface PickupTabProps {
 }
 
 export function PickupTab({ orders, menu, tenantId, onRefresh }: PickupTabProps) {
+  const { t, euro } = useRestaurantI18n();
   const [filterStatus, setFilterStatus] = useState<"alle" | "zubereitung" | "bereit" | "abgeschlossen">("alle");
   const [search, setSearch] = useState("");
   const [isNewPickupModalOpen, setIsNewPickupModalOpen] = useState(false);
@@ -47,8 +48,7 @@ export function PickupTab({ orders, menu, tenantId, onRefresh }: PickupTabProps)
   const [activePrintOrder, setActivePrintOrder] = useState<RestaurantOrder | null>(null);
   const [isBusy, setIsBusy] = useState(false);
 
-  const fmtEuro = (amount: number) =>
-    new Intl.NumberFormat("de-DE", { style: "currency", currency: companyCurrency() }).format(amount);
+  const fmtEuro = euro;
 
   // Filter only pickup / takeaway orders
   const pickupOrders = orders.filter((o) => o.type === "abholung");
@@ -151,10 +151,10 @@ export function PickupTab({ orders, menu, tenantId, onRefresh }: PickupTabProps)
   };
 
   const filters = [
-    { id: "alle" as const, label: `Alle (${pickupOrders.length})`, icon: null },
-    { id: "zubereitung" as const, label: `In Zubereitung (${preparingCount})`, icon: Clock },
-    { id: "bereit" as const, label: `Abholbereit (${readyCount})`, icon: CheckCircle2 },
-    { id: "abgeschlossen" as const, label: "Abgeschlossen", icon: null },
+    { id: "alle" as const, label: t("pickup.filterAll", { n: pickupOrders.length }), icon: null },
+    { id: "zubereitung" as const, label: t("pickup.filterPreparing", { n: preparingCount }), icon: Clock },
+    { id: "bereit" as const, label: t("pickup.filterReady", { n: readyCount }), icon: CheckCircle2 },
+    { id: "abgeschlossen" as const, label: t("pickup.filterDone"), icon: null },
   ];
 
   return (
@@ -163,21 +163,21 @@ export function PickupTab({ orders, menu, tenantId, onRefresh }: PickupTabProps)
         <span className="stat-icon"><Tv size={20} /></span>
         <div className="stack-sm">
           <h2 className="restaurant-callout-title">
-            Digitaler Abholaufruf-Monitor
-            <span className="pill">Live TV-Modus</span>
+            {t("pickup.monitorTitle")}
+            <span className="pill">{t("pickup.liveTv")}</span>
           </h2>
           <p className="muted small">
-            Zeigt Gästen im Wartebereich automatisch große Abholnummern für „In Zubereitung“ und „Abholbereit“.
+            {t("pickup.monitorHint")}
           </p>
         </div>
         <div className="row gap push-end restaurant-callout-actions">
           <a href={`/abholung/${tenantId}`} target="_blank" rel="noopener noreferrer" className="button">
             <ExternalLink size={18} />
-            Aufruf-Monitor öffnen
+            {t("pickup.openMonitor")}
           </a>
           <button onClick={() => setIsNewPickupModalOpen(true)} className="button primary">
             <Plus size={18} />
-            Telefon-Vorbestellung
+            {t("pickup.phoneOrder")}
           </button>
         </div>
       </section>
@@ -202,8 +202,8 @@ export function PickupTab({ orders, menu, tenantId, onRefresh }: PickupTabProps)
           <Search size={18} />
           <input
             type="text"
-            placeholder="Nummer, Name, Telefon..."
-            aria-label="Nummer, Name, Telefon"
+            placeholder={t("pickup.search")}
+            aria-label={t("pickup.searchLabel")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -214,9 +214,9 @@ export function PickupTab({ orders, menu, tenantId, onRefresh }: PickupTabProps)
         {filteredOrders.length === 0 ? (
           <div className="card restaurant-empty wide-card">
             <ShoppingBag size={32} aria-hidden />
-            <strong>Keine Abholaufträge vorhanden</strong>
+            <strong>{t("pickup.emptyTitle")}</strong>
             <p className="muted small">
-              Bestellungen vom Kundenschalter oder per Telefon erscheinen hier automatisch.
+              {t("pickup.emptyHint")}
             </p>
           </div>
         ) : (
@@ -232,17 +232,17 @@ export function PickupTab({ orders, menu, tenantId, onRefresh }: PickupTabProps)
               >
                 <div className="restaurant-order-head">
                   <div className="restaurant-ticket-number">
-                    <small>Abhol-Nr</small>
+                    <small>{t("pickup.pickupNo")}</small>
                     <strong>#{order.pickupNumber || "?"}</strong>
                   </div>
                   <span className="list-main">
                     <span className="row gap">
                       <small className="muted restaurant-code">{order.orderNumber}</small>
                       <span className={`pill ${isReady ? "pos" : isPreparing ? "warn" : ""}`}>
-                        {isReady ? "Abholbereit" : isPreparing ? "In Zubereitung" : "Ausgegeben"}
+                        {isReady ? t("pickup.ready") : isPreparing ? t("pickup.preparing") : t("pickup.handedOut")}
                       </span>
                     </span>
-                    <strong>{order.customerName || "Gast / Laufkundschaft"}</strong>
+                    <strong>{order.customerName || t("common.walkIn")}</strong>
                     {order.customerPhone && (
                       <small className="muted restaurant-inline">
                         <Phone size={12} aria-hidden />
@@ -262,7 +262,7 @@ export function PickupTab({ orders, menu, tenantId, onRefresh }: PickupTabProps)
                       <span className="muted restaurant-amount">{fmtEuro(item.unitPriceGross * item.quantity)}</span>
                     </p>
                   ))}
-                  {order.notes && <small className="restaurant-note">Hinweis: {order.notes}</small>}
+                  {order.notes && <small className="restaurant-note">{t("common.note", { note: order.notes })}</small>}
                 </div>
 
                 <div className="restaurant-order-foot">
@@ -270,13 +270,13 @@ export function PickupTab({ orders, menu, tenantId, onRefresh }: PickupTabProps)
                     <button
                       onClick={() => setActivePrintOrder(order)}
                       className="icon-button"
-                      title="Bon drucken"
-                      aria-label="Bon drucken"
+                      title={t("pickup.printTicket")}
+                      aria-label={t("pickup.printTicket")}
                     >
                       <Printer size={18} />
                     </button>
                     <span className={`pill ${order.paymentStatus === "bezahlt" ? "pos" : "neg"}`}>
-                      {order.paymentStatus === "bezahlt" ? "Bezahlt" : "Offen"}
+                      {order.paymentStatus === "bezahlt" ? t("common.paid") : t("common.open")}
                     </span>
                   </div>
 
@@ -288,14 +288,14 @@ export function PickupTab({ orders, menu, tenantId, onRefresh }: PickupTabProps)
                         className="button primary small-button"
                       >
                         <CheckCircle2 size={16} />
-                        Fertig melden
+                        {t("pickup.markReady")}
                       </button>
                     )}
 
                     {order.paymentStatus === "offen" && (
                       <button onClick={() => setPaying(order.id)} disabled={isBusy} className="button primary small-button">
                         <Banknote size={16} />
-                        Bezahlen
+                        {t("common.pay")}
                       </button>
                     )}
 
@@ -305,7 +305,7 @@ export function PickupTab({ orders, menu, tenantId, onRefresh }: PickupTabProps)
                         disabled={isBusy}
                         className="button primary small-button"
                       >
-                        Ausgeben
+                        {t("pickup.handOut")}
                       </button>
                     )}
                   </div>
@@ -317,19 +317,19 @@ export function PickupTab({ orders, menu, tenantId, onRefresh }: PickupTabProps)
       </div>
 
       {isNewPickupModalOpen && (
-        <Dialog title="Telefon- / Vorbestellung aufnehmen" onClose={() => setIsNewPickupModalOpen(false)} wide>
+        <Dialog title={t("pickup.newTitle")} onClose={() => setIsNewPickupModalOpen(false)} wide>
           <form onSubmit={handleCreatePhoneOrder} className="restaurant-dialog stack">
             <div className="grid form-grid">
-              <Field label="Kundenname" required>
+              <Field label={t("pickup.customerName")} required>
                 <input
                   type="text"
                   required
-                  placeholder="Frau Müller"
+                  placeholder={t("pickup.customerNamePlaceholder")}
                   value={newCustomerName}
                   onChange={(e) => setNewCustomerName(e.target.value)}
                 />
               </Field>
-              <Field label="Telefonnummer">
+              <Field label={t("pickup.phone")}>
                 <input
                   type="tel"
                   placeholder="0171 1234567"
@@ -337,10 +337,10 @@ export function PickupTab({ orders, menu, tenantId, onRefresh }: PickupTabProps)
                   onChange={(e) => setNewCustomerPhone(e.target.value)}
                 />
               </Field>
-              <Field label="Besondere Notiz" wide>
+              <Field label={t("pickup.notes")} wide>
                 <input
                   type="text"
-                  placeholder="z.B. Abholung um 13:15 Uhr, Besteck beilegen"
+                  placeholder={t("pickup.notesPlaceholder")}
                   value={newNotes}
                   onChange={(e) => setNewNotes(e.target.value)}
                 />
@@ -348,7 +348,7 @@ export function PickupTab({ orders, menu, tenantId, onRefresh }: PickupTabProps)
             </div>
 
             <div className="stack-sm">
-              <span className="field-label">Speisen & Getränke auswählen:</span>
+              <span className="field-label">{t("pickup.chooseItems")}</span>
               <div className="restaurant-picker">
                 {menu.filter((m) => m.active).map((item) => (
                   <div key={item.id} className="list-row">
@@ -361,7 +361,7 @@ export function PickupTab({ orders, menu, tenantId, onRefresh }: PickupTabProps)
                       onClick={() => addItemToNewOrder(item)}
                       className="button small-button"
                     >
-                      + Hinzufügen
+                      {t("pickup.add")}
                     </button>
                   </div>
                 ))}
@@ -370,7 +370,7 @@ export function PickupTab({ orders, menu, tenantId, onRefresh }: PickupTabProps)
 
             {selectedItems.length > 0 && (
               <div className="restaurant-selected stack-sm">
-                <strong>Ausgewählt:</strong>
+                <strong>{t("pickup.selected")}</strong>
                 {selectedItems.map(({ menuItem, quantity }) => (
                   <div key={menuItem.id} className="restaurant-split">
                     <span>
@@ -382,7 +382,7 @@ export function PickupTab({ orders, menu, tenantId, onRefresh }: PickupTabProps)
                         type="button"
                         onClick={() => removeItemFromNewOrder(menuItem.id)}
                         className="icon-button danger"
-                        aria-label="Entfernen"
+                        aria-label={t("common.remove")}
                       >
                         <X size={16} />
                       </button>
@@ -394,14 +394,14 @@ export function PickupTab({ orders, menu, tenantId, onRefresh }: PickupTabProps)
 
             <div className="row gap restaurant-form-actions">
               <button type="button" onClick={() => setIsNewPickupModalOpen(false)} className="button">
-                Abbrechen
+                {t("common.cancel")}
               </button>
               <button
                 type="submit"
                 disabled={isBusy || selectedItems.length === 0}
                 className="button primary"
               >
-                Abholauftrag anlegen
+                {t("pickup.create")}
               </button>
             </div>
           </form>

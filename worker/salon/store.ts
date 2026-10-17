@@ -592,9 +592,7 @@ export class SalonStore {
     for (const app of existingAppointments) {
       if (app.id !== id && app.status !== "canceled") {
         if (timeSlotsOverlap(input.startTime, endTime, app.startTime, app.endTime)) {
-          throw new SalonError(
-            `Kollision: ${app.staffName} hat zu dieser Zeit bereits einen Termin (${app.startTime} - ${app.endTime})`
-          );
+          throw new SalonError("collision");
         }
       }
     }

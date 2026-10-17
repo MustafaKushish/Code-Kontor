@@ -16,7 +16,7 @@ import {
 import type { SparePart, Vehicle, WorkshopOrder, WorkshopOrderStatus } from "../../../shared/workshop";
 import { OrderDetailsModal } from "./OrderDetailsModal";
 import { NewOrderModal } from "./NewOrderModal";
-import { currency as companyCurrency } from "../../money";
+import { useWorkshopI18n, LIFT_KEYS } from "./i18n";
 
 interface OrdersTabProps {
   orders: WorkshopOrder[];
@@ -29,13 +29,24 @@ interface OrdersTabProps {
   onOrdersChanged: (orders: WorkshopOrder[]) => void;
 }
 
-const STAGES: { id: WorkshopOrderStatus; label: string; tone: string }[] = [
-  { id: "annahme", label: "01. Annahme", tone: "neutral" },
-  { id: "diagnose", label: "02. Diagnose", tone: "warn" },
-  { id: "wartet_teile", label: "03. Warten / KVA", tone: "orange" },
-  { id: "in_arbeit", label: "04. Hebebühne", tone: "info" },
-  { id: "endkontrolle", label: "05. Endkontrolle", tone: "purple" },
-  { id: "abholbereit", label: "06. Abholbereit", tone: "ok" },
+// Texte kommen zur Anzeige aus orders.stages.<id>
+const STAGES: { id: WorkshopOrderStatus; tone: string }[] = [
+  { id: "annahme", tone: "neutral" },
+  { id: "diagnose", tone: "warn" },
+  { id: "wartet_teile", tone: "orange" },
+  { id: "in_arbeit", tone: "info" },
+  { id: "endkontrolle", tone: "purple" },
+  { id: "abholbereit", tone: "ok" },
+];
+
+/** Filter der Hebebühnen: Wert wie gespeichert, Text mit oder ohne Zusatz. */
+const LIFT_FILTER: { value: keyof typeof LIFT_KEYS; text: "name" | "option" }[] = [
+  { value: "Bühne 1", text: "option" },
+  { value: "Bühne 2", text: "option" },
+  { value: "Bühne 3", text: "option" },
+  { value: "Bühne 4 (Achsmessung)", text: "name" },
+  { value: "Prüfstraße", text: "name" },
+  { value: "Hof / Parkplatz", text: "name" },
 ];
 
 export function OrdersTab({
@@ -56,8 +67,7 @@ export function OrdersTab({
   const [selectedOrder, setSelectedOrder] = useState<WorkshopOrder | null>(null);
   const [newOrderModalOpen, setNewOrderModalOpen] = useState(false);
 
-  const fmtEuro = (amount: number) =>
-    new Intl.NumberFormat("de-DE", { style: "currency", currency: companyCurrency() }).format(amount);
+  const { t, euro: fmtEuro, day, lift } = useWorkshopI18n();
 
   // Filter
   const filtered = orders.filter((o) => {
@@ -101,43 +111,42 @@ export function OrdersTab({
           <Search size={18} />
           <input
             type="search"
-            placeholder="Kennzeichen, Kunde, Auftrags-Nr..."
-            aria-label="Kennzeichen, Kunde, Auftrags-Nr..."
+            placeholder={t("orders.searchPlaceholder")}
+            aria-label={t("orders.searchPlaceholder")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </label>
 
         {/* Hebebühnen-Filter */}
-        <select value={liftFilter} onChange={(e) => setLiftFilter(e.target.value)} className="workshop-select" aria-label="Hebebühne">
-          <option value="all">Alle Hebebühnen & Plätze</option>
-          <option value="Bühne 1">Bühne 1 (2-Säulen)</option>
-          <option value="Bühne 2">Bühne 2 (Scherenbühne)</option>
-          <option value="Bühne 3">Bühne 3 (4-Säulen)</option>
-          <option value="Bühne 4 (Achsmessung)">Bühne 4 (Achsmessung)</option>
-          <option value="Prüfstraße">Prüfstraße</option>
-          <option value="Hof / Parkplatz">Hof / Parkplatz</option>
+        <select value={liftFilter} onChange={(e) => setLiftFilter(e.target.value)} className="workshop-select" aria-label={t("orders.liftFilter")}>
+          <option value="all">{t("orders.allLifts")}</option>
+          {LIFT_FILTER.map(({ value, text }) => (
+            <option key={value} value={value}>
+              {t(`lifts.${LIFT_KEYS[value]}.${text}`)}
+            </option>
+          ))}
         </select>
 
         <div className="row gap workshop-toolbar-end">
           {/* Abgerechnete anzeigen */}
           <button type="button" onClick={() => setShowArchived(!showArchived)} className={showArchived ? "chip active" : "chip"}>
-            {showArchived ? "Abgerechnete verbergen" : "Inkl. Abgerechnete"}
+            {showArchived ? t("orders.hideBilled") : t("orders.showBilled")}
           </button>
 
           {/* Umschalter Kanban / Tabelle */}
           <div className="segmented workshop-view-toggle">
-            <button onClick={() => setViewMode("kanban")} className={viewMode === "kanban" ? "active" : ""} title="Kanban-Board (Hebebühnen & Phasen)" aria-label="Kanban-Board (Hebebühnen & Phasen)">
+            <button onClick={() => setViewMode("kanban")} className={viewMode === "kanban" ? "active" : ""} title={t("orders.kanbanView")} aria-label={t("orders.kanbanView")}>
               <LayoutGrid size={17} />
             </button>
-            <button onClick={() => setViewMode("table")} className={viewMode === "table" ? "active" : ""} title="Tabellenansicht" aria-label="Tabellenansicht">
+            <button onClick={() => setViewMode("table")} className={viewMode === "table" ? "active" : ""} title={t("orders.tableView")} aria-label={t("orders.tableView")}>
               <List size={17} />
             </button>
           </div>
 
           <button onClick={() => setNewOrderModalOpen(true)} className="button primary">
             <Plus size={18} />
-            Auftrag annehmen
+            {t("orders.accept")}
           </button>
         </div>
       </div>
@@ -150,12 +159,12 @@ export function OrdersTab({
             return (
               <section key={stage.id} className={`workshop-column tone-${stage.tone}`}>
                 <div className="workshop-column-head">
-                  <strong>{stage.label}</strong>
+                  <strong>{t(`orders.stages.${stage.id}`)}</strong>
                   <span className="pill">{stageOrders.length}</span>
                 </div>
 
                 {stageOrders.length === 0 ? (
-                  <p className="empty muted">Keine Fahrzeuge</p>
+                  <p className="empty muted">{t("orders.noVehicles")}</p>
                 ) : (
                   stageOrders.map((ord) => (
                     <button key={ord.id} type="button" onClick={() => setSelectedOrder(ord)} className="workshop-job">
@@ -164,7 +173,7 @@ export function OrdersTab({
                           <strong className="workshop-plate">{ord.licensePlate}</strong>
                           <small className="muted">{ord.vehicleInfo}</small>
                         </span>
-                        <small className="muted workshop-mono">{ord.liftBay.split(" ")[0]}</small>
+                        <small className="muted workshop-mono">{lift(ord.liftBay)}</small>
                       </span>
                       {ord.issueDescription && <span className="workshop-job-issue">{ord.issueDescription}</span>}
                       <span className="workshop-job-foot">
@@ -182,7 +191,7 @@ export function OrdersTab({
         /* LISTENANSICHT */
         <section className="card list-card">
           {filtered.length === 0 ? (
-            <p className="empty muted">Keine Werkstattaufträge gefunden.</p>
+            <p className="empty muted">{t("orders.empty")}</p>
           ) : (
             filtered.map((ord) => (
               <button key={ord.id} type="button" onClick={() => setSelectedOrder(ord)} className="list-row workshop-row">
@@ -193,12 +202,12 @@ export function OrdersTab({
                 </span>
                 <span className="list-main workshop-row-customer">
                   <span>{ord.customerName}</span>
-                  <small className="muted">{ord.customerPhone} · {ord.liftBay}</small>
+                  <small className="muted">{ord.customerPhone} · {lift(ord.liftBay)}</small>
                 </span>
                 <span className="workshop-row-meta">
-                  <span className="pill">{ord.status.toUpperCase()}</span>
+                  <span className="pill">{t(`status.${ord.status}.label`)}</span>
                   <strong className="workshop-num">{fmtEuro(ord.totalGross)}</strong>
-                  <small className="muted">{new Date(ord.createdAt).toLocaleDateString("de-DE")}</small>
+                  <small className="muted">{day(ord.createdAt)}</small>
                 </span>
               </button>
             ))

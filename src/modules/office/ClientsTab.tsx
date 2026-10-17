@@ -5,7 +5,6 @@ import { Field } from "../../components";
 import { Dialog } from "../../pos/ui";
 import type { OfficeClient } from "../../../shared/office";
 import { useOfficeI18n } from "./i18n";
-import { currencySymbol } from "../../money";
 
 export function ClientsTab({
   isManager,
@@ -14,7 +13,7 @@ export function ClientsTab({
   isManager: boolean;
   onSelectClient?: (clientId: string) => void;
 }) {
-  const { o, euro, officeError } = useOfficeI18n();
+  const { o, euro, cur, officeError } = useOfficeI18n();
   const [clients, setClients] = useState<OfficeClient[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -156,15 +155,15 @@ export function ClientsTab({
       <div className="office-stats">
         <div className="tile stat-tile">
           <span className="stat-icon"><Users size={18} /></span>
-          <strong>{totalClients}</strong><small>Kundenkartei</small>
+          <strong>{totalClients}</strong><small>{o("clients.title")}</small>
         </div>
         <div className="tile stat-tile">
           <span className="stat-icon"><AlertTriangle size={18} /></span>
-          <strong>{clientsWithOpenInvoices.length}</strong><small>Mit offenen Rechnungen</small>
+          <strong>{clientsWithOpenInvoices.length}</strong><small>{o("clients.statWithOpen")}</small>
         </div>
         <div className="tile stat-tile">
           <span className="stat-icon"><Wallet size={18} /></span>
-          <strong>{euro(totalOpenCents)}</strong><small>Gesamt offener Posten</small>
+          <strong>{euro(totalOpenCents)}</strong><small>{o("clients.statOpenTotal")}</small>
         </div>
       </div>
 
@@ -191,7 +190,7 @@ export function ClientsTab({
       </div>
 
       {loading ? (
-        <p className="muted">Laden...</p>
+        <p className="muted">{o("common.loading")}</p>
       ) : clients.length === 0 ? (
         <section className="card list-card">
           <p className="empty muted">{o("clients.noClients")}</p>
@@ -203,17 +202,17 @@ export function ClientsTab({
               <div className="section-head">
                 <div>
                   <h3 className="office-icon-line"><Building2 size={18} /> {c.name}</h3>
-                  <small className="muted">Kunden-Nr. #{c.number}</small>
+                  <small className="muted">{o("clients.customerNo", { number: c.number })}</small>
                 </div>
                 {(c.openInvoiceCount || 0) > 0 && (
-                  <span className="pill warn" title="Offene Rechnungen">
-                    {c.openInvoiceCount} offen ({euro(c.openInvoiceCents || 0)})
+                  <span className="pill warn" title={o("clients.openInvoices")}>
+                    {o("clients.openBadge", { count: c.openInvoiceCount ?? 0, amount: euro(c.openInvoiceCents || 0) })}
                   </span>
                 )}
               </div>
 
               <div className="stack-sm small muted">
-                {c.contactPerson && <span>Ansprechpartner: <strong>{c.contactPerson}</strong></span>}
+                {c.contactPerson && <span>{o("clients.contactPerson")}: <strong>{c.contactPerson}</strong></span>}
                 {c.email && <span className="office-icon-line"><Mail size={15} /> {c.email}</span>}
                 {c.phone && <span className="office-icon-line"><Phone size={15} /> {c.phone}</span>}
                 {(c.street || c.city) && (
@@ -223,28 +222,28 @@ export function ClientsTab({
 
               {!!(c.sepaIban || (c.skontoDays && c.skontoDays > 0) || (c.discountPercent && c.discountPercent > 0)) && (
                 <div className="row wrap gap">
-                  {c.sepaIban ? <span className="pill success" title={`IBAN: ${c.sepaIban}`}>SEPA-Mandat</span> : null}
+                  {c.sepaIban ? <span className="pill success" title={`IBAN: ${c.sepaIban}`}>{o("clients.sepaBadge")}</span> : null}
                   {c.skontoDays && c.skontoDays > 0 ? (
-                    <span className="pill" title={`Skonto: ${c.skontoPercent}% bei ${c.skontoDays} Tagen`}>
-                      {c.skontoPercent}% Skonto ({c.skontoDays} T.)
+                    <span className="pill" title={o("clients.skontoTitle", { percent: c.skontoPercent ?? 0, days: c.skontoDays })}>
+                      {o("clients.skontoBadge", { percent: c.skontoPercent ?? 0, days: c.skontoDays })}
                     </span>
                   ) : null}
                   {c.discountPercent && c.discountPercent > 0 ? (
-                    <span className="pill warn" title={`Rabatt: ${c.discountPercent}%`}>{c.discountPercent}% Rabatt</span>
+                    <span className="pill warn" title={o("clients.discountTitle", { percent: c.discountPercent })}>{o("clients.discountBadge", { percent: c.discountPercent })}</span>
                   ) : null}
                 </div>
               )}
 
               <div className="office-facts foot">
-                <span>Satz: <strong>{c.hourlyRateCents > 0 ? `${euro(c.hourlyRateCents)}/h` : "Standard"}</strong></span>
-                <span>Zahlungsziel: <strong>{c.paymentTermsDays || 14} Tage</strong></span>
+                <span>{o("clients.rate")}: <strong>{c.hourlyRateCents > 0 ? o("common.perHour", { amount: euro(c.hourlyRateCents) }) : o("clients.rateStandard")}</strong></span>
+                <span>{o("clients.paymentTermsShort")}: <strong>{o("clients.daysValue", { days: c.paymentTermsDays || 14 })}</strong></span>
               </div>
 
               {isManager && (
                 <div className="row wrap gap end">
                   {onSelectClient && (
-                    <button className="button small-button" onClick={() => onSelectClient(c.id)} title="Projekte anzeigen">
-                      Projekte <ArrowRight size={15} />
+                    <button className="button small-button" onClick={() => onSelectClient(c.id)} title={o("clients.showProjectsHint")}>
+                      {o("clients.showProjects")} <ArrowRight size={15} />
                     </button>
                   )}
                   <button className="button small-button" onClick={() => openEdit(c)} title={o("common.edit")}>
@@ -265,7 +264,7 @@ export function ClientsTab({
         <Dialog title={o("common.confirmDelete")} onClose={() => setDeleteConfirmId(null)}>
           <div className="stack office-dialog">
             <p className="muted">
-              Möchten Sie diesen Kunden wirklich löschen? Kunden mit verknüpften Projekten können aus Sicherheitsgründen nicht gelöscht werden.
+              {o("clients.deleteText")}
             </p>
             <div className="row wrap gap end">
               <button className="button" onClick={() => setDeleteConfirmId(null)}>{o("common.cancel")}</button>
@@ -277,15 +276,15 @@ export function ClientsTab({
 
       {/* Dialog: Neu / Bearbeiten */}
       {modalOpen && (
-        <Dialog title={editingClient ? "Kunde bearbeiten" : o("clients.newClient")} onClose={() => setModalOpen(false)} wide>
+        <Dialog title={editingClient ? o("clients.editClient") : o("clients.newClient")} onClose={() => setModalOpen(false)} wide>
           <form onSubmit={handleSave} className="stack office-dialog">
             {errorMsg && <p className="error" role="alert">{errorMsg}</p>}
             <div className="grid form-grid">
-              <Field label="Kundenname / Firma" required wide>
+              <Field label={o("clients.name")} required wide>
                 <input
                   type="text"
                   required
-                  placeholder="z.B. Musterkanzlei Schmidt & Partner"
+                  placeholder={o("clients.namePlaceholder")}
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                 />
@@ -293,7 +292,7 @@ export function ClientsTab({
               <Field label={o("clients.contactPerson")}>
                 <input
                   type="text"
-                  placeholder="z.B. Dr. Michael Schmidt"
+                  placeholder={o("clients.contactPlaceholder")}
                   value={form.contactPerson}
                   onChange={(e) => setForm({ ...form, contactPerson: e.target.value })}
                 />
@@ -301,25 +300,25 @@ export function ClientsTab({
               <Field label={o("clients.vatId")}>
                 <input type="text" placeholder="DE123456789" value={form.vatId} onChange={(e) => setForm({ ...form, vatId: e.target.value })} />
               </Field>
-              <Field label="E-Mail-Adresse">
-                <input type="email" placeholder="kontakt@kunde.de" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+              <Field label={o("clients.email")}>
+                <input type="email" placeholder={o("clients.emailPlaceholder")} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
               </Field>
-              <Field label="Telefonnummer">
+              <Field label={o("clients.phone")}>
                 <input type="tel" placeholder="+49 30 12345678" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
               </Field>
-              <Field label="Straße & Hausnummer" wide>
-                <input type="text" placeholder="Hauptstraße 12" value={form.street} onChange={(e) => setForm({ ...form, street: e.target.value })} />
+              <Field label={o("clients.street")} wide>
+                <input type="text" placeholder={o("clients.streetPlaceholder")} value={form.street} onChange={(e) => setForm({ ...form, street: e.target.value })} />
               </Field>
             </div>
 
             <div className="grid three">
-              <Field label="PLZ">
+              <Field label={o("clients.postalCode")}>
                 <input type="text" placeholder="10115" value={form.postalCode} onChange={(e) => setForm({ ...form, postalCode: e.target.value })} />
               </Field>
-              <Field label="Ort">
-                <input type="text" placeholder="Berlin" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
+              <Field label={o("clients.city")}>
+                <input type="text" placeholder={o("clients.cityPlaceholder")} value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
               </Field>
-              <Field label="Land">
+              <Field label={o("clients.country")}>
                 <input type="text" value={form.country} onChange={(e) => setForm({ ...form, country: e.target.value })} />
               </Field>
             </div>
@@ -334,12 +333,12 @@ export function ClientsTab({
                   onChange={(e) => setForm({ ...form, paymentTermsDays: parseInt(e.target.value, 10) || 14 })}
                 />
               </Field>
-              <Field label={`Individueller Stundensatz (${currencySymbol("de-DE")}/h, netto)`}>
+              <Field label={o("clients.individualRate", { currency: cur() })}>
                 <input
                   type="number"
                   step="0.01"
                   min="0"
-                  placeholder="0.00 = Standard"
+                  placeholder={o("clients.individualRatePlaceholder")}
                   value={(form.hourlyRateCents / 100) || ""}
                   onChange={(e) => setForm({ ...form, hourlyRateCents: Math.round(parseFloat(e.target.value || "0") * 100) })}
                 />
@@ -348,36 +347,36 @@ export function ClientsTab({
 
             {/* Skonto- & Rabatt-Konditionen */}
             <div className="office-section">
-              <h3 className="card-subtitle">Skonto- & Rabatt-Konditionen</h3>
+              <h3 className="card-subtitle">{o("clients.conditionsTitle")}</h3>
               <div className="grid three">
-                <Field label="Skonto-Frist (Tage)">
+                <Field label={o("clients.skontoDaysField")}>
                   <input
                     type="number"
                     min="0"
                     max="60"
-                    placeholder="z.B. 7"
+                    placeholder={o("common.example", { value: 7 })}
                     value={form.skontoDays || ""}
                     onChange={(e) => setForm({ ...form, skontoDays: parseInt(e.target.value, 10) || 0 })}
                   />
                 </Field>
-                <Field label="Skonto (%)">
+                <Field label={o("clients.skontoPercentField")}>
                   <input
                     type="number"
                     min="0"
                     max="10"
                     step="0.5"
-                    placeholder="z.B. 2"
+                    placeholder={o("common.example", { value: 2 })}
                     value={form.skontoPercent || ""}
                     onChange={(e) => setForm({ ...form, skontoPercent: parseFloat(e.target.value) || 0 })}
                   />
                 </Field>
-                <Field label="Standard-Rabatt (%)">
+                <Field label={o("clients.discountField")}>
                   <input
                     type="number"
                     min="0"
                     max="100"
                     step="0.5"
-                    placeholder="z.B. 5"
+                    placeholder={o("common.example", { value: 5 })}
                     value={form.discountPercent || ""}
                     onChange={(e) => setForm({ ...form, discountPercent: parseFloat(e.target.value) || 0 })}
                   />
@@ -387,7 +386,7 @@ export function ClientsTab({
 
             {/* SEPA-Lastschriftmandat */}
             <div className="office-section">
-              <h3 className="card-subtitle">SEPA-Lastschriftmandat</h3>
+              <h3 className="card-subtitle">{o("clients.sepaTitle")}</h3>
               <div className="grid form-grid">
                 <Field label="IBAN">
                   <input
@@ -405,7 +404,7 @@ export function ClientsTab({
                     onChange={(e) => setForm({ ...form, sepaBic: e.target.value.toUpperCase() })}
                   />
                 </Field>
-                <Field label="Mandatsreferenz">
+                <Field label={o("clients.sepaMandateRef")}>
                   <input
                     type="text"
                     placeholder="MANDAT-1001"
@@ -413,16 +412,16 @@ export function ClientsTab({
                     onChange={(e) => setForm({ ...form, sepaMandateRef: e.target.value })}
                   />
                 </Field>
-                <Field label="Mandatsdatum">
+                <Field label={o("clients.sepaMandateDate")}>
                   <input type="date" value={form.sepaMandateDate} onChange={(e) => setForm({ ...form, sepaMandateDate: e.target.value })} />
                 </Field>
               </div>
             </div>
 
-            <Field label="Kundenhistorie & Interne Notizen">
+            <Field label={o("clients.notes")}>
               <textarea
                 rows={2}
-                placeholder="Besondere Vereinbarungen, Ansprechzeiten..."
+                placeholder={o("clients.notesPlaceholder")}
                 value={form.notes}
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
               />

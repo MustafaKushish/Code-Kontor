@@ -20,7 +20,7 @@ import type {
   MenuItem,
   PrintDestination,
 } from "../../../shared/restaurant";
-import { currency as companyCurrency, currencySymbol } from "../../money";
+import { useRestaurantI18n } from "./i18n";
 
 interface MenuTabProps {
   menu: MenuItem[];
@@ -28,6 +28,7 @@ interface MenuTabProps {
 }
 
 export function MenuTab({ menu, onRefresh }: MenuTabProps) {
+  const { t, euro, symbol, category } = useRestaurantI18n();
   const [selectedCategory, setSelectedCategory] = useState<string>("alle");
   const [search, setSearch] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -41,8 +42,7 @@ export function MenuTab({ menu, onRefresh }: MenuTabProps) {
   });
   const [isBusy, setIsBusy] = useState(false);
 
-  const fmtEuro = (amount: number) =>
-    new Intl.NumberFormat("de-DE", { style: "currency", currency: companyCurrency() }).format(amount);
+  const fmtEuro = euro;
 
   const categories = [
     "alle",
@@ -106,7 +106,7 @@ export function MenuTab({ menu, onRefresh }: MenuTabProps) {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Möchtest du diesen Artikel wirklich aus der Speisekarte löschen?")) return;
+    if (!confirm(t("menu.confirmDelete"))) return;
     setIsBusy(true);
     try {
       await api(`/restaurant/menu/${id}`, { method: "DELETE" });
@@ -140,15 +140,15 @@ export function MenuTab({ menu, onRefresh }: MenuTabProps) {
           <Search size={18} />
           <input
             type="text"
-            placeholder="Artikel suchen..."
-            aria-label="Artikel suchen"
+            placeholder={t("common.searchItems")}
+            aria-label={t("common.searchItemsLabel")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </label>
         <button onClick={handleOpenAdd} className="button primary">
           <Plus size={18} />
-          Artikel anlegen
+          {t("menu.add")}
         </button>
       </div>
 
@@ -161,7 +161,7 @@ export function MenuTab({ menu, onRefresh }: MenuTabProps) {
             onClick={() => setSelectedCategory(cat)}
             className={selectedCategory === cat ? "chip active" : "chip"}
           >
-            {cat === "alle" ? "Alle Kategorien" : cat}
+            {cat === "alle" ? t("common.allCategories") : category(cat)}
           </button>
         ))}
       </div>
@@ -173,8 +173,8 @@ export function MenuTab({ menu, onRefresh }: MenuTabProps) {
             <span className="list-main">
               <strong>{item.name}</strong>
               <small className="muted">
-                {item.category}
-                {item.allergens && item.allergens.length > 0 && <> · Allergene: {item.allergens.join(", ")}</>}
+                {category(item.category)}
+                {item.allergens && item.allergens.length > 0 && <> · {t("menu.allergens", { list: item.allergens.join(", ") })}</>}
               </small>
             </span>
             <span className="restaurant-menu-meta">
@@ -182,12 +182,12 @@ export function MenuTab({ menu, onRefresh }: MenuTabProps) {
                 {item.destination === "bar" ? (
                   <>
                     <Coffee size={13} aria-hidden />
-                    Bar / Theke
+                    {t("common.barCounter")}
                   </>
                 ) : (
                   <>
                     <Flame size={13} aria-hidden />
-                    Küche
+                    {t("common.kitchen")}
                   </>
                 )}
               </span>
@@ -198,16 +198,16 @@ export function MenuTab({ menu, onRefresh }: MenuTabProps) {
               <button
                 onClick={() => handleToggleFavorite(item)}
                 className={`icon-button restaurant-star ${item.isFavorite ? "on" : ""}`}
-                title={item.isFavorite ? "Aus Schnellwahl entfernen" : "Zur Schnellwahl hinzufügen"}
-                aria-label={item.isFavorite ? "Aus Schnellwahl entfernen" : "Zur Schnellwahl hinzufügen"}
+                title={item.isFavorite ? t("menu.unfavorite") : t("menu.favorite")}
+                aria-label={item.isFavorite ? t("menu.unfavorite") : t("menu.favorite")}
                 aria-pressed={!!item.isFavorite}
               >
                 <Star size={18} />
               </button>
-              <button onClick={() => handleOpenEdit(item)} className="icon-button" aria-label="Bearbeiten" title="Bearbeiten">
+              <button onClick={() => handleOpenEdit(item)} className="icon-button" aria-label={t("common.edit")} title={t("common.edit")}>
                 <Pencil size={18} />
               </button>
-              <button onClick={() => handleDelete(item.id)} className="icon-button danger" aria-label="Löschen" title="Löschen">
+              <button onClick={() => handleDelete(item.id)} className="icon-button danger" aria-label={t("common.delete")} title={t("common.delete")}>
                 <Trash2 size={18} />
               </button>
             </span>
@@ -216,10 +216,10 @@ export function MenuTab({ menu, onRefresh }: MenuTabProps) {
       </section>
 
       {isModalOpen && (
-        <Dialog title={editingItem.id ? "Artikel bearbeiten" : "Neues Gericht / Getränk anlegen"} onClose={() => setIsModalOpen(false)} wide>
+        <Dialog title={editingItem.id ? t("menu.editTitle") : t("menu.newTitle")} onClose={() => setIsModalOpen(false)} wide>
           <form onSubmit={handleSave} className="restaurant-dialog stack">
             <div className="grid form-grid">
-              <Field label="Artikel-Nummer" required>
+              <Field label={t("menu.itemNumber")} required>
                 <input
                   type="text"
                   required
@@ -227,33 +227,33 @@ export function MenuTab({ menu, onRefresh }: MenuTabProps) {
                   onChange={(e) => setEditingItem({ ...editingItem, itemNumber: e.target.value })}
                 />
               </Field>
-              <Field label="Kategorie" required>
+              <Field label={t("menu.category")} required>
                 <select
                   value={editingItem.category || "Hauptspeisen"}
                   onChange={(e) => setEditingItem({ ...editingItem, category: e.target.value as any })}
                 >
                   {categories.filter((c) => c !== "alle").map((c) => (
                     <option key={c} value={c}>
-                      {c}
+                      {category(c)}
                     </option>
                   ))}
                 </select>
               </Field>
 
-              <Field label="Bezeichnung" required wide>
+              <Field label={t("menu.name")} required wide>
                 <input
                   type="text"
                   required
-                  placeholder="z.B. Wiener Schnitzel vom Kalb"
+                  placeholder={t("menu.namePlaceholder")}
                   value={editingItem.name || ""}
                   onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })}
                 />
               </Field>
 
-              <Field label="Beschreibung / Beilage" wide>
+              <Field label={t("menu.description")} wide>
                 <input
                   type="text"
-                  placeholder="z.B. mit lauwarmem Kartoffel-Gurken-Salat & Preiselbeeren"
+                  placeholder={t("menu.descriptionPlaceholder")}
                   value={editingItem.description || ""}
                   onChange={(e) => setEditingItem({ ...editingItem, description: e.target.value })}
                 />
@@ -261,7 +261,7 @@ export function MenuTab({ menu, onRefresh }: MenuTabProps) {
             </div>
 
             <div className="grid restaurant-three">
-              <Field label={`Bruttopreis (${currencySymbol("de-DE")})`} required>
+              <Field label={t("menu.price", { symbol: symbol() })} required>
                 <input
                   type="number"
                   step="0.10"
@@ -274,27 +274,27 @@ export function MenuTab({ menu, onRefresh }: MenuTabProps) {
                 />
               </Field>
 
-              <Field label="MwSt.-Satz">
+              <Field label={t("menu.taxRate")}>
                 <select
                   value={editingItem.taxRate || 19}
                   onChange={(e) =>
                     setEditingItem({ ...editingItem, taxRate: parseInt(e.target.value) || 19 })
                   }
                 >
-                  <option value="19">19% (Standard / In-Haus)</option>
-                  <option value="7">7% (Ermäßigt / To-Go)</option>
+                  <option value="19">{t("menu.tax19")}</option>
+                  <option value="7">{t("menu.tax7")}</option>
                 </select>
               </Field>
 
-              <Field label="Druckziel">
+              <Field label={t("menu.destination")}>
                 <select
                   value={editingItem.destination || "kueche"}
                   onChange={(e) =>
                     setEditingItem({ ...editingItem, destination: e.target.value as PrintDestination })
                   }
                 >
-                  <option value="kueche">Küche</option>
-                  <option value="bar">Bar / Theke</option>
+                  <option value="kueche">{t("common.kitchen")}</option>
+                  <option value="bar">{t("common.barCounter")}</option>
                 </select>
               </Field>
             </div>
@@ -306,7 +306,7 @@ export function MenuTab({ menu, onRefresh }: MenuTabProps) {
                   checked={editingItem.isFavorite || false}
                   onChange={(e) => setEditingItem({ ...editingItem, isFavorite: e.target.checked })}
                 />
-                <span>Schnellwahl / Bestseller</span>
+                <span>{t("menu.favoriteCheck")}</span>
               </label>
 
               <label className="check">
@@ -315,16 +315,16 @@ export function MenuTab({ menu, onRefresh }: MenuTabProps) {
                   checked={editingItem.active !== false}
                   onChange={(e) => setEditingItem({ ...editingItem, active: e.target.checked })}
                 />
-                <span>Aktiv auf Karte</span>
+                <span>{t("menu.active")}</span>
               </label>
             </div>
 
             <div className="row gap restaurant-form-actions">
               <button type="button" onClick={() => setIsModalOpen(false)} className="button">
-                Abbrechen
+                {t("common.cancel")}
               </button>
               <button type="submit" disabled={isBusy} className="button primary">
-                Speichern
+                {t("common.save")}
               </button>
             </div>
           </form>

@@ -7,7 +7,6 @@ import type { InvoiceStatus, LineItem, OfficeClient, OfficeInvoice, OfficeProjec
 import { useOfficeI18n } from "./i18n";
 import { PrintDocument } from "./PrintDocument";
 import { DunningModal } from "./DunningModal";
-import { currencySymbol } from "../../money";
 
 export function InvoicesTab({
   isManager,
@@ -16,7 +15,7 @@ export function InvoicesTab({
   isManager: boolean;
   initialData?: { clientId: string; projectId: string | null; items: LineItem[] } | null;
 }) {
-  const { o, euro, day, officeError } = useOfficeI18n();
+  const { o, oRich, euro, cur, day, unitLabel, officeError } = useOfficeI18n();
   const [invoices, setInvoices] = useState<OfficeInvoice[]>([]);
   const [clients, setClients] = useState<OfficeClient[]>([]);
   const [projects, setProjects] = useState<OfficeProject[]>([]);
@@ -53,19 +52,19 @@ export function InvoicesTab({
     clientId: "",
     projectId: "",
     status: "draft",
-    title: "Rechnung für Dienstleistungen",
+    title: o("invoices.defaultTitle"),
     issuedAt: new Date().toISOString().slice(0, 10),
     dueDate: new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10),
     buyerReference: "",
     discountPercent: 0,
     skontoDays: 0,
     skontoPercent: 0,
-    notes: "Zahlbar innerhalb von 14 Tagen ohne Abzug.",
+    notes: o("invoices.initialNotes"),
     items: [
       {
         id: crypto.randomUUID(),
-        title: "Dienstleistungen",
-        description: "Projektumsetzung und Beratung",
+        title: o("invoices.defaultItemTitle"),
+        description: o("invoices.initialItemDescription"),
         qty: 1,
         unit: "Pauschal",
         unitCents: 120000,
@@ -108,14 +107,14 @@ export function InvoicesTab({
         clientId: initialData.clientId || (clients[0]?.id || ""),
         projectId: initialData.projectId || "",
         status: "draft",
-        title: "Abrechnung Zeiterfassung",
+        title: o("invoices.timeTitle"),
         issuedAt: new Date().toISOString().slice(0, 10),
         dueDate: new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10),
         buyerReference: "",
         discountPercent: 0,
         skontoDays: 0,
         skontoPercent: 0,
-        notes: "Vielen Dank für Ihren Auftrag. Bitte überweisen Sie den Betrag fristgerecht.",
+        notes: o("invoices.timeNotes"),
         items: initialData.items,
       });
       setModalOpen(true);
@@ -129,7 +128,7 @@ export function InvoicesTab({
       clientId: selectedClient?.id || (clients[0]?.id || ""),
       projectId: "",
       status: "draft",
-      title: "Rechnung für Dienstleistungen",
+      title: o("invoices.defaultTitle"),
       issuedAt: new Date().toISOString().slice(0, 10),
       dueDate: new Date(Date.now() + (selectedClient?.paymentTermsDays || 14) * 86_400_000).toISOString().slice(0, 10),
       buyerReference: "",
@@ -137,13 +136,13 @@ export function InvoicesTab({
       skontoDays: selectedClient?.skontoDays || 0,
       skontoPercent: selectedClient?.skontoPercent || 0,
       notes: selectedClient?.skontoDays
-        ? `Zahlbar innerhalb von ${selectedClient.paymentTermsDays || 14} Tagen. Bei Zahlung innerhalb von ${selectedClient.skontoDays} Tagen gewähren wir ${selectedClient.skontoPercent}% Skonto.`
-        : "Zahlbar innerhalb von 14 Tagen ohne Abzug auf das angegebene Geschäftskonto.",
+        ? o("invoices.skontoNotes", { days: selectedClient.paymentTermsDays || 14, skontoDays: selectedClient.skontoDays, percent: selectedClient.skontoPercent ?? 0 })
+        : o("invoices.defaultNotes"),
       items: [
         {
           id: crypto.randomUUID(),
-          title: "Dienstleistungen",
-          description: "Leistungserbringung gemäß Vereinbarung",
+          title: o("invoices.defaultItemTitle"),
+          description: o("invoices.defaultItemDescription"),
           qty: 1,
           unit: "Pauschal",
           unitCents: 120000,
@@ -173,7 +172,7 @@ export function InvoicesTab({
       items: invoice.items.length > 0 ? invoice.items : [
         {
           id: crypto.randomUUID(),
-          title: "Position",
+          title: o("invoices.fallbackItemTitle"),
           description: "",
           qty: 1,
           unit: "Std",
@@ -202,7 +201,7 @@ export function InvoicesTab({
         ...form.items,
         {
           id: crypto.randomUUID(),
-          title: "Neue Leistung",
+          title: o("invoices.newItemTitle"),
           description: "",
           qty: 1,
           unit: "Std",
@@ -281,7 +280,7 @@ export function InvoicesTab({
       await api(`/office/recurring/${id}/trigger`, { method: "POST" });
       await loadData();
       await loadRecurring();
-      alert("Rechnung erfolgreich aus Dauerauftrag erzeugt!");
+      alert(o("invoices.recurring.triggered"));
     } catch (err) {
       alert(officeError(err));
     }
@@ -312,7 +311,7 @@ export function InvoicesTab({
             {
               id: crypto.randomUUID(),
               title: newRecurringTitle.trim(),
-              description: "Monatlicher Retainer / Betreuungspauschale",
+              description: o("invoices.recurring.itemDescription"),
               qty: 1,
               unit: "Monat",
               unitCents: 50000,
@@ -376,15 +375,15 @@ export function InvoicesTab({
       <div className="office-stats">
         <div className="tile stat-tile">
           <span className="stat-icon"><Hourglass size={18} /></span>
-          <strong>{euro(openCents)}</strong><small>Offener Gesamtbetrag · {openInvoices.length} unbezahlte Rechnungen</small>
+          <strong>{euro(openCents)}</strong><small>{o("invoices.statOpen", { n: openInvoices.length })}</small>
         </div>
         <div className="tile stat-tile">
           <span className="stat-icon"><CheckCircle size={18} /></span>
-          <strong>{euro(paidCents)}</strong><small>Erhaltene Zahlungen · {paidInvoices.length} Rechnungen beglichen</small>
+          <strong>{euro(paidCents)}</strong><small>{o("invoices.statPaid", { n: paidInvoices.length })}</small>
         </div>
         <div className="tile stat-tile">
           <span className="stat-icon"><Receipt size={18} /></span>
-          <strong>{invoices.length}</strong><small>Rechnungen Gesamt</small>
+          <strong>{invoices.length}</strong><small>{o("invoices.statTotal")}</small>
         </div>
       </div>
 
@@ -405,18 +404,18 @@ export function InvoicesTab({
 
         <div className="row wrap gap office-filters">
           {clients.length > 0 && (
-            <select value={clientFilter} onChange={(e) => setClientFilter(e.target.value)} aria-label="Kunde">
-              <option value="all">Alle Kunden</option>
+            <select value={clientFilter} onChange={(e) => setClientFilter(e.target.value)} aria-label={o("common.client")}>
+              <option value="all">{o("common.allClients")}</option>
               {clients.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
           )}
           <div className="row wrap gap push-end">
-            <button className="button" onClick={handleOpenRecurring} title="Wiederkehrende Rechnungen & Daueraufträge verwalten">
-              <Repeat size={18} /> Daueraufträge
+            <button className="button" onClick={handleOpenRecurring} title={o("invoices.recurring.hint")}>
+              <Repeat size={18} /> {o("invoices.recurring.button")}
             </button>
-            <button className="button" onClick={handleDatevExport} title="DATEV Buchungsstapel für den Steuerberater">
+            <button className="button" onClick={handleDatevExport} title={o("invoices.datevHint")}>
               <Download size={18} /> {o("invoices.exportDatev")}
             </button>
             {isManager && (
@@ -429,7 +428,7 @@ export function InvoicesTab({
       </div>
 
       {loading ? (
-        <p className="muted">Laden...</p>
+        <p className="muted">{o("common.loading")}</p>
       ) : (
         <section className="card list-card">
           {filteredInvoices.length === 0 && <p className="empty muted">{o("invoices.noInvoices")}</p>}
@@ -439,31 +438,31 @@ export function InvoicesTab({
                 <span className="office-date">{inv.status === "draft" ? o("invoices.draftNumber") : inv.number}</span>
                 <span className="list-main">
                   <strong>{inv.clientName}</strong>
-                  <small className="muted">{[inv.projectName, `${day(inv.issuedAt)} · fällig ${day(inv.dueDate)}`].filter(Boolean).join(" · ")}</small>
+                  <small className="muted">{[inv.projectName, o("invoices.rowDates", { issued: day(inv.issuedAt), due: day(inv.dueDate) })].filter(Boolean).join(" · ")}</small>
                 </span>
                 <span className="office-row-meta">
                   <strong>{euro(inv.totalCents)}</strong>
-                  <small className="muted">Netto {euro(inv.netCents)}</small>
+                  <small className="muted">{o("invoices.netLine", { amount: euro(inv.netCents) })}</small>
                   <span className={`pill ${inv.status === "paid" ? "success" : inv.status === "overdue" ? "neg" : inv.status === "sent" ? "warn" : ""}`}>
                     {o(`invoices.status.${inv.status}`)}
                   </span>
                 </span>
               </div>
               <div className="row wrap gap office-item-actions">
-                <button className="button small-button" onClick={() => setPrintDoc(inv)} title="Drucken / E-Rechnung / GiroCode">
-                  <Printer size={15} /> Druck / XML
+                <button className="button small-button" onClick={() => setPrintDoc(inv)} title={o("invoices.printHint")}>
+                  <Printer size={15} /> {o("invoices.printButton")}
                 </button>
                 {(inv.status === "sent" || inv.status === "overdue") && (
                   <>
-                    <button className="button small-button success-button" onClick={() => setPayModalInvoice(inv)} title="Als bezahlt markieren">
-                      <CheckCircle size={15} /> Bezahlt
+                    <button className="button small-button success-button" onClick={() => setPayModalInvoice(inv)} title={o("invoices.markPaid")}>
+                      <CheckCircle size={15} /> {o("invoices.paidButton")}
                     </button>
                     <button
                       className={`button small-button ${inv.status === "overdue" ? "danger" : ""}`}
                       onClick={() => setDunningInvoice(inv)}
-                      title="Zahlungserinnerung oder Mahnung verfassen und drucken"
+                      title={o("invoices.dunningHint")}
                     >
-                      <AlertTriangle size={15} /> {inv.dunningLevel > 0 ? `Mahnung (${inv.dunningLevel})` : "Mahnung"}
+                      <AlertTriangle size={15} /> {inv.dunningLevel > 0 ? o("invoices.dunningButtonLevel", { level: inv.dunningLevel }) : o("invoices.dunningButton")}
                     </button>
                   </>
                 )}
@@ -507,20 +506,20 @@ export function InvoicesTab({
         <Dialog title={o("invoices.markPaid")} onClose={() => setPayModalInvoice(null)}>
           <form onSubmit={handleMarkPaid} className="stack office-dialog">
             <p>
-              Rechnung <strong>{payModalInvoice.number}</strong> über <strong>{euro(payModalInvoice.totalCents)}</strong> als bezahlt buchen.
+              {oRich("invoices.payText", { number: <strong>{payModalInvoice.number}</strong>, amount: <strong>{euro(payModalInvoice.totalCents)}</strong> })}
             </p>
-            <Field label="Zahlungsart">
+            <Field label={o("invoices.payMethod")}>
               <select value={payMethod} onChange={(e) => setPayMethod(e.target.value)}>
-                <option value="Überweisung">Banküberweisung</option>
-                <option value="Lastschrift">SEPA-Lastschrift</option>
-                <option value="Bar">Barzahlung</option>
-                <option value="Karte">Kartenzahlung (EC/Kredit)</option>
-                <option value="PayPal">PayPal</option>
+                <option value="Überweisung">{o("invoices.payMethods.transfer")}</option>
+                <option value="Lastschrift">{o("invoices.payMethods.debit")}</option>
+                <option value="Bar">{o("invoices.payMethods.cash")}</option>
+                <option value="Karte">{o("invoices.payMethods.card")}</option>
+                <option value="PayPal">{o("invoices.payMethods.paypal")}</option>
               </select>
             </Field>
             <div className="row wrap gap end">
               <button type="button" className="button" onClick={() => setPayModalInvoice(null)}>{o("common.cancel")}</button>
-              <button type="submit" className="button primary"><Check size={18} /> Bestätigen</button>
+              <button type="submit" className="button primary"><Check size={18} /> {o("common.confirm")}</button>
             </div>
           </form>
         </Dialog>
@@ -528,20 +527,20 @@ export function InvoicesTab({
 
       {/* Dialog: Rechnung erstellen / bearbeiten */}
       {modalOpen && (
-        <Dialog title={editingInvoice ? "Rechnung bearbeiten" : o("invoices.newInvoice")} onClose={() => setModalOpen(false)} wide>
+        <Dialog title={editingInvoice ? o("invoices.editInvoice") : o("invoices.newInvoice")} onClose={() => setModalOpen(false)} wide>
           <form onSubmit={handleSave} className="stack office-dialog">
             {errorMsg && <p className="error" role="alert">{errorMsg}</p>}
             <div className="grid form-grid">
-              <Field label="Kunde" required>
+              <Field label={o("documents.client")} required>
                 <select required value={form.clientId} onChange={(e) => setForm({ ...form, clientId: e.target.value })}>
                   {clients.map((c) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </select>
               </Field>
-              <Field label="Projekt (optional)">
+              <Field label={o("documents.projectOptional")}>
                 <select value={form.projectId} onChange={(e) => setForm({ ...form, projectId: e.target.value })}>
-                  <option value="">Keinem Projekt zugeordnet</option>
+                  <option value="">{o("documents.noProject")}</option>
                   {projects
                     .filter((p) => !form.clientId || p.clientId === form.clientId)
                     .map((p) => (
@@ -549,7 +548,7 @@ export function InvoicesTab({
                     ))}
                 </select>
               </Field>
-              <Field label="Betreff / Titel" required wide>
+              <Field label={o("documents.subject")} required wide>
                 <input type="text" required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
               </Field>
             </div>
@@ -573,42 +572,42 @@ export function InvoicesTab({
             <Field label={o("invoices.buyerReference")}>
               <input
                 type="text"
-                placeholder="z.B. Leitweg-ID für Behörden (04011000-12345-67) oder Kundenbestellnummer"
+                placeholder={o("invoices.buyerReferencePlaceholder")}
                 value={form.buyerReference}
                 onChange={(e) => setForm({ ...form, buyerReference: e.target.value })}
               />
             </Field>
 
             <div className="grid three">
-              <Field label="Rabatt (%)">
+              <Field label={o("documents.discount")}>
                 <input
                   type="number"
                   min="0"
                   max="100"
                   step="0.5"
                   value={form.discountPercent || ""}
-                  placeholder="z.B. 5"
+                  placeholder={o("common.example", { value: 5 })}
                   onChange={(e) => setForm({ ...form, discountPercent: parseFloat(e.target.value) || 0 })}
                 />
               </Field>
-              <Field label="Skonto-Frist (Tage)">
+              <Field label={o("documents.skontoDays")}>
                 <input
                   type="number"
                   min="0"
                   max="60"
                   value={form.skontoDays || ""}
-                  placeholder="z.B. 7"
+                  placeholder={o("common.example", { value: 7 })}
                   onChange={(e) => setForm({ ...form, skontoDays: parseInt(e.target.value, 10) || 0 })}
                 />
               </Field>
-              <Field label="Skonto (%)">
+              <Field label={o("documents.skontoPercent")}>
                 <input
                   type="number"
                   min="0"
                   max="10"
                   step="0.5"
                   value={form.skontoPercent || ""}
-                  placeholder="z.B. 2"
+                  placeholder={o("common.example", { value: 2 })}
                   onChange={(e) => setForm({ ...form, skontoPercent: parseFloat(e.target.value) || 0 })}
                 />
               </Field>
@@ -617,7 +616,7 @@ export function InvoicesTab({
             {/* Positionen */}
             <div className="office-section">
               <div className="section-head">
-                <h3 className="card-subtitle">Abrechnungspositionen</h3>
+                <h3 className="card-subtitle">{o("invoices.itemsTitle")}</h3>
                 <button type="button" className="button small-button" onClick={addItem}>
                   <Plus size={15} /> {o("common.addItem")}
                 </button>
@@ -625,10 +624,10 @@ export function InvoicesTab({
 
               {form.items.map((it, idx) => (
                 <div key={it.id || idx} className="office-line">
-                  <Field label="Titel / Leistung" wide>
+                  <Field label={o("documents.itemTitle")} wide>
                     <input type="text" required value={it.title} onChange={(e) => updateItem(idx, { title: e.target.value })} />
                   </Field>
-                  <Field label="Menge">
+                  <Field label={o("documents.qty")}>
                     <input
                       type="number"
                       step="0.01"
@@ -637,15 +636,14 @@ export function InvoicesTab({
                       onChange={(e) => updateItem(idx, { qty: parseFloat(e.target.value || "1") })}
                     />
                   </Field>
-                  <Field label="Einheit">
+                  <Field label={o("documents.unit")}>
                     <select value={it.unit} onChange={(e) => updateItem(idx, { unit: e.target.value })}>
-                      <option value="Std">Std</option>
-                      <option value="Tag">Tag</option>
-                      <option value="Stk">Stk</option>
-                      <option value="Pauschal">Pauschal</option>
+                      {["Std", "Tag", "Stk", "Pauschal"].map((u) => (
+                        <option key={u} value={u}>{unitLabel(u)}</option>
+                      ))}
                     </select>
                   </Field>
-                  <Field label={`Einzelpreis (${currencySymbol("de-DE")})`}>
+                  <Field label={o("documents.unitPrice", { currency: cur() })}>
                     <input
                       type="number"
                       step="0.01"
@@ -654,7 +652,7 @@ export function InvoicesTab({
                       onChange={(e) => updateItem(idx, { unitCents: Math.round(parseFloat(e.target.value || "0") * 100) })}
                     />
                   </Field>
-                  <Field label="MwSt.">
+                  <Field label={o("documents.vat")}>
                     <select value={it.vatRate} onChange={(e) => updateItem(idx, { vatRate: parseInt(e.target.value, 10) || 19 })}>
                       <option value={19}>19%</option>
                       <option value={7}>7%</option>
@@ -671,8 +669,8 @@ export function InvoicesTab({
                   <input
                     type="text"
                     className="wide"
-                    placeholder="Zusätzliche Leistungsbeschreibung (optional)"
-                    aria-label="Zusätzliche Leistungsbeschreibung (optional)"
+                    placeholder={o("documents.itemDescription")}
+                    aria-label={o("documents.itemDescription")}
                     value={it.description}
                     onChange={(e) => updateItem(idx, { description: e.target.value })}
                   />
@@ -681,20 +679,20 @@ export function InvoicesTab({
 
               <table className="price-table office-totals">
                 <tbody>
-                  <tr><td>Zwischensumme:</td><td>{euro(totals.itemsNet)}</td></tr>
+                  <tr><td>{o("documents.subtotal")}</td><td>{euro(totals.itemsNet)}</td></tr>
                   {form.discountPercent > 0 && (
-                    <tr><td>Rabatt ({form.discountPercent}%):</td><td>-{euro(totals.itemsNet - totals.net)}</td></tr>
+                    <tr><td>{o("documents.discountLine", { percent: form.discountPercent })}</td><td>-{euro(totals.itemsNet - totals.net)}</td></tr>
                   )}
-                  <tr><td>Nettobetrag:</td><td><strong>{euro(totals.net)}</strong></td></tr>
-                  <tr><td>Umsatzsteuer:</td><td>{euro(totals.vat)}</td></tr>
+                  <tr><td>{o("documents.netAmount")}</td><td><strong>{euro(totals.net)}</strong></td></tr>
+                  <tr><td>{o("documents.vatTotal")}</td><td>{euro(totals.vat)}</td></tr>
                 </tbody>
                 <tfoot>
-                  <tr><th>Gesamt:</th><th>{euro(totals.gross)}</th></tr>
+                  <tr><th>{o("documents.total")}</th><th>{euro(totals.gross)}</th></tr>
                 </tfoot>
               </table>
             </div>
 
-            <Field label="Hinweise & Zahlungsbedingungen">
+            <Field label={o("documents.notes")}>
               <textarea rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
             </Field>
 
@@ -722,39 +720,39 @@ export function InvoicesTab({
 
       {/* Dialog: Wiederkehrende Rechnungen */}
       {recurringModalOpen && (
-        <Dialog title="Wiederkehrende Rechnungen & Daueraufträge" onClose={() => setRecurringModalOpen(false)} wide>
+        <Dialog title={o("invoices.recurring.title")} onClose={() => setRecurringModalOpen(false)} wide>
           <div className="stack office-dialog">
             <p className="muted">
-              Automatische Vorlagen für wiederkehrende Retainer, monatliche Hosting- & Wartungsverträge oder quartalsweise Servicepauschalen.
+              {o("invoices.recurring.intro")}
             </p>
 
             <form onSubmit={handleCreateRecurring} className="office-panel">
               <div className="office-add">
-                <Field label="Vertragsbezeichnung">
+                <Field label={o("invoices.recurring.contractName")}>
                   <input
                     type="text"
                     required
-                    placeholder="z.B. Monatliche Betreuung & Wartung"
+                    placeholder={o("invoices.recurring.contractPlaceholder")}
                     value={newRecurringTitle}
                     onChange={(e) => setNewRecurringTitle(e.target.value)}
                   />
                 </Field>
-                <Field label="Intervall">
+                <Field label={o("invoices.recurring.interval")}>
                   <select value={newRecurringMonths} onChange={(e) => setNewRecurringMonths(parseInt(e.target.value, 10) || 1)}>
-                    <option value={1}>Monatlich (1 Monat)</option>
-                    <option value={3}>Quartalsweise (3 Monate)</option>
-                    <option value={6}>Halbjährlich (6 Monate)</option>
-                    <option value={12}>Jährlich (12 Monate)</option>
+                    <option value={1}>{o("invoices.recurring.monthly")}</option>
+                    <option value={3}>{o("invoices.recurring.quarterly")}</option>
+                    <option value={6}>{o("invoices.recurring.halfYearly")}</option>
+                    <option value={12}>{o("invoices.recurring.yearly")}</option>
                   </select>
                 </Field>
                 <button type="submit" className="button primary">
-                  <Plus size={17} /> Vorlage anlegen
+                  <Plus size={17} /> {o("invoices.recurring.createTemplate")}
                 </button>
               </div>
             </form>
 
             {recurringList.length === 0 ? (
-              <p className="empty muted">Noch keine Daueraufträge eingerichtet.</p>
+              <p className="empty muted">{o("invoices.recurring.empty")}</p>
             ) : (
               <div className="office-sublist">
                 {recurringList.map((rec) => (
@@ -762,11 +760,15 @@ export function InvoicesTab({
                     <span className="list-main">
                       <strong>{rec.title}</strong>
                       <small className="muted">
-                        Kunde: {rec.clientName} · Intervall: {rec.intervalMonths === 1 ? "monatlich" : `${rec.intervalMonths} Monate`} · Nächster Lauf: {day(rec.nextRunDay)}
+                        {o("invoices.recurring.line", {
+                          client: rec.clientName,
+                          interval: rec.intervalMonths === 1 ? o("invoices.recurring.everyMonth") : o("invoices.recurring.everyMonths", { n: rec.intervalMonths }),
+                          date: day(rec.nextRunDay),
+                        })}
                       </small>
                     </span>
-                    <button className="button small-button primary" onClick={() => handleTriggerRecurring(rec.id)} title="Rechnung jetzt sofort generieren">
-                      <Play size={14} /> Rechnung erzeugen
+                    <button className="button small-button primary" onClick={() => handleTriggerRecurring(rec.id)} title={o("invoices.recurring.triggerHint")}>
+                      <Play size={14} /> {o("invoices.recurring.trigger")}
                     </button>
                     <button className="icon-button danger" onClick={() => handleDeleteRecurring(rec.id)} title={o("common.delete")} aria-label={o("common.delete")}>
                       <Trash2 size={16} />

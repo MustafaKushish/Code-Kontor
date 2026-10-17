@@ -11,7 +11,7 @@ import { PartsTab } from "./PartsTab";
 import { TiresTab } from "./TiresTab";
 import { NewOrderModal } from "./NewOrderModal";
 import "./workshop.css";
-import { currency as companyCurrency } from "../../money";
+import { useWorkshopI18n } from "./i18n";
 
 interface WorkshopAppProps {
   me: Me;
@@ -23,6 +23,7 @@ export default function WorkshopApp({ me, path }: WorkshopAppProps) {
   const hasPos = me.installedApps.includes(POS_APP_ID);
   const app = findApp("werkstatt")!;
 
+  const { t, workshopError } = useWorkshopI18n();
   const [activeTab, setActiveTab] = useState<"orders" | "vehicles" | "parts" | "tires">("orders");
 
   const [stats, setStats] = useState<WorkshopStats | null>(null);
@@ -34,9 +35,6 @@ export default function WorkshopApp({ me, path }: WorkshopAppProps) {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [newOrderModalOpen, setNewOrderModalOpen] = useState(false);
-
-  const fmtEuro = (amount: number) =>
-    new Intl.NumberFormat("de-DE", { style: "currency", currency: companyCurrency() }).format(amount);
 
   const loadData = async () => {
     try {
@@ -53,8 +51,8 @@ export default function WorkshopApp({ me, path }: WorkshopAppProps) {
       setVehicles(veh);
       setParts(prt);
       setTires(trs);
-    } catch (err: any) {
-      setErrorMsg(err.message || "Fehler beim Laden der Werkstattdaten.");
+    } catch (err: unknown) {
+      setErrorMsg(workshopError(err, t("app.loadError")));
     } finally {
       setLoading(false);
     }
@@ -72,18 +70,18 @@ export default function WorkshopApp({ me, path }: WorkshopAppProps) {
 
   const openCount = orders.filter((o) => o.status !== "abgerechnet").length;
   const tabs = [
-    { id: "orders" as const, label: `Aufträge & Hebebühnen (${openCount})`, icon: Wrench },
-    { id: "vehicles" as const, label: `Fahrzeugakte (${vehicles.length})`, icon: Car },
-    { id: "parts" as const, label: `Ersatzteillager & AWs (${parts.length})`, icon: Package },
-    { id: "tires" as const, label: `Räderhotel & Reifen (${tires.length})`, icon: Disc },
+    { id: "orders" as const, label: t("app.tabs.orders", { n: openCount }), icon: Wrench },
+    { id: "vehicles" as const, label: t("app.tabs.vehicles", { n: vehicles.length }), icon: Car },
+    { id: "parts" as const, label: t("app.tabs.parts", { n: parts.length }), icon: Package },
+    { id: "tires" as const, label: t("app.tabs.tires", { n: tires.length }), icon: Disc },
   ];
   const kpis = [
-    { label: "Aktive Aufträge", value: openCount, hint: `davon ${orders.filter((o) => o.status === "in_arbeit").length} auf Bühne`, icon: Wrench, tone: "" },
-    { label: "Warten auf Teile", value: orders.filter((o) => o.status === "wartet_teile").length, hint: "Teilebestellung / KVA", icon: Clock, tone: "warn" },
-    { label: "Abholbereit", value: orders.filter((o) => o.status === "abholbereit").length, hint: "Kunden informiert", icon: CheckCircle2, tone: "ok" },
-    { label: "Fahrzeugstamm", value: vehicles.length, hint: "Registrierte Kunden", icon: Car, tone: "" },
-    { label: "Räderhotel", value: tires.length, hint: "Eingelagerte Sätze", icon: Layers, tone: "" },
-    { label: "Meldebestand Teile", value: parts.filter((p) => p.stock <= p.minStock).length, hint: "Nachbestellung fällig", icon: AlertTriangle, tone: "bad" },
+    { id: "active", label: t("app.kpi.active"), value: openCount, hint: t("app.kpi.activeHint", { n: orders.filter((o) => o.status === "in_arbeit").length }), icon: Wrench, tone: "" },
+    { id: "waiting", label: t("app.kpi.waiting"), value: orders.filter((o) => o.status === "wartet_teile").length, hint: t("app.kpi.waitingHint"), icon: Clock, tone: "warn" },
+    { id: "ready", label: t("app.kpi.ready"), value: orders.filter((o) => o.status === "abholbereit").length, hint: t("app.kpi.readyHint"), icon: CheckCircle2, tone: "ok" },
+    { id: "vehicles", label: t("app.kpi.vehicles"), value: vehicles.length, hint: t("app.kpi.vehiclesHint"), icon: Car, tone: "" },
+    { id: "tires", label: t("app.kpi.tires"), value: tires.length, hint: t("app.kpi.tiresHint"), icon: Layers, tone: "" },
+    { id: "lowStock", label: t("app.kpi.lowStock"), value: parts.filter((p) => p.stock <= p.minStock).length, hint: t("app.kpi.lowStockHint"), icon: AlertTriangle, tone: "bad" },
   ];
 
   return (
@@ -91,17 +89,17 @@ export default function WorkshopApp({ me, path }: WorkshopAppProps) {
       <header className="page-head with-icon workshop-head">
         <AppIcon app={app} size="lg" />
         <div>
-          <h1 className="display">Kfz-Werkstatt & Service</h1>
-          <p className="muted">Hebebühnen-Steuerung, Dialogannahme, Fahrzeugakte, Teilelager & Räderhotel</p>
+          <h1 className="display">{t("app.title")}</h1>
+          <p className="muted">{t("app.subtitle")}</p>
         </div>
         <div className="row gap push-end workshop-head-actions">
           {hasPos && (
             <Link to="/kasse" className="button">
-              <ShoppingCart size={18} /> Zur Kasse wechseln
+              <ShoppingCart size={18} /> {t("app.toPos")}
             </Link>
           )}
           <button onClick={() => setNewOrderModalOpen(true)} className="button primary">
-            <Plus size={18} /> Neuer Werkstattauftrag
+            <Plus size={18} /> {t("app.newOrder")}
           </button>
         </div>
       </header>
@@ -116,8 +114,8 @@ export default function WorkshopApp({ me, path }: WorkshopAppProps) {
 
       {/* Kennzahlen */}
       <div className="workshop-stats">
-        {kpis.map(({ label, value, hint, icon: Icon, tone }) => (
-          <div key={label} className={`tile stat-tile ${tone ? `tone-${tone}` : ""}`}>
+        {kpis.map(({ id, label, value, hint, icon: Icon, tone }) => (
+          <div key={id} className={`tile stat-tile ${tone ? `tone-${tone}` : ""}`}>
             <span className="stat-icon"><Icon size={18} /></span>
             <strong>{value}</strong>
             <small>{label}</small>

@@ -4,10 +4,9 @@ import { api } from "../../api";
 import { Field } from "../../components";
 import type { OfficeSettings, RoleRate } from "../../../shared/office";
 import { useOfficeI18n } from "./i18n";
-import { currencySymbol } from "../../money";
 
 export function SettingsTab() {
-  const { o, euro, officeError } = useOfficeI18n();
+  const { o, euro, cur, officeError } = useOfficeI18n();
   const [settings, setSettings] = useState<OfficeSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
@@ -65,7 +64,7 @@ export function SettingsTab() {
     });
   };
 
-  if (loading || !settings) return <p className="muted">Laden...</p>;
+  if (loading || !settings) return <p className="muted">{o("common.loading")}</p>;
 
   return (
     <div className="stack office-settings">
@@ -111,13 +110,13 @@ export function SettingsTab() {
               }
             />
           </Field>
-          <Field label="Standard Skonto-Frist (Tage)">
+          <Field label={o("settings.defaultSkontoDays")}>
             <input
               type="number"
               min="0"
               max="60"
               value={settings.defaultSkontoDays || ""}
-              placeholder="z.B. 7"
+              placeholder={o("common.example", { value: 7 })}
               onChange={(e) =>
                 setSettings({
                   ...settings,
@@ -126,14 +125,14 @@ export function SettingsTab() {
               }
             />
           </Field>
-          <Field label="Standard Skonto-Satz (%)">
+          <Field label={o("settings.defaultSkontoPercent")}>
             <input
               type="number"
               min="0"
               max="10"
               step="0.5"
               value={settings.defaultSkontoPercent || ""}
-              placeholder="z.B. 2"
+              placeholder={o("common.example", { value: 2 })}
               onChange={(e) =>
                 setSettings({
                   ...settings,
@@ -146,9 +145,9 @@ export function SettingsTab() {
 
         {/* Rollen- & Tätigkeitsbasierte Stundensätze */}
         <div className="office-section">
-          <h3 className="card-subtitle"><Users size={18} /> Rollen- & tätigkeitsbasierte Stundensätze</h3>
+          <h3 className="card-subtitle"><Users size={18} /> {o("settings.roleRatesTitle")}</h3>
           <p className="small muted">
-            Definieren Sie Stundensätze nach Qualifikation oder Aufgabenrolle (z.B. Junior, Senior, Beratung, Entwicklung, Kreation).
+            {o("settings.roleRatesHint")}
           </p>
 
           {(settings.roleRates || []).length > 0 && (
@@ -157,14 +156,14 @@ export function SettingsTab() {
                 <div key={r.id} className="list-row">
                   <span className="list-main">
                     <strong>{r.name}</strong>
-                    <small className="muted">Stundensatz: {euro(r.hourlyRateCents)} / Std (netto)</small>
+                    <small className="muted">{o("settings.roleRateLine", { rate: euro(r.hourlyRateCents) })}</small>
                   </span>
                   <button
                     type="button"
                     className="icon-button danger"
                     onClick={() => handleRemoveRoleRate(r.id)}
-                    title="Rolle entfernen"
-                    aria-label="Rolle entfernen"
+                    title={o("settings.removeRole")}
+                    aria-label={o("settings.removeRole")}
                   >
                     <Trash2 size={16} />
                   </button>
@@ -174,31 +173,31 @@ export function SettingsTab() {
           )}
 
           <div className="office-add">
-            <Field label="Neue Rolle / Tätigkeit">
+            <Field label={o("settings.newRole")}>
               <input
                 type="text"
-                placeholder="z.B. Senior Consultant, Grafikdesign..."
+                placeholder={o("settings.newRolePlaceholder")}
                 value={newRoleName}
                 onChange={(e) => setNewRoleName(e.target.value)}
               />
             </Field>
-            <Field label={`Satz (${currencySymbol("de-DE")}/Std)`}>
+            <Field label={o("settings.roleRate", { currency: cur() })}>
               <input type="number" step="0.01" min="0" value={newRoleRateEur} onChange={(e) => setNewRoleRateEur(e.target.value)} />
             </Field>
             <button type="button" className="button" onClick={handleAddRoleRate} disabled={!newRoleName.trim()}>
-              <Plus size={17} /> Rolle hinzufügen
+              <Plus size={17} /> {o("settings.addRole")}
             </button>
           </div>
         </div>
 
         {/* Mahnwesen & Gebühren */}
         <div className="office-section">
-          <h3 className="card-subtitle"><AlertTriangle size={18} /> Mahnwesen & Gebühren</h3>
+          <h3 className="card-subtitle"><AlertTriangle size={18} /> {o("settings.dunningTitle")}</h3>
           <p className="small muted">
-            Feste Gebührensätze für Mahnungen überfälliger Rechnungen (Stufe 1 Zahlungserinnerung ist kostenlos).
+            {o("settings.dunningHint")}
           </p>
           <div className="grid form-grid">
-            <Field label={`Mahngebühr 1. Mahnung (Stufe 2, ${currencySymbol("de-DE")})`}>
+            <Field label={o("settings.feeLevel2", { currency: cur() })}>
               <input
                 type="number"
                 step="0.01"
@@ -212,7 +211,7 @@ export function SettingsTab() {
                 }
               />
             </Field>
-            <Field label={`Mahngebühr 2. / Letzte Mahnung (Stufe 3, ${currencySymbol("de-DE")})`}>
+            <Field label={o("settings.feeLevel3", { currency: cur() })}>
               <input
                 type="number"
                 step="0.01"
@@ -231,7 +230,7 @@ export function SettingsTab() {
 
         {/* Nummernkreise & E-Rechnung */}
         <div className="office-section">
-          <h3 className="card-subtitle"><Hash size={18} /> Nummernkreise & Rechnungsstandards</h3>
+          <h3 className="card-subtitle"><Hash size={18} /> {o("settings.numberingTitle")}</h3>
           <div className="grid form-grid">
             <Field label={o("settings.quotePrefix")} required>
               <input
@@ -252,7 +251,7 @@ export function SettingsTab() {
             <Field label={o("settings.buyerReferenceDefault")} wide>
               <input
                 type="text"
-                placeholder="z.B. Leitweg-ID für öffentliche Auftraggeber"
+                placeholder={o("settings.buyerReferencePlaceholder")}
                 value={settings.buyerReferenceDefault}
                 onChange={(e) => setSettings({ ...settings, buyerReferenceDefault: e.target.value })}
               />
@@ -268,7 +267,7 @@ export function SettingsTab() {
             <span className="stack-sm">
               <strong>{o("settings.eInvoiceEnabled")}</strong>
               <small className="muted">
-                Generiert automatisch den EN16931-konformen XRechnung-Standard (UBL 2.1) für Rechnungen an Behörden und B2B-Kunden in Deutschland und der EU.
+                {o("settings.eInvoiceHint")}
               </small>
             </span>
           </label>

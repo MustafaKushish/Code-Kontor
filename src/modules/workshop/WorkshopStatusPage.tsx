@@ -13,7 +13,7 @@ import {
   FileText,
 } from "lucide-react";
 import type { OrderPosition, WorkshopOrder, WorkshopOrderStatus } from "../../../shared/workshop";
-import { formatMoney } from "../../money";
+import { useWorkshopI18n } from "./i18n";
 
 /** Was die Statusseite vom Server bekommt (ohne Kontaktdaten und Zahlungsdaten). */
 type PublicOrder = Pick<WorkshopOrder, "orderNumber" | "licensePlate" | "vehicleInfo" | "mileage" | "customerName" | "status" | "issueDescription" | "diagnosticNotes" | "estimateStatus" | "totalNet" | "totalTax" | "totalGross" | "createdAt" | "updatedAt"> & {
@@ -27,16 +27,18 @@ interface StatusPageProps {
   token: string;
 }
 
-const PHASES: { id: WorkshopOrderStatus; label: string; desc: string }[] = [
-  { id: "annahme", label: "Angenommen", desc: "Fahrzeug in der Werkstatt eingetroffen" },
-  { id: "diagnose", label: "Diagnose", desc: "Sichtprüfung & Mängelerfassung" },
-  { id: "wartet_teile", label: "Warten auf Teile", desc: "Ersatzteile bestellt / Kostenvoranschlag" },
-  { id: "in_arbeit", label: "In Reparatur", desc: "Arbeiten auf der Hebebühne laufen" },
-  { id: "endkontrolle", label: "Endkontrolle", desc: "Probefahrt & Meisterprüfung" },
-  { id: "abholbereit", label: "Abholbereit", desc: "Fahrzeug fertiggestellt zur Abholung" },
+// Texte der Phasen kommen aus public.phases.<id>
+const PHASES: { id: WorkshopOrderStatus }[] = [
+  { id: "annahme" },
+  { id: "diagnose" },
+  { id: "wartet_teile" },
+  { id: "in_arbeit" },
+  { id: "endkontrolle" },
+  { id: "abholbereit" },
 ];
 
 export default function WorkshopStatusPage({ tenantId, token }: StatusPageProps) {
+  const { t, euro, num, unit } = useWorkshopI18n();
   const [order, setOrder] = useState<PublicOrder | null>(null);
   const [currency, setCurrency] = useState("EUR");
   const [approveError, setApproveError] = useState("");
@@ -53,19 +55,19 @@ export default function WorkshopStatusPage({ tenantId, token }: StatusPageProps)
   const [approving, setApproving] = useState(false);
   const [approvedSuccess, setApprovedSuccess] = useState(false);
 
-  const fmtEuro = (amount: number) => formatMoney(Math.round(amount * 100), "de-DE", currency);
+  const fmtEuro = (amount: number) => euro(amount, currency);
 
   useEffect(() => {
     async function load() {
       try {
         const res = await fetch(`/api/workshop/public/${tenantId}/status/${token}`);
-        if (!res.ok) throw new Error("Status nicht gefunden");
+        if (!res.ok) throw new Error(t("public.notFound"));
         const data = (await res.json()) as any;
         setOrder(data.order);
         setCompany(data.company);
         if (data.currency) setCurrency(data.currency);
       } catch (err: any) {
-        setErrorMsg(err.message || "Auftragsdaten konnten nicht geladen werden.");
+        setErrorMsg(err.message || t("public.loadError"));
       } finally {
         setLoading(false);
       }
@@ -82,12 +84,12 @@ export default function WorkshopStatusPage({ tenantId, token }: StatusPageProps)
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
       });
-      if (!res.ok) throw new Error("Die Freigabe ist nicht mehr möglich. Bitte rufe die Werkstatt an.");
+      if (!res.ok) throw new Error(t("public.approveNotPossible"));
       const data = (await res.json()) as any;
       setOrder(data.order);
       setApprovedSuccess(true);
     } catch (err: any) {
-      setApproveError(err.message || "Fehler bei der KVA-Freigabe.");
+      setApproveError(err.message || t("public.approveError"));
     } finally {
       setApproving(false);
     }
@@ -96,7 +98,7 @@ export default function WorkshopStatusPage({ tenantId, token }: StatusPageProps)
   if (loading) {
     return (
       <div className="workshop-status-page">
-        <p className="muted workshop-center">Status wird geladen...</p>
+        <p className="muted workshop-center">{t("public.loading")}</p>
       </div>
     );
   }
@@ -106,9 +108,9 @@ export default function WorkshopStatusPage({ tenantId, token }: StatusPageProps)
       <div className="workshop-status-page">
         <section className="card stack workshop-center">
           <span className="stat-icon warn workshop-status-icon"><AlertTriangle size={22} /></span>
-          <h1 className="display">Auftrag nicht gefunden</h1>
+          <h1 className="display">{t("public.notFoundTitle")}</h1>
           <p className="muted">
-            Der Link ist ungültig oder der Reparaturauftrag wurde bereits archiviert. Bitte wende dich direkt an die Werkstatt.
+            {t("public.notFoundText")}
           </p>
         </section>
       </div>
@@ -125,14 +127,14 @@ export default function WorkshopStatusPage({ tenantId, token }: StatusPageProps)
         <div className="workshop-status-brand">
           <Wrench size={22} />
           <span className="list-main">
-            <strong>{company?.name || "Kfz-Meisterbetrieb"}</strong>
-            <small className="muted">Live-Reparaturstatus deines Fahrzeugs</small>
+            <strong>{company?.name || t("public.defaultCompany")}</strong>
+            <small className="muted">{t("public.liveStatus")}</small>
           </span>
         </div>
         {company?.phone && (
-          <a href={`tel:${company.phone}`} className="button small-button" aria-label="Werkstatt anrufen">
+          <a href={`tel:${company.phone}`} className="button small-button" aria-label={t("public.call")}>
             <Phone size={16} />
-            <span className="workshop-hide-phone">Werkstatt anrufen</span>
+            <span className="workshop-hide-phone">{t("public.call")}</span>
           </a>
         )}
       </header>
@@ -143,26 +145,26 @@ export default function WorkshopStatusPage({ tenantId, token }: StatusPageProps)
           <span className="workshop-plate-badge">{order.licensePlate}</span>
           <h1 className="display">{order.vehicleInfo}</h1>
           <p className="muted">
-            Auftrags-Nr. <span className="workshop-mono">{order.orderNumber}</span> · KM-Stand:{" "}
-            <span className="workshop-mono">{order.mileage.toLocaleString("de-DE")} km</span>
+            {t("public.orderNo")} <span className="workshop-mono">{order.orderNumber}</span> · {t("public.mileage")}{" "}
+            <span className="workshop-mono">{t("common.km", { n: num(order.mileage) })}</span>
           </p>
           <p>
-            <span className="muted">Kunde:</span> <strong>{order.customerName}</strong>
+            <span className="muted">{t("public.customer")}</span> <strong>{order.customerName}</strong>
           </p>
         </section>
 
         {/* Status-Phasenleiste */}
         <section className="card stack">
           <div className="section-head">
-            <h2>Reparaturfortschritt</h2>
+            <h2>{t("public.progress")}</h2>
             <span className={order.status === "abholbereit" ? "pill pos" : "pill"}>
               {order.status === "abholbereit"
-                ? "✓ Bereit zur Abholung"
+                ? t("public.badge.ready")
                 : order.status === "in_arbeit"
-                ? "Auf Hebebühne in Arbeit"
+                ? t("public.badge.inWork")
                 : order.status === "wartet_teile"
-                ? "Warten auf Teile"
-                : "In Bearbeitung"}
+                ? t("public.badge.waiting")
+                : t("public.badge.processing")}
             </span>
           </div>
 
@@ -174,8 +176,8 @@ export default function WorkshopStatusPage({ tenantId, token }: StatusPageProps)
                 <li key={p.id} className={isPast ? "done" : isCurrent ? "current" : ""}>
                   <span className="workshop-phase-bullet">{isPast ? <Check size={14} /> : idx + 1}</span>
                   <span className="list-main">
-                    <strong>{p.label}</strong>
-                    <small className="muted">{p.desc}</small>
+                    <strong>{t(`public.phases.${p.id}.label`)}</strong>
+                    <small className="muted">{t(`public.phases.${p.id}.desc`)}</small>
                   </span>
                 </li>
               );
@@ -186,16 +188,16 @@ export default function WorkshopStatusPage({ tenantId, token }: StatusPageProps)
         {/* Diagnose & Mängelbeschreibung */}
         {(order.issueDescription || order.diagnosticNotes) && (
           <section className="card stack">
-            <h2>Auftrags- & Diagnoseprotokoll</h2>
+            <h2>{t("public.protocol")}</h2>
             {order.issueDescription && (
               <div className="stack-sm">
-                <span className="tile-label">Kundenauftrag</span>
+                <span className="tile-label">{t("public.customerOrder")}</span>
                 <p className="workshop-panel">{order.issueDescription}</p>
               </div>
             )}
             {order.diagnosticNotes && (
               <div className="stack-sm">
-                <span className="tile-label">Werkstattbefund</span>
+                <span className="tile-label">{t("public.findings")}</span>
                 <p className="workshop-panel workshop-panel-accent">{order.diagnosticNotes}</p>
               </div>
             )}
@@ -207,8 +209,8 @@ export default function WorkshopStatusPage({ tenantId, token }: StatusPageProps)
           <section className="card stack">
             <div className="section-head">
               <div className="stack-sm">
-                <h2>Kostenaufstellung & Positionen</h2>
-                <small className="muted">Transparente Übersicht aller Arbeitswerte und Ersatzteile</small>
+                <h2>{t("public.costs")}</h2>
+                <small className="muted">{t("public.costsHint")}</small>
               </div>
               <strong className="workshop-num workshop-big">{fmtEuro(order.totalGross)}</strong>
             </div>
@@ -219,7 +221,7 @@ export default function WorkshopStatusPage({ tenantId, token }: StatusPageProps)
                   <span className="list-main">
                     <strong>{pos.name}</strong>
                     <small className="muted workshop-mono">
-                      {pos.quantity} {pos.unit}
+                      {num(pos.quantity)} {unit(pos.unit)}
                     </small>
                   </span>
                   <strong className="workshop-num">{fmtEuro(pos.quantity * pos.unitPriceNet * (1 + pos.taxRate / 100))}</strong>
@@ -228,8 +230,8 @@ export default function WorkshopStatusPage({ tenantId, token }: StatusPageProps)
             </div>
 
             <div className="workshop-total-line">
-              <small className="muted">Inklusive gesetzlicher Mehrwertsteuer</small>
-              <strong className="workshop-num">Gesamtkosten: {fmtEuro(order.totalGross)}</strong>
+              <small className="muted">{t("public.inclVat")}</small>
+              <strong className="workshop-num">{t("public.totalCosts", { amount: fmtEuro(order.totalGross) })}</strong>
             </div>
 
             {/* Freigabebutton */}
@@ -239,12 +241,12 @@ export default function WorkshopStatusPage({ tenantId, token }: StatusPageProps)
               <div className="notice stack-sm">
                 <strong className="workshop-icon-text">
                   <AlertTriangle size={17} />
-                  Freigabe durch den Kunden erforderlich
+                  {t("public.approvalRequired")}
                 </strong>
-                <span>Bitte bestätige die Reparaturpositionen, damit die Werkstatt die Ersatzteile montieren kann.</span>
+                <span>{t("public.approvalText")}</span>
                 <button type="button" onClick={handleApproveEstimate} disabled={approving} className="button primary block">
                   <Check size={18} />
-                  {approving ? "Wird übermittelt..." : "Reparatur & Kostenvoranschlag jetzt freigeben"}
+                  {approving ? t("public.approving") : t("public.approve")}
                 </button>
               </div>
             )}
@@ -252,7 +254,7 @@ export default function WorkshopStatusPage({ tenantId, token }: StatusPageProps)
             {approvedSuccess && (
               <p className="notice success">
                 <CheckCircle2 size={17} />
-                Vielen Dank! Deine Freigabe wurde erfolgreich an die Werkstatt übermittelt.
+                {t("public.thanks")}
               </p>
             )}
           </section>

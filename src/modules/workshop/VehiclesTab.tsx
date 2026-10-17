@@ -4,6 +4,7 @@ import { api } from "../../api";
 import { Field } from "../../components";
 import { Dialog } from "../../pos/ui";
 import type { Vehicle, WorkshopOrder } from "../../../shared/workshop";
+import { useWorkshopI18n } from "./i18n";
 
 interface VehiclesTabProps {
   isManager: boolean;
@@ -13,6 +14,7 @@ interface VehiclesTabProps {
 }
 
 export function VehiclesTab({ vehicles, orders, onVehiclesChanged, isManager }: VehiclesTabProps) {
+  const { t, workshopError, num } = useWorkshopI18n();
   const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
@@ -101,7 +103,7 @@ export function VehiclesTab({ vehicles, orders, onVehiclesChanged, isManager }: 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.licensePlate.trim() || !form.customerName.trim()) {
-      setErrorMsg("Bitte mindestens Kennzeichen und Kundenname ausfüllen.");
+      setErrorMsg(t("vehicles.required"));
       return;
     }
 
@@ -115,8 +117,8 @@ export function VehiclesTab({ vehicles, orders, onVehiclesChanged, isManager }: 
           id: editingVehicle?.id,
           licensePlate: form.licensePlate.trim().toUpperCase(),
           vin: form.vin.trim().toUpperCase(),
-          brand: form.brand.trim() || "Kfz",
-          model: form.model.trim() || "Modell",
+          brand: form.brand.trim() || t("vehicles.defaultBrand"),
+          model: form.model.trim() || t("vehicles.defaultModel"),
           year: Number(form.year) || 2020,
           mileage: Number(form.mileage) || 0,
           hsn: form.hsn.trim(),
@@ -138,8 +140,8 @@ export function VehiclesTab({ vehicles, orders, onVehiclesChanged, isManager }: 
         onVehiclesChanged([saved, ...vehicles]);
       }
       setModalOpen(false);
-    } catch (err: any) {
-      setErrorMsg(err.message || "Fehler beim Speichern des Fahrzeugs.");
+    } catch (err: unknown) {
+      setErrorMsg(workshopError(err, t("vehicles.saveError")));
     } finally {
       setSaving(false);
     }
@@ -150,8 +152,8 @@ export function VehiclesTab({ vehicles, orders, onVehiclesChanged, isManager }: 
       await api(`/workshop/vehicles/${id}`, { method: "DELETE" });
       onVehiclesChanged(vehicles.filter((v) => v.id !== id));
       setDeleteConfirmId(null);
-    } catch (err: any) {
-      setErrorMsg(err.message || "Fehler beim Löschen.");
+    } catch (err: unknown) {
+      setErrorMsg(workshopError(err, t("common.deleteError")));
     }
   };
 
@@ -163,15 +165,15 @@ export function VehiclesTab({ vehicles, orders, onVehiclesChanged, isManager }: 
           <Search size={18} />
           <input
             type="search"
-            placeholder="Kennzeichen, Modell, Kunde, Fahrgestellnummer..."
-            aria-label="Kennzeichen, Modell, Kunde, Fahrgestellnummer..."
+            placeholder={t("vehicles.searchPlaceholder")}
+            aria-label={t("vehicles.searchPlaceholder")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </label>
         <button onClick={openNewModal} className="button primary workshop-toolbar-end">
           <Plus size={18} />
-          Fahrzeug erfassen
+          {t("vehicles.add")}
         </button>
       </div>
 
@@ -180,7 +182,7 @@ export function VehiclesTab({ vehicles, orders, onVehiclesChanged, isManager }: 
       {/* Fahrzeugliste */}
       {filtered.length === 0 ? (
         <section className="card list-card">
-          <p className="empty muted">Keine Fahrzeuge gefunden. Erfasse ein neues Kundenfahrzeug über den Button oben.</p>
+          <p className="empty muted">{t("vehicles.empty")}</p>
         </section>
       ) : (
         <div className="workshop-cards">
@@ -199,17 +201,17 @@ export function VehiclesTab({ vehicles, orders, onVehiclesChanged, isManager }: 
                 </div>
 
                 <dl className="workshop-facts">
-                  <dt>Kilometerstand:</dt>
-                  <dd className="workshop-mono">{v.mileage.toLocaleString("de-DE")} km</dd>
+                  <dt>{t("vehicles.mileage")}</dt>
+                  <dd className="workshop-mono">{t("common.km", { n: num(v.mileage) })}</dd>
                   {v.nextInspection && (
                     <>
-                      <dt>Nächste HU / TÜV:</dt>
+                      <dt>{t("vehicles.nextInspection")}</dt>
                       <dd><span className="pill warn workshop-mono">{v.nextInspection}</span></dd>
                     </>
                   )}
                   {v.vin && (
                     <>
-                      <dt>FIN:</dt>
+                      <dt>{t("vehicles.vin")}</dt>
                       <dd className="workshop-mono muted">{v.vin}</dd>
                     </>
                   )}
@@ -220,25 +222,25 @@ export function VehiclesTab({ vehicles, orders, onVehiclesChanged, isManager }: 
                   <strong>{v.customerName}</strong>
                   <small className="muted">{v.customerPhone}</small>
                   {v.customerEmail && <small className="muted">{v.customerEmail}</small>}
-                  {vehicleOrders.length > 0 && <small className="muted">{vehicleOrders.length} Werkstattauftrag/-aufträge erfasst</small>}
+                  {vehicleOrders.length > 0 && <small className="muted">{t("vehicles.ordersCount", { n: vehicleOrders.length })}</small>}
                 </div>
 
                 <div className="workshop-card-foot">
                   <button onClick={() => openEditModal(v)} className="text-button workshop-icon-text">
                     <Pencil size={15} />
-                    Bearbeiten
+                    {t("common.edit")}
                   </button>
                   {!isManager ? null : deleteConfirmId === v.id ? (
                     <div className="row gap">
                       <button onClick={() => handleDelete(v.id)} className="button danger small-button">
-                        Löschen
+                        {t("common.delete")}
                       </button>
                       <button onClick={() => setDeleteConfirmId(null)} className="text-button">
-                        Nein
+                        {t("common.no")}
                       </button>
                     </div>
                   ) : (
-                    <button onClick={() => setDeleteConfirmId(v.id)} className="icon-button danger" aria-label="Löschen">
+                    <button onClick={() => setDeleteConfirmId(v.id)} className="icon-button danger" aria-label={t("common.delete")}>
                       <Trash2 size={17} />
                     </button>
                   )}
@@ -251,76 +253,76 @@ export function VehiclesTab({ vehicles, orders, onVehiclesChanged, isManager }: 
 
       {/* Dialog: Fahrzeug erfassen / bearbeiten */}
       {modalOpen && (
-        <Dialog title={editingVehicle ? "Fahrzeug bearbeiten" : "Neues Kundenfahrzeug erfassen"} onClose={() => setModalOpen(false)} wide>
+        <Dialog title={editingVehicle ? t("vehicles.editTitle") : t("vehicles.newTitle")} onClose={() => setModalOpen(false)} wide>
           <form onSubmit={handleSave} className="stack workshop-dialog">
             {errorMsg && <p className="error" role="alert">{errorMsg}</p>}
             <div className="grid form-grid">
-              <Field label="Amtliches Kennzeichen *">
+              <Field label={t("common.plate")}>
                 <input
                   type="text"
                   required
-                  placeholder="z. B. HH-WM 2024"
+                  placeholder={t("common.platePlaceholder")}
                   value={form.licensePlate}
                   onChange={(e) => setForm({ ...form, licensePlate: e.target.value.toUpperCase() })}
                   className="workshop-mono workshop-upper"
                 />
               </Field>
-              <Field label="Fahrgestellnummer (FIN / VIN)">
+              <Field label={t("common.vin")}>
                 <input
                   type="text"
-                  placeholder="17-stellig (optional)"
+                  placeholder={t("common.vinPlaceholder")}
                   value={form.vin}
                   onChange={(e) => setForm({ ...form, vin: e.target.value.toUpperCase() })}
                   className="workshop-mono workshop-upper"
                 />
               </Field>
-              <Field label="Hersteller / Marke">
-                <input type="text" placeholder="z. B. Volkswagen, BMW, Audi" value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} />
+              <Field label={t("common.brand")}>
+                <input type="text" placeholder={t("vehicles.brandPlaceholder")} value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} />
               </Field>
-              <Field label="Modell / Typ">
-                <input type="text" placeholder="z. B. Golf VII Variant 2.0 TDI" value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} />
+              <Field label={t("vehicles.model")}>
+                <input type="text" placeholder={t("vehicles.modelPlaceholder")} value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} />
               </Field>
-              <Field label="Baujahr / Erstzulassung">
+              <Field label={t("vehicles.year")}>
                 <input type="number" value={form.year} onChange={(e) => setForm({ ...form, year: Number(e.target.value) })} className="workshop-mono" />
               </Field>
-              <Field label="Kilometerstand (km)">
+              <Field label={t("common.mileage")}>
                 <input type="number" value={form.mileage} onChange={(e) => setForm({ ...form, mileage: Number(e.target.value) })} className="workshop-mono" />
               </Field>
-              <Field label="Kraftstoff">
+              <Field label={t("vehicles.fuel")}>
                 <select value={form.fuelType} onChange={(e) => setForm({ ...form, fuelType: e.target.value as any })}>
-                  <option value="Benzin">Benzin</option>
-                  <option value="Diesel">Diesel</option>
-                  <option value="Hybrid">Hybrid</option>
-                  <option value="Elektro">Elektro</option>
-                  <option value="LPG">LPG / Autogas</option>
+                  {(["Benzin", "Diesel", "Hybrid", "Elektro", "LPG"] as const).map((fuel) => (
+                    <option key={fuel} value={fuel}>
+                      {t(`vehicles.fuels.${fuel}`)}
+                    </option>
+                  ))}
                 </select>
               </Field>
-              <Field label="Nächste HU / TÜV (JJJJ-MM)">
-                <input type="text" placeholder="2026-08" value={form.nextInspection} onChange={(e) => setForm({ ...form, nextInspection: e.target.value })} className="workshop-mono" />
+              <Field label={t("vehicles.inspection")}>
+                <input type="text" placeholder={t("vehicles.inspectionPlaceholder")} value={form.nextInspection} onChange={(e) => setForm({ ...form, nextInspection: e.target.value })} className="workshop-mono" />
               </Field>
             </div>
 
             {/* Halterdaten */}
-            <h3 className="card-subtitle"><User size={17} aria-hidden /> Fahrzeughalter</h3>
+            <h3 className="card-subtitle"><User size={17} aria-hidden /> {t("vehicles.ownerSection")}</h3>
             <div className="grid form-grid">
-              <Field label="Kundenname *" wide>
+              <Field label={t("common.customerNameRequired")} wide>
                 <input type="text" required value={form.customerName} onChange={(e) => setForm({ ...form, customerName: e.target.value })} />
               </Field>
-              <Field label="Telefon *">
+              <Field label={t("common.phoneRequired")}>
                 <input type="tel" required value={form.customerPhone} onChange={(e) => setForm({ ...form, customerPhone: e.target.value })} />
               </Field>
-              <Field label="E-Mail">
+              <Field label={t("common.email")}>
                 <input type="email" value={form.customerEmail} onChange={(e) => setForm({ ...form, customerEmail: e.target.value })} />
               </Field>
             </div>
 
             <div className="row gap workshop-dialog-actions">
               <button type="button" onClick={() => setModalOpen(false)} className="button">
-                Abbrechen
+                {t("common.cancel")}
               </button>
               <button type="submit" disabled={saving} className="button primary">
                 <Check size={18} />
-                {saving ? "Wird gespeichert..." : "Fahrzeug speichern"}
+                {saving ? t("common.saving") : t("vehicles.save")}
               </button>
             </div>
           </form>

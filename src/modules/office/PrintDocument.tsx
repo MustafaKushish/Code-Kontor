@@ -17,7 +17,7 @@ export function PrintDocument({
   kind: "invoice" | "quote";
   onClose: () => void;
 }) {
-  const { o, euro, day } = useOfficeI18n();
+  const { o, euro, day, unitLabel, payMethodLabel } = useOfficeI18n();
   const [company, setCompany] = useState<CompanyProfile | null>(null);
   const [xmlModalOpen, setXmlModalOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -202,7 +202,7 @@ ${taxSubtotals}
             </button>
           </div>
           <p className="small muted">
-            Diese Rechnung entspricht dem Standard EN 16931 / XRechnung (UBL 2.1). Die XML-Datei kann direkt an Behörden oder Geschäftskunden übermittelt werden.
+            {o("print.xmlInfo")}
           </p>
           <textarea readOnly rows={12} value={generateEInvoiceXml()} aria-label={o("print.eInvoiceXml")} />
           <div className="row wrap gap end">
@@ -227,7 +227,7 @@ ${taxSubtotals}
         <header className="print-head">
           <div>
             {company?.logoDataUrl && <img src={company.logoDataUrl} alt="" className="print-logo" />}
-            <strong className="print-company">{company?.name || "Code Kontor Mandant"}</strong>
+            <strong className="print-company">{company?.name || o("print.companyFallback")}</strong>
             <p>
               {company?.street}
               <br />
@@ -241,30 +241,30 @@ ${taxSubtotals}
               <strong>{doc.number}</strong>
             </p>
             <p>
-              Datum: {day(isInvoice ? (invoice?.issuedAt || "") : (doc.createdAt || ""))}
+              {o("print.date")}: {day(isInvoice ? (invoice?.issuedAt || "") : (doc.createdAt || ""))}
             </p>
             {isInvoice && invoice?.dueDate && (
               <p>
-                Fällig am: <strong>{day(invoice.dueDate)}</strong>
+                {o("invoices.dueDate")}: <strong>{day(invoice.dueDate)}</strong>
               </p>
             )}
             {!isInvoice && quote?.validUntil && (
               <p>
-                Gültig bis: <strong>{day(quote.validUntil)}</strong>
+                {o("quotes.validUntil")}: <strong>{day(quote.validUntil)}</strong>
               </p>
             )}
-            {doc.projectName && <p>Projekt: {doc.projectName}</p>}
+            {doc.projectName && <p>{o("print.project")}: {doc.projectName}</p>}
           </div>
         </header>
 
         {/* Empfänger */}
         <section>
-          <h2>Empfänger:</h2>
+          <h2>{o("print.recipient")}</h2>
           <p><strong>{doc.clientName}</strong></p>
           {invoice?.clientAddress && <p className="office-pre">{invoice.clientAddress}</p>}
-          {invoice?.clientVatId && <p>USt-IdNr.: {invoice.clientVatId}</p>}
+          {invoice?.clientVatId && <p>{o("clients.vatId")}: {invoice.clientVatId}</p>}
           {isInvoice && invoice?.buyerReference && (
-            <p><small>Käuferreferenz / Leitweg-ID: <strong>{invoice.buyerReference}</strong></small></p>
+            <p><small>{o("print.buyerReference")}: <strong>{invoice.buyerReference}</strong></small></p>
           )}
         </section>
 
@@ -279,12 +279,12 @@ ${taxSubtotals}
           <thead>
             <tr>
               <th>#</th>
-              <th>Position & Beschreibung</th>
-              <th className="num">Menge</th>
-              <th className="num">Einheit</th>
-              <th className="num">Einzelpreis</th>
-              <th className="num">MwSt.</th>
-              <th className="num">Gesamt</th>
+              <th>{o("print.colPosition")}</th>
+              <th className="num">{o("print.colQty")}</th>
+              <th className="num">{o("print.colUnit")}</th>
+              <th className="num">{o("print.colUnitPrice")}</th>
+              <th className="num">{o("print.colVat")}</th>
+              <th className="num">{o("print.colTotal")}</th>
             </tr>
           </thead>
           <tbody>
@@ -296,7 +296,7 @@ ${taxSubtotals}
                   {it.description && <><br /><small>{it.description}</small></>}
                 </td>
                 <td className="num">{it.qty}</td>
-                <td className="num">{it.unit || "Std"}</td>
+                <td className="num">{unitLabel(it.unit || "Std")}</td>
                 <td className="num">{euro(it.unitCents)}</td>
                 <td className="num">{it.vatRate}%</td>
                 <td className="num">{euro(Math.round(it.qty * it.unitCents))}</td>
@@ -309,20 +309,20 @@ ${taxSubtotals}
         <div className="print-totals">
           {doc.discountPercent ? (
             <p>
-              <span>Rabatt ({doc.discountPercent}%):</span>
-              <span>enthalten</span>
+              <span>{o("print.discount", { percent: doc.discountPercent })}</span>
+              <span>{o("print.included")}</span>
             </p>
           ) : null}
           <p>
-            <span>Nettobetrag:</span>
+            <span>{o("print.netAmount")}</span>
             <span>{euro(doc.netCents)}</span>
           </p>
           <p>
-            <span>Umsatzsteuer:</span>
+            <span>{o("print.vatAmount")}</span>
             <span>{euro(doc.vatCents)}</span>
           </p>
           <p className="grand">
-            <span><strong>Gesamtbetrag:</strong></span>
+            <span><strong>{o("print.grandTotal")}</strong></span>
             <strong>{euro(doc.totalCents)}</strong>
           </p>
         </div>
@@ -339,19 +339,19 @@ ${taxSubtotals}
             <div className="stack-sm">
               <strong>
                 {invoice?.paidAt
-                  ? o("print.paidWith", { date: day(invoice.paidAt), method: invoice.paidMethod || "Überweisung" })
+                  ? o("print.paidWith", { date: day(invoice.paidAt), method: payMethodLabel(invoice.paidMethod || "Überweisung") })
                   : o("print.payNotice", { days: 14 })}
               </strong>
               {invoice?.skontoDays && invoice?.skontoPercent ? (
                 <p>
-                  Skontovereinbarung: Bei Zahlung innerhalb von {invoice.skontoDays} Tagen gewähren wir {invoice.skontoPercent}% Skonto (Zahlbetrag: {euro(Math.round(invoice.totalCents * (1 - invoice.skontoPercent / 100)))}).
+                  {o("print.skontoAgreement", { days: invoice.skontoDays, percent: invoice.skontoPercent, amount: euro(Math.round(invoice.totalCents * (1 - invoice.skontoPercent / 100))) })}
                 </p>
               ) : null}
               {company?.iban && (
                 <p className="small">
-                  Bank: <strong>{company.bankName || "Geschäftskonto"}</strong><br />
+                  {o("print.bank")}: <strong>{company.bankName || o("print.bankFallback")}</strong><br />
                   IBAN: <strong>{company.iban}</strong> · BIC: <strong>{company.bic || "—"}</strong><br />
-                  Verwendungszweck: <strong>{doc.number}</strong>
+                  {o("print.reference")}: <strong>{doc.number}</strong>
                 </p>
               )}
             </div>
@@ -359,8 +359,8 @@ ${taxSubtotals}
         )}
 
         <footer className="print-foot">
-          {company?.taxNumber && <span>Steuernummer: {company.taxNumber}</span>}
-          {company?.vatId && <span>USt-IdNr.: {company.vatId}</span>}
+          {company?.taxNumber && <span>{o("print.taxNumber")}: {company.taxNumber}</span>}
+          {company?.vatId && <span>{o("clients.vatId")}: {company.vatId}</span>}
           {company?.iban && <span>IBAN: {company.iban}</span>}
           {company?.bic && <span>BIC: {company.bic}</span>}
         </footer>

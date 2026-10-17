@@ -24,7 +24,7 @@ import type {
   CraftProjectStatus,
   CraftTrade,
 } from "../../../shared/craft";
-import { currency as companyCurrency, currencySymbol } from "../../money";
+import { useCraftI18n } from "./i18n";
 
 interface ProjectsTabProps {
   isManager: boolean;
@@ -41,6 +41,7 @@ export function ProjectsTab({
   onSelectProjectForReport,
   isManager,
 }: ProjectsTabProps) {
+  const { t, money, symbol, day, tradeLabel, projectStatusLabel } = useCraftI18n();
   const [selectedStatus, setSelectedStatus] = useState<string>("alle");
   const [selectedTrade, setSelectedTrade] = useState<string>("alle");
   const [search, setSearch] = useState("");
@@ -52,8 +53,7 @@ export function ProjectsTab({
   });
   const [isBusy, setIsBusy] = useState(false);
 
-  const fmtEuro = (amount?: number) =>
-    new Intl.NumberFormat("de-DE", { style: "currency", currency: companyCurrency() }).format(amount || 0);
+  const fmtEuro = money;
 
   const trades: CraftTrade[] = [
     "Elektro",
@@ -119,7 +119,7 @@ export function ProjectsTab({
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Möchtest du diese Baustellenakte wirklich löschen? Zugehörige Aufmaße und Berichte werden ebenfalls gelöscht.")) {
+    if (!confirm(t("projects.confirmDelete"))) {
       return;
     }
     setIsBusy(true);
@@ -134,13 +134,7 @@ export function ProjectsTab({
   };
 
   const statusLabel = (status: CraftProjectStatus) =>
-    status === "abnahmebereit"
-      ? "Abnahmebereit"
-      : status === "in_arbeit"
-      ? "In Arbeit"
-      : status === "abgeschlossen"
-      ? "Abgeschlossen"
-      : "Geplant";
+    projectStatusLabel(status === "abnahmebereit" || status === "in_arbeit" || status === "abgeschlossen" ? status : "geplant");
 
   return (
     <div className="stack">
@@ -150,8 +144,8 @@ export function ProjectsTab({
             <Search size={18} />
             <input
               type="search"
-              placeholder="Suchen..."
-              aria-label="Suchen..."
+              placeholder={t("common.search")}
+              aria-label={t("common.search")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -159,26 +153,26 @@ export function ProjectsTab({
           <select
             value={selectedTrade}
             onChange={(e) => setSelectedTrade(e.target.value)}
-            aria-label="Gewerk"
+            aria-label={t("projects.tradeFilter")}
           >
-            <option value="alle">Alle Gewerke</option>
-            {trades.map((t) => (
-              <option key={t} value={t}>
-                {t}
+            <option value="alle">{t("projects.allTrades")}</option>
+            {trades.map((trade) => (
+              <option key={trade} value={trade}>
+                {tradeLabel(trade)}
               </option>
             ))}
           </select>
           <button onClick={handleOpenAdd} className="button primary">
-            <Plus size={18} /> Neue Baustelle
+            <Plus size={18} /> {t("projects.add")}
           </button>
         </div>
         <div className="chips" role="tablist">
           {[
-            { id: "alle", label: "Alle Baustellen" },
-            { id: "in_arbeit", label: "In Arbeit" },
-            { id: "abnahmebereit", label: "Abnahmebereit" },
-            { id: "geplant", label: "Geplant" },
-            { id: "abgeschlossen", label: "Abgeschlossen" },
+            { id: "alle", label: t("projects.allProjects") },
+            { id: "in_arbeit", label: t("projectStatus.in_arbeit") },
+            { id: "abnahmebereit", label: t("projectStatus.abnahmebereit") },
+            { id: "geplant", label: t("projectStatus.geplant") },
+            { id: "abgeschlossen", label: t("projectStatus.abgeschlossen") },
           ].map((s) => (
             <button
               key={s.id}
@@ -196,9 +190,9 @@ export function ProjectsTab({
       {filteredProjects.length === 0 ? (
         <section className="card craft-empty">
           <HardHat size={40} aria-hidden />
-          <strong>Keine Baustellenakten gefunden</strong>
+          <strong>{t("projects.emptyTitle")}</strong>
           <p className="muted small">
-            Erstelle eine neue Baustelle, um Aufmaße, Arbeitsberichte und Bautagebücher zuzuordnen.
+            {t("projects.emptyText")}
           </p>
         </section>
       ) : (
@@ -224,7 +218,7 @@ export function ProjectsTab({
                 <div className="craft-card-title">
                   <h3>{project.title}</h3>
                   <small className="muted">
-                    <strong>{project.trade}</strong> · Bauherr: {project.customerName}
+                    <strong>{tradeLabel(project.trade)}</strong> · {t("common.client", { name: project.customerName })}
                   </small>
                 </div>
 
@@ -235,7 +229,7 @@ export function ProjectsTab({
                     )}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    title="In Google Maps öffnen"
+                    title={t("projects.openMaps")}
                   >
                     <MapPin size={14} />
                     <span>
@@ -253,22 +247,22 @@ export function ProjectsTab({
                   <span className="muted">
                     <Calendar size={14} />
                     <span>
-                      Start: {new Date(project.startDate).toLocaleDateString("de-DE")}
+                      {t("projects.start", { date: day(project.startDate) })}
                       {project.targetDate && (
-                        <> · Bis: {new Date(project.targetDate).toLocaleDateString("de-DE")}</>
+                        <> · {t("projects.until", { date: day(project.targetDate) })}</>
                       )}
                     </span>
                   </span>
                 </div>
 
                 <div className="craft-card-foot">
-                  <strong className="craft-amount">Budget: {fmtEuro(project.budgetGross)}</strong>
+                  <strong className="craft-amount">{t("projects.budget", { amount: fmtEuro(project.budgetGross) })}</strong>
                   <div className="row">
                     <button
                       onClick={() => handleOpenEdit(project)}
                       className="icon-button"
-                      title="Bearbeiten"
-                      aria-label="Bearbeiten"
+                      title={t("common.edit")}
+                      aria-label={t("common.edit")}
                     >
                       <Pencil size={17} />
                     </button>
@@ -276,8 +270,8 @@ export function ProjectsTab({
                       <button
                         onClick={() => handleDelete(project.id)}
                         className="icon-button danger"
-                        title="Löschen"
-                        aria-label="Löschen"
+                        title={t("common.delete")}
+                        aria-label={t("common.delete")}
                       >
                         <Trash2 size={17} />
                       </button>
@@ -292,48 +286,48 @@ export function ProjectsTab({
 
       {isModalOpen && (
         <Dialog
-          title={editingProject.id ? "Baustellenakte bearbeiten" : "Neue Baustelle / Bauvorhaben anlegen"}
+          title={editingProject.id ? t("projects.editTitle") : t("projects.newTitle")}
           onClose={() => setIsModalOpen(false)}
           wide
         >
           <form onSubmit={handleSave} className="stack">
             <div className="grid form-grid">
-              <Field label="Bauvorhaben / Projekt-Titel" required hint="z.B. Sanierung Altbau 1. OG" wide>
+              <Field label={t("projects.fieldTitle")} required hint={t("projects.titleHint")} wide>
                 <input
                   type="text"
                   required
-                  placeholder="Sanierung Altbau 1. OG"
+                  placeholder={t("projects.titlePlaceholder")}
                   value={editingProject.title || ""}
                   onChange={(e) => setEditingProject({ ...editingProject, title: e.target.value })}
                 />
               </Field>
 
-              <Field label="Gewerk" required>
+              <Field label={t("projects.fieldTrade")} required>
                 <select
                   value={editingProject.trade || "Elektro"}
                   onChange={(e) => setEditingProject({ ...editingProject, trade: e.target.value as any })}
                 >
-                  {trades.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
+                  {trades.map((trade) => (
+                    <option key={trade} value={trade}>
+                      {tradeLabel(trade)}
                     </option>
                   ))}
                 </select>
               </Field>
 
-              <Field label="Status">
+              <Field label={t("projects.fieldStatus")}>
                 <select
                   value={editingProject.status || "in_arbeit"}
                   onChange={(e) => setEditingProject({ ...editingProject, status: e.target.value as any })}
                 >
-                  <option value="geplant">Geplant</option>
-                  <option value="in_arbeit">In Arbeit</option>
-                  <option value="abnahmebereit">Abnahmebereit</option>
-                  <option value="abgeschlossen">Abgeschlossen</option>
+                  <option value="geplant">{t("projectStatus.geplant")}</option>
+                  <option value="in_arbeit">{t("projectStatus.in_arbeit")}</option>
+                  <option value="abnahmebereit">{t("projectStatus.abnahmebereit")}</option>
+                  <option value="abgeschlossen">{t("projectStatus.abgeschlossen")}</option>
                 </select>
               </Field>
 
-              <Field label="Auftraggeber / Bauherr" required>
+              <Field label={t("projects.fieldCustomer")} required>
                 <input
                   type="text"
                   required
@@ -343,7 +337,7 @@ export function ProjectsTab({
                 />
               </Field>
 
-              <Field label="Telefon Bauherr">
+              <Field label={t("projects.fieldPhone")}>
                 <input
                   type="tel"
                   placeholder="+49 40 123456"
@@ -352,7 +346,7 @@ export function ProjectsTab({
                 />
               </Field>
 
-              <Field label="Baustellenadresse / Einsatzort" required>
+              <Field label={t("projects.fieldAddress")} required>
                 <input
                   type="text"
                   required
@@ -362,7 +356,7 @@ export function ProjectsTab({
                 />
               </Field>
 
-              <Field label="PLZ / Ort">
+              <Field label={t("projects.fieldCity")}>
                 <input
                   type="text"
                   placeholder="20359 Hamburg"
@@ -371,7 +365,7 @@ export function ProjectsTab({
                 />
               </Field>
 
-              <Field label="Montage-Start" required>
+              <Field label={t("projects.fieldStart")} required>
                 <input
                   type="date"
                   required
@@ -380,7 +374,7 @@ export function ProjectsTab({
                 />
               </Field>
 
-              <Field label="Zieltermin">
+              <Field label={t("projects.fieldTarget")}>
                 <input
                   type="date"
                   value={editingProject.targetDate || ""}
@@ -388,7 +382,7 @@ export function ProjectsTab({
                 />
               </Field>
 
-              <Field label={`Budget (${currencySymbol("de-DE")} brutto)`}>
+              <Field label={t("projects.fieldBudget", { currency: symbol() })}>
                 <input
                   type="number"
                   step="100"
@@ -399,10 +393,10 @@ export function ProjectsTab({
                 />
               </Field>
 
-              <Field label="Baustellennotizen & Ausführungsdetails" wide>
+              <Field label={t("projects.fieldNotes")} wide>
                 <textarea
                   rows={3}
-                  placeholder="Besonderheiten, Schlüsselübergabe, Zufahrtsregelung..."
+                  placeholder={t("projects.notesPlaceholder")}
                   value={editingProject.notes || ""}
                   onChange={(e) => setEditingProject({ ...editingProject, notes: e.target.value })}
                 />
@@ -411,10 +405,10 @@ export function ProjectsTab({
 
             <div className="row gap craft-dialog-actions">
               <button type="button" onClick={() => setIsModalOpen(false)} className="button">
-                Abbrechen
+                {t("common.cancel")}
               </button>
               <button type="submit" disabled={isBusy} className="button primary">
-                <Check size={18} /> Baustelle speichern
+                <Check size={18} /> {t("projects.save")}
               </button>
             </div>
           </form>

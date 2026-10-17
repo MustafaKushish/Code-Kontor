@@ -22,6 +22,7 @@ import type {
   FitnessStats,
 } from "../../../shared/fitness";
 import { navigate } from "../../router";
+import { useFitnessI18n } from "./i18n";
 
 interface CheckInTabProps {
   stats: FitnessStats;
@@ -36,6 +37,7 @@ export function CheckInTab({
   onOpenNewMemberModal,
   onSelectMember,
 }: CheckInTabProps) {
+  const { t, fitnessError, checkInMessage } = useFitnessI18n();
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [activeVisits, setActiveVisits] = useState<FitnessCheckIn[]>([]);
@@ -80,7 +82,7 @@ export function CheckInTab({
     } catch (err: unknown) {
       setFeedback({
         success: false,
-        message: err instanceof Error ? err.message : "Fehler bei der Check-In Abfrage",
+        message: err instanceof Error ? fitnessError(err) : t("checkin.failed"),
         alertLevel: "error",
       });
     } finally {
@@ -124,11 +126,11 @@ export function CheckInTab({
 
   const timeAgo = (isoString: string) => {
     const diffMin = Math.floor((Date.now() - new Date(isoString).getTime()) / 60000);
-    if (diffMin < 1) return "gerade eben";
-    if (diffMin < 60) return `vor ${diffMin} Min.`;
+    if (diffMin < 1) return t("checkin.justNow");
+    if (diffMin < 60) return t("checkin.minutesAgo", { m: diffMin });
     const hours = Math.floor(diffMin / 60);
     const mins = diffMin % 60;
-    return `vor ${hours} Std. ${mins} Min.`;
+    return t("checkin.hoursAgo", { h: hours, m: mins });
   };
 
   return (
@@ -138,13 +140,13 @@ export function CheckInTab({
         {/* Check-In Scan-Terminal (Große Touch- & Scanner-Fläche) */}
         <section className="card stack">
           <div className="section-head">
-            <h2 className="card-title"><Scan size={20} /> Theken-Check-In & Schnelleinlass</h2>
-            <span className="pill mono">Barcode / QR / RFID</span>
+            <h2 className="card-title"><Scan size={20} /> {t("checkin.title")}</h2>
+            <span className="pill mono">{t("checkin.scanTypes")}</span>
           </div>
 
           <p className="muted">
-            Halte den Mitgliedsausweis vor den Scanner oder tippe die Mitgliedsnummer (z. B.{" "}
-            <strong className="mono">M-1001</strong>), Namen oder Telefonnummer ein.
+            {t("checkin.introBefore")}{" "}
+            <strong className="mono">M-1001</strong>{t("checkin.introAfter")}
           </p>
 
           <form onSubmit={handleCheckIn} className="fitness-scan">
@@ -155,25 +157,25 @@ export function CheckInTab({
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Ausweis scannen oder Mitgliedsnummer eingeben..."
-                aria-label="Ausweis scannen oder Mitgliedsnummer eingeben..."
+                placeholder={t("checkin.placeholder")}
+                aria-label={t("checkin.placeholder")}
                 autoFocus
               />
               {query && (
-                <button type="button" onClick={() => setQuery("")} className="icon-button" aria-label="Eingabe leeren">
+                <button type="button" onClick={() => setQuery("")} className="icon-button" aria-label={t("checkin.clear")}>
                   ×
                 </button>
               )}
             </label>
             <button type="submit" disabled={loading || !query.trim()} className="button primary">
               {loading ? <RefreshCw size={18} className="spin" /> : <UserCheck size={18} />}
-              Einchecken
+              {t("checkin.submit")}
             </button>
           </form>
 
           {/* Schnelltasten für Test/Empfang */}
           <div className="row wrap gap fitness-quick">
-            <span className="small muted">Schnellwahl:</span>
+            <span className="small muted">{t("checkin.quick")}</span>
             {["M-1001", "M-1002", "M-1003", "M-1004", "M-1005", "M-1006"].map((num) => (
               <button
                 key={num}
@@ -206,12 +208,12 @@ export function CheckInTab({
               <div className="fitness-feedback-body">
                 <h3>
                   {feedback.alertLevel === "success"
-                    ? "Check-In Erfolgreich!"
+                    ? t("checkin.success")
                     : feedback.alertLevel === "warning"
-                    ? "Hinweis / Warnung"
-                    : "Zugang Verwehrt"}
+                    ? t("checkin.warning")
+                    : t("checkin.denied")}
                 </h3>
-                <p>{feedback.message}</p>
+                <p>{checkInMessage(feedback)}</p>
 
                 {feedback.member && (
                   <div className="row wrap gap small">
@@ -224,7 +226,7 @@ export function CheckInTab({
                     {feedback.member.remainingUnits !== undefined && (
                       <>
                         <span>·</span>
-                        <span className="pill">{feedback.member.remainingUnits} Einheiten verbleibend</span>
+                        <span className="pill">{t("common.unitsLeft", { n: feedback.member.remainingUnits })}</span>
                       </>
                     )}
                   </div>
@@ -233,7 +235,7 @@ export function CheckInTab({
 
               {feedback.member && (
                 <button onClick={() => onSelectMember(feedback.member!.id)} className="button small-button">
-                  Mitgliederakte
+                  {t("checkin.memberFile")}
                 </button>
               )}
             </div>
@@ -245,12 +247,12 @@ export function CheckInTab({
           {/* Live Auslastungskarte */}
           <section className="card stack-sm">
             <div className="section-head">
-              <span className="tile-label">Live Auslastung</span>
-              <span className="pill">Max. {stats.maxCapacity || 120} Personen</span>
+              <span className="tile-label">{t("checkin.liveOccupancy")}</span>
+              <span className="pill">{t("checkin.maxPeople", { n: stats.maxCapacity || 120 })}</span>
             </div>
             <div className="fitness-big">
               <strong>{stats.checkedInNowCount}</strong>
-              <span className="muted">anwesend ({occupancyPercent} %)</span>
+              <span className="muted">{t("checkin.present", { p: occupancyPercent })}</span>
             </div>
             {/* Auslastungs-Balken */}
             <div className="fitness-bar">
@@ -258,25 +260,25 @@ export function CheckInTab({
             </div>
             <p className="fitness-icon-line small muted">
               <Users size={14} />
-              <span>{stats.visitsTodayCount} Studiobesuche heute registriert</span>
+              <span>{t("checkin.visitsToday", { n: stats.visitsTodayCount })}</span>
             </p>
           </section>
 
           {/* Empfang Schnellzugriff: Kasse & Neuanmeldung */}
           <section className="card stack-sm fitness-service">
-            <span className="eyebrow"><Sparkles size={14} /> Thekenservice</span>
-            <h3>Thekenverkauf & Getränke</h3>
+            <span className="eyebrow"><Sparkles size={14} /> {t("checkin.serviceEyebrow")}</span>
+            <h3>{t("checkin.serviceTitle")}</h3>
             <p className="small muted">
-              Verkäufe von Proteindrinks, Riegeln oder Handtüchern direkt in die Kasse einbuchen.
+              {t("checkin.serviceText")}
             </p>
             <div className="fitness-two">
               <button onClick={() => navigate("/app/kasse")} className="button primary">
                 <ShoppingCart size={17} />
-                Kasse öffnen
+                {t("checkin.openPos")}
               </button>
               <button onClick={onOpenNewMemberModal} className="button">
                 <UserPlus size={17} />
-                Neues Mitglied
+                {t("common.newMember")}
               </button>
             </div>
           </section>
@@ -289,8 +291,8 @@ export function CheckInTab({
           <div className="row gap">
             <span className="stat-icon"><Users size={18} /></span>
             <div>
-              <h2>Aktuell im Studio ({activeVisits.length})</h2>
-              <small className="muted">Echtzeitliste aller anwesenden Mitglieder mit Aufenthaltsdauer</small>
+              <h2>{t("checkin.inStudio", { n: activeVisits.length })}</h2>
+              <small className="muted">{t("checkin.inStudioHint")}</small>
             </div>
           </div>
           <div className="row gap">
@@ -300,11 +302,11 @@ export function CheckInTab({
                 type="search"
                 value={activeFilter}
                 onChange={(e) => setActiveFilter(e.target.value)}
-                placeholder="In Anwesenden suchen..."
-                aria-label="In Anwesenden suchen..."
+                placeholder={t("checkin.searchPresent")}
+                aria-label={t("checkin.searchPresent")}
               />
             </label>
-            <button onClick={loadActiveVisits} className="icon-button" title="Liste aktualisieren" aria-label="Liste aktualisieren">
+            <button onClick={loadActiveVisits} className="icon-button" title={t("checkin.refreshList")} aria-label={t("checkin.refreshList")}>
               <RefreshCw size={18} />
             </button>
           </div>
@@ -313,8 +315,8 @@ export function CheckInTab({
         {filteredVisits.length === 0 ? (
           <p className="empty muted">
             {activeVisits.length === 0
-              ? "Derzeit sind keine Gäste im Studio eingecheckt."
-              : "Keine anwesenden Mitglieder zur Suchanfrage gefunden."}
+              ? t("checkin.emptyNone")
+              : t("checkin.emptySearch")}
           </p>
         ) : (
           filteredVisits.map((visit) => (
@@ -342,16 +344,16 @@ export function CheckInTab({
               </span>
               <span className="fitness-row-actions">
                 <button onClick={() => onSelectMember(visit.memberId)} className="button small-button">
-                  Details
+                  {t("common.details")}
                 </button>
                 <button
                   onClick={() => handleCheckOut(visit.id)}
                   disabled={checkingOutId === visit.id}
                   className="button small-button danger"
-                  title="Gast auschecken"
+                  title={t("checkin.checkOutTitle")}
                 >
                   {checkingOutId === visit.id ? <RefreshCw size={14} className="spin" /> : <LogOut size={14} />}
-                  Check-Out
+                  {t("checkin.checkOut")}
                 </button>
               </span>
             </div>

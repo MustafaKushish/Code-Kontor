@@ -10,7 +10,7 @@ import { useRetailI18n } from "./i18n";
 import "./retail.css";
 
 export default function RetailApp({ me, path }: { me: Me; path: string }) {
-  const { appText } = useRetailI18n();
+  const { appText, r } = useRetailI18n();
   const app = findApp("einzelhandel")!;
   const isManager = me.user.role === "owner" || me.user.role === "admin";
   const hasPos = me.installedApps.includes(POS_APP_ID);
@@ -18,8 +18,8 @@ export default function RetailApp({ me, path }: { me: Me; path: string }) {
   const [activeTab, setActiveTab] = useState<"products" | "orders">("products");
 
   const tabs = [
-    { id: "products" as const, label: "Artikel & Lagerbestand", icon: Package },
-    { id: "orders" as const, label: "Bestellungen & Wareneingang", icon: Truck },
+    { id: "products" as const, label: r("tabs.products"), icon: Package },
+    { id: "orders" as const, label: r("tabs.orders"), icon: Truck },
   ];
 
   return (
@@ -33,7 +33,7 @@ export default function RetailApp({ me, path }: { me: Me; path: string }) {
         {hasPos && (
           <div className="row gap push-end">
             <Link to="/kasse" className="button">
-              <ShoppingCart size={18} /> Zur Kasse wechseln
+              <ShoppingCart size={18} /> {r("app.toPos")}
             </Link>
           </div>
         )}

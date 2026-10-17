@@ -27,7 +27,7 @@ import type {
 import { Dialog } from "../../pos/ui";
 import { ModuleCheckout } from "../../pos/ModuleCheckout";
 import { RestaurantPrint } from "./RestaurantPrint";
-import { currency as companyCurrency } from "../../money";
+import { useRestaurantI18n } from "./i18n";
 
 interface CounterTabProps {
   menu: MenuItem[];
@@ -35,6 +35,7 @@ interface CounterTabProps {
 }
 
 export function CounterTab({ menu, onRefresh }: CounterTabProps) {
+  const { t, euro, category } = useRestaurantI18n();
   const [selectedCategory, setSelectedCategory] = useState<string>("alle");
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<OrderItem[]>([]);
@@ -46,8 +47,7 @@ export function CounterTab({ menu, onRefresh }: CounterTabProps) {
   const [completedOrder, setCompletedOrder] = useState<RestaurantOrder | null>(null);
   const [printType, setPrintType] = useState<"kitchen" | "bar" | "guest" | null>(null);
 
-  const fmtEuro = (amount: number) =>
-    new Intl.NumberFormat("de-DE", { style: "currency", currency: companyCurrency() }).format(amount);
+  const fmtEuro = euro;
 
   const categories = [
     "alle",
@@ -176,11 +176,11 @@ export function CounterTab({ menu, onRefresh }: CounterTabProps) {
           <div className="segmented restaurant-type">
             <button onClick={() => setOrderType("theke")} className={orderType === "theke" ? "active" : ""}>
               <Coffee size={17} aria-hidden />
-              Theke (Im Haus)
+              {t("counter.dineIn")}
             </button>
             <button onClick={() => setOrderType("abholung")} className={orderType === "abholung" ? "active" : ""}>
               <ShoppingBag size={17} aria-hidden />
-              Abholung / To-Go (7% MwSt)
+              {t("counter.takeaway")}
             </button>
           </div>
 
@@ -188,13 +188,13 @@ export function CounterTab({ menu, onRefresh }: CounterTabProps) {
             <Search size={18} />
             <input
               type="text"
-              placeholder="Artikel suchen..."
-              aria-label="Artikel suchen"
+              placeholder={t("common.searchItems")}
+              aria-label={t("common.searchItemsLabel")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
             {search && (
-              <button onClick={() => setSearch("")} className="icon-button restaurant-search-clear" aria-label="Suche leeren">
+              <button onClick={() => setSearch("")} className="icon-button restaurant-search-clear" aria-label={t("counter.clearSearch")}>
                 <X size={16} />
               </button>
             )}
@@ -205,7 +205,7 @@ export function CounterTab({ menu, onRefresh }: CounterTabProps) {
           <div className="stack-sm">
             <h3 className="restaurant-label">
               <Sparkles size={15} aria-hidden />
-              Schnellwahl & Bestseller
+              {t("counter.favorites")}
             </h3>
             <div className="restaurant-items favorites">
               {favorites.map((item) => (
@@ -230,7 +230,7 @@ export function CounterTab({ menu, onRefresh }: CounterTabProps) {
               onClick={() => setSelectedCategory(cat)}
               className={selectedCategory === cat ? "chip active" : "chip"}
             >
-              {cat === "alle" ? "Alle Kategorien" : cat}
+              {cat === "alle" ? t("common.allCategories") : category(cat)}
             </button>
           ))}
         </div>
@@ -241,12 +241,12 @@ export function CounterTab({ menu, onRefresh }: CounterTabProps) {
               <span className="restaurant-split">
                 <small className="muted restaurant-code">{item.itemNumber}</small>
                 <span className={`pill ${item.destination === "bar" ? "restaurant-pill-info" : "warn"}`}>
-                  {item.destination === "bar" ? "Bar" : "Küche"}
+                  {item.destination === "bar" ? t("common.bar") : t("common.kitchen")}
                 </span>
               </span>
               <strong>{item.name}</strong>
               <span className="restaurant-split restaurant-item-foot">
-                <small className="muted">{item.category}</small>
+                <small className="muted">{category(item.category)}</small>
                 <strong className="restaurant-amount">{fmtEuro(item.priceGross)}</strong>
               </span>
             </button>
@@ -259,16 +259,16 @@ export function CounterTab({ menu, onRefresh }: CounterTabProps) {
           <div className="restaurant-cart-title">
             <span className="stat-icon"><ShoppingCart size={18} /></span>
             <span className="list-main">
-              <h2>Kundenschalter-Bon</h2>
+              <h2>{t("counter.ticketTitle")}</h2>
               <small className="muted">
-                {orderType === "theke" ? "Thekenverkauf" : "Abholung / Takeaway"}
+                {orderType === "theke" ? t("counter.counterSale") : t("counter.takeawaySale")}
               </small>
             </span>
           </div>
           {cart.length > 0 && (
             <button onClick={clearCart} className="text-button restaurant-danger">
               <Trash2 size={15} />
-              Leeren
+              {t("counter.clear")}
             </button>
           )}
         </div>
@@ -277,15 +277,15 @@ export function CounterTab({ menu, onRefresh }: CounterTabProps) {
           <div className="grid form-grid restaurant-customer">
             <input
               type="text"
-              placeholder="Kundenname (optional)"
-              aria-label="Kundenname"
+              placeholder={t("counter.customerName")}
+              aria-label={t("counter.customerNameLabel")}
               value={customerName}
               onChange={(e) => setCustomerName(e.target.value)}
             />
             <input
               type="text"
-              placeholder="Telefon (optional)"
-              aria-label="Telefon"
+              placeholder={t("counter.phone")}
+              aria-label={t("counter.phoneLabel")}
               value={customerPhone}
               onChange={(e) => setCustomerPhone(e.target.value)}
             />
@@ -295,9 +295,9 @@ export function CounterTab({ menu, onRefresh }: CounterTabProps) {
         {cart.length === 0 ? (
           <div className="restaurant-empty">
             <UtensilsCrossed size={28} aria-hidden />
-            <strong>Noch keine Artikel im Schalter-Bon</strong>
+            <strong>{t("counter.emptyTitle")}</strong>
             <p className="muted small">
-              Klicke auf Gerichte oder Getränke links, um sie hinzuzufügen.
+              {t("counter.emptyHint")}
             </p>
           </div>
         ) : (
@@ -308,7 +308,7 @@ export function CounterTab({ menu, onRefresh }: CounterTabProps) {
                   <span className="list-main">
                     <strong>{item.name}</strong>
                     <small className="muted">
-                      {fmtEuro(item.unitPriceGross)} / Stk. · {item.taxRate}% MwSt
+                      {t("counter.perUnit", { price: fmtEuro(item.unitPriceGross), rate: item.taxRate })}
                     </small>
                   </span>
                   <strong className="restaurant-amount">{fmtEuro(item.unitPriceGross * item.quantity)}</strong>
@@ -317,18 +317,18 @@ export function CounterTab({ menu, onRefresh }: CounterTabProps) {
                 <div className="restaurant-split">
                   <input
                     type="text"
-                    placeholder="Sonderwunsch (z.B. ohne Eis)..."
-                    aria-label="Sonderwunsch"
+                    placeholder={t("counter.notePlaceholder")}
+                    aria-label={t("common.specialRequest")}
                     value={item.note || ""}
                     onChange={(e) => updateItemNote(idx, e.target.value)}
                     className="restaurant-note-input"
                   />
                   <div className="restaurant-qty">
-                    <button onClick={() => updateQuantity(idx, -1)} aria-label="Weniger">
+                    <button onClick={() => updateQuantity(idx, -1)} aria-label={t("counter.less")}>
                       <Minus size={15} />
                     </button>
                     <span>{item.quantity}</span>
-                    <button onClick={() => updateQuantity(idx, 1)} aria-label="Mehr">
+                    <button onClick={() => updateQuantity(idx, 1)} aria-label={t("counter.more")}>
                       <Plus size={15} />
                     </button>
                   </div>
@@ -340,23 +340,23 @@ export function CounterTab({ menu, onRefresh }: CounterTabProps) {
 
         <div className="repair-totals">
           <p className="muted">
-            <span>Nettobetrag</span>
+            <span>{t("counter.net")}</span>
             <span>{fmtEuro(totalNet)}</span>
           </p>
           {tax7 > 0 && (
             <p className="muted">
-              <span>MwSt. 7% (Speisen außer Haus)</span>
+              <span>{t("counter.tax7")}</span>
               <span>{fmtEuro(tax7)}</span>
             </p>
           )}
           {tax19 > 0 && (
             <p className="muted">
-              <span>MwSt. 19% (In-Haus / Getränke)</span>
+              <span>{t("counter.tax19")}</span>
               <span>{fmtEuro(tax19)}</span>
             </p>
           )}
           <p className="grand">
-            <span>Zu zahlen</span>
+            <span>{t("counter.due")}</span>
             <strong>{fmtEuro(totalGross)}</strong>
           </p>
         </div>
@@ -364,7 +364,7 @@ export function CounterTab({ menu, onRefresh }: CounterTabProps) {
         <div className="restaurant-actions">
           <button onClick={() => handleCheckout(true)} disabled={isBusy || cart.length === 0} className="button primary">
             <Banknote size={18} />
-            Bezahlen
+            {t("common.pay")}
           </button>
         </div>
 
@@ -375,43 +375,43 @@ export function CounterTab({ menu, onRefresh }: CounterTabProps) {
             className="button block restaurant-wrap"
           >
             <ShoppingBag size={18} />
-            An Küche senden (Zahlung bei Abholung)
+            {t("counter.sendToKitchen")}
           </button>
         )}
       </section>
 
       {completedOrder && (
-        <Dialog title="Bestellung erfolgreich!" onClose={() => setCompletedOrder(null)}>
+        <Dialog title={t("counter.successTitle")} onClose={() => setCompletedOrder(null)}>
           <div className="restaurant-dialog restaurant-success stack">
             <span className="restaurant-success-icon"><CheckCircle2 size={30} /></span>
             <p className="muted">
-              Bon-Nr. <strong className="restaurant-code">{completedOrder.orderNumber}</strong>
+              {t("counter.ticketNo")} <strong className="restaurant-code">{completedOrder.orderNumber}</strong>
             </p>
 
             {completedOrder.pickupNumber && (
               <div className="restaurant-pickup-number">
-                <small>Abholnummer für Gast</small>
+                <small>{t("counter.pickupNumber")}</small>
                 <strong>#{completedOrder.pickupNumber}</strong>
               </div>
             )}
 
             <p className="muted small">
-              Betrag: {fmtEuro(completedOrder.totalGross)} · {completedOrder.paymentStatus === "bezahlt" ? "Bezahlt" : "Offen"}
+              {t("counter.amount", { amount: fmtEuro(completedOrder.totalGross), status: completedOrder.paymentStatus === "bezahlt" ? t("common.paid") : t("common.open") })}
             </p>
 
             <div className="restaurant-actions">
               <button onClick={() => setPrintType("guest")} className="button">
                 <Printer size={17} />
-                Gastbeleg
+                {t("counter.guestReceipt")}
               </button>
               <button onClick={() => setPrintType("kitchen")} className="button">
                 <Printer size={17} />
-                Küchenbon
+                {t("common.kitchenTicket")}
               </button>
             </div>
 
             <button onClick={() => setCompletedOrder(null)} className="button primary block">
-              Nächster Kunde
+              {t("counter.nextCustomer")}
             </button>
           </div>
         </Dialog>

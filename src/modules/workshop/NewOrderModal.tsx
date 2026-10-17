@@ -4,6 +4,7 @@ import { api } from "../../api";
 import { Field } from "../../components";
 import { Dialog } from "../../pos/ui";
 import type { Vehicle, WorkshopOrder } from "../../../shared/workshop";
+import { useWorkshopI18n, LIFT_KEYS } from "./i18n";
 
 interface NewOrderModalProps {
   vehicles: Vehicle[];
@@ -12,6 +13,7 @@ interface NewOrderModalProps {
 }
 
 export function NewOrderModal({ vehicles, onClose, onCreated }: NewOrderModalProps) {
+  const { t, workshopError } = useWorkshopI18n();
   const [licensePlate, setLicensePlate] = useState("");
   const [vehicleInfo, setVehicleInfo] = useState("");
   const [vin, setVin] = useState("");
@@ -21,7 +23,7 @@ export function NewOrderModal({ vehicles, onClose, onCreated }: NewOrderModalPro
   const [customerEmail, setCustomerEmail] = useState("");
   const [issueDescription, setIssueDescription] = useState("");
   const [liftBay, setLiftBay] = useState<string>("Bühne 1");
-  const [mechanicName, setMechanicName] = useState("Meister");
+  const [mechanicName, setMechanicName] = useState(() => t("newOrder.defaultMechanic"));
 
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -44,7 +46,7 @@ export function NewOrderModal({ vehicles, onClose, onCreated }: NewOrderModalPro
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!licensePlate.trim() || !customerName.trim()) {
-      setErrorMsg("Bitte mindestens Kennzeichen und Kundenname angeben.");
+      setErrorMsg(t("newOrder.required"));
       return;
     }
 
@@ -56,55 +58,55 @@ export function NewOrderModal({ vehicles, onClose, onCreated }: NewOrderModalPro
         method: "POST",
         body: {
           licensePlate: licensePlate.trim().toUpperCase(),
-          vehicleInfo: vehicleInfo.trim() || "Fahrzeug",
+          vehicleInfo: vehicleInfo.trim() || t("newOrder.defaultVehicle"),
           vin: vin.trim(),
           mileage: Number(mileage) || 0,
           customerName: customerName.trim(),
           customerPhone: customerPhone.trim(),
           customerEmail: customerEmail.trim() || undefined,
-          issueDescription: issueDescription.trim() || "Allgemeine Wartung / Reparatur",
+          issueDescription: issueDescription.trim() || t("newOrder.defaultIssue"),
           liftBay,
           mechanicName,
         },
       });
       onCreated(created);
-    } catch (err: any) {
-      setErrorMsg(err.message || "Fehler beim Erstellen des Auftrags.");
+    } catch (err: unknown) {
+      setErrorMsg(workshopError(err, t("newOrder.createError")));
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <Dialog title="Neuer Werkstattauftrag" onClose={onClose} wide>
+    <Dialog title={t("newOrder.title")} onClose={onClose} wide>
       <form onSubmit={handleSubmit} className="stack workshop-dialog">
-        <p className="muted workshop-dialog-sub"><Wrench size={16} aria-hidden /> Dialogannahme & Erfassung des Fahrzeugs</p>
+        <p className="muted workshop-dialog-sub"><Wrench size={16} aria-hidden /> {t("newOrder.subtitle")}</p>
 
         {errorMsg && <p className="error" role="alert">{errorMsg}</p>}
 
         {/* Fahrzeugdaten */}
-        <h3 className="card-subtitle"><Car size={17} aria-hidden /> Fahrzeuginformationen</h3>
+        <h3 className="card-subtitle"><Car size={17} aria-hidden /> {t("newOrder.vehicleSection")}</h3>
         <div className="grid form-grid">
-          <Field label="Amtliches Kennzeichen *">
+          <Field label={t("common.plate")}>
             <input
               type="text"
               required
-              placeholder="z. B. HH-WM 2024"
+              placeholder={t("common.platePlaceholder")}
               value={licensePlate}
               onChange={(e) => handlePlateChange(e.target.value)}
               className="workshop-mono workshop-upper"
             />
           </Field>
-          <Field label="Fahrzeugmodell / Motor">
-            <input type="text" placeholder="z. B. VW Golf VII 2.0 TDI" value={vehicleInfo} onChange={(e) => setVehicleInfo(e.target.value)} />
+          <Field label={t("newOrder.model")}>
+            <input type="text" placeholder={t("newOrder.modelPlaceholder")} value={vehicleInfo} onChange={(e) => setVehicleInfo(e.target.value)} />
           </Field>
-          <Field label="Kilometerstand (km)">
+          <Field label={t("common.mileage")}>
             <input type="number" value={mileage} onChange={(e) => setMileage(Number(e.target.value))} className="workshop-mono" />
           </Field>
-          <Field label="Fahrgestellnummer (FIN / VIN)">
+          <Field label={t("common.vin")}>
             <input
               type="text"
-              placeholder="17-stellig (optional)"
+              placeholder={t("common.vinPlaceholder")}
               value={vin}
               onChange={(e) => setVin(e.target.value.toUpperCase())}
               className="workshop-mono workshop-upper"
@@ -113,41 +115,40 @@ export function NewOrderModal({ vehicles, onClose, onCreated }: NewOrderModalPro
         </div>
 
         {/* Kundendaten */}
-        <h3 className="card-subtitle"><User size={17} aria-hidden /> Kunde & Erreichbarkeit</h3>
+        <h3 className="card-subtitle"><User size={17} aria-hidden /> {t("newOrder.customerSection")}</h3>
         <div className="grid form-grid">
-          <Field label="Kundenname *">
-            <input type="text" required placeholder="Vorname Nachname" value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
+          <Field label={t("common.customerNameRequired")}>
+            <input type="text" required placeholder={t("newOrder.namePlaceholder")} value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
           </Field>
-          <Field label="Telefon / Mobilfunk *">
-            <input type="tel" required placeholder="+49 171 ..." value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} />
+          <Field label={t("newOrder.phone")}>
+            <input type="tel" required placeholder={t("newOrder.phonePlaceholder")} value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} />
           </Field>
-          <Field label="E-Mail für Status-Link" wide>
-            <input type="email" placeholder="kunde@beispiel.de" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} />
+          <Field label={t("newOrder.email")} wide>
+            <input type="email" placeholder={t("newOrder.emailPlaceholder")} value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} />
           </Field>
         </div>
 
         {/* Werkstattzuweisung */}
         <div className="grid form-grid">
-          <Field label="Hebebühne / Arbeitsplatz">
+          <Field label={t("newOrder.lift")}>
             <select value={liftBay} onChange={(e) => setLiftBay(e.target.value)}>
-              <option value="Bühne 1">Bühne 1 (2-Säulen)</option>
-              <option value="Bühne 2">Bühne 2 (Scherenbühne)</option>
-              <option value="Bühne 3">Bühne 3 (4-Säulen)</option>
-              <option value="Bühne 4 (Achsmessung)">Bühne 4 (Achsmessung)</option>
-              <option value="Prüfstraße">Prüfstraße (Bremsen/Licht)</option>
-              <option value="Hof / Parkplatz">Hof / Parkplatz</option>
+              {(Object.keys(LIFT_KEYS) as (keyof typeof LIFT_KEYS)[]).map((value) => (
+                <option key={value} value={value}>
+                  {t(`lifts.${LIFT_KEYS[value]}.option`)}
+                </option>
+              ))}
             </select>
           </Field>
-          <Field label="Zuständiger Mechaniker / Berater">
+          <Field label={t("newOrder.mechanic")}>
             <input type="text" value={mechanicName} onChange={(e) => setMechanicName(e.target.value)} />
           </Field>
 
           {/* Beanstandung */}
-          <Field label="Kundenbeanstandung / Gewünschte Arbeiten *" wide>
+          <Field label={t("newOrder.issue")} wide>
             <textarea
               required
               rows={3}
-              placeholder="z. B. Inspektion nach Herstellervorgabe, Bremsbeläge prüfen, Schleifgeräusch vorn rechts..."
+              placeholder={t("newOrder.issuePlaceholder")}
               value={issueDescription}
               onChange={(e) => setIssueDescription(e.target.value)}
             />
@@ -156,11 +157,11 @@ export function NewOrderModal({ vehicles, onClose, onCreated }: NewOrderModalPro
 
         <div className="row gap workshop-dialog-actions">
           <button type="button" onClick={onClose} className="button">
-            Abbrechen
+            {t("common.cancel")}
           </button>
           <button type="submit" disabled={saving} className="button primary">
             <Check size={18} />
-            {saving ? "Wird angelegt..." : "Auftrag annehmen & anlegen"}
+            {saving ? t("newOrder.submitting") : t("newOrder.submit")}
           </button>
         </div>
       </form>

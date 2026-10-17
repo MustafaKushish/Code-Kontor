@@ -25,7 +25,7 @@ import type {
   FitnessPlan,
   MemberStatus,
 } from "../../../shared/fitness";
-import { currency as companyCurrency } from "../../money";
+import { useFitnessI18n } from "./i18n";
 
 interface MembersTabProps {
   plans: FitnessPlan[];
@@ -48,6 +48,7 @@ export function MembersTab({
   onRefreshStats,
   isManager,
 }: MembersTabProps) {
+  const { t, money, day, dateTime, statusLabel } = useFitnessI18n();
   const [members, setMembers] = useState<FitnessMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -73,8 +74,7 @@ export function MembersTab({
   });
   const [savingNew, setSavingNew] = useState(false);
 
-  const fmtEuro = (amount: number) =>
-    new Intl.NumberFormat("de-DE", { style: "currency", currency: companyCurrency() }).format(amount);
+  const fmtEuro = money;
 
   const loadMembers = async () => {
     setLoading(true);
@@ -195,7 +195,7 @@ export function MembersTab({
   };
 
   const handleDeleteMember = async (id: string) => {
-    if (!confirm("Mitglied wirklich unwiderruflich aus der Kartei löschen?")) return;
+    if (!confirm(t("members.confirmDelete"))) return;
     try {
       await api(`/fitness/members/${id}`, { method: "DELETE" });
       setDetailedMember(null);
@@ -213,28 +213,28 @@ export function MembersTab({
         return (
           <span className="pill pos">
             <CheckCircle2 size={13} />
-            Aktiv
+            {t("status.aktiv")}
           </span>
         );
       case "pausiert":
         return (
           <span className="pill warn">
             <Clock size={13} />
-            Pausiert
+            {t("status.pausiert")}
           </span>
         );
       case "gesperrt":
         return (
           <span className="pill neg">
             <ShieldAlert size={13} />
-            Gesperrt
+            {t("status.gesperrt")}
           </span>
         );
       case "gekuendigt":
         return (
           <span className="pill">
             <XCircle size={13} />
-            Gekündigt
+            {t("status.gekuendigt")}
           </span>
         );
     }
@@ -256,13 +256,13 @@ export function MembersTab({
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Nach Name, Mitgliedsnummer, E-Mail suchen..."
-              aria-label="Nach Name, Mitgliedsnummer, E-Mail suchen..."
+              placeholder={t("members.search")}
+              aria-label={t("members.search")}
             />
           </label>
           <button onClick={() => setIsNewMemberOpen(true)} className="button primary">
             <UserPlus size={18} />
-            Neues Mitglied
+            {t("common.newMember")}
           </button>
         </div>
 
@@ -276,7 +276,7 @@ export function MembersTab({
               onClick={() => setStatusFilter(st)}
               className={`chip cap ${statusFilter === st ? "active" : ""}`}
             >
-              {st === "alle" ? "Alle" : st}
+              {st === "alle" ? t("status.all") : statusLabel(st)}
             </button>
           ))}
         </div>
@@ -285,9 +285,9 @@ export function MembersTab({
       {/* Mitgliederliste */}
       <section className="card list-card">
         {loading ? (
-          <p className="empty muted">Mitglieder werden geladen...</p>
+          <p className="empty muted">{t("members.loading")}</p>
         ) : members.length === 0 ? (
-          <p className="empty muted">Keine Mitglieder zur Auswahl gefunden.</p>
+          <p className="empty muted">{t("members.empty")}</p>
         ) : (
           members.map((m) => (
             <div key={m.id} onClick={() => loadMemberDetails(m.id)} className="list-row fitness-member-row">
@@ -300,21 +300,21 @@ export function MembersTab({
                   {m.firstName} {m.lastName}
                 </strong>
                 <small className="muted">
-                  <span className="mono">{m.memberNumber}</span> · {m.email || m.phone || "Keine Kontaktdaten"}
+                  <span className="mono">{m.memberNumber}</span> · {m.email || m.phone || t("members.noContact")}
                 </small>
               </span>
               <span className="fitness-member-plan">
                 <strong>{m.planName}</strong>
                 <small className="muted">
                   {m.remainingUnits !== undefined
-                    ? `${m.remainingUnits} Einheiten verbleibend`
-                    : `${fmtEuro(m.monthlyFee)} / Monat`}
+                    ? t("common.unitsLeft", { n: m.remainingUnits })
+                    : t("common.perMonth", { amount: fmtEuro(m.monthlyFee) })}
                 </small>
               </span>
               <span className="fitness-row-meta">
                 {getStatusBadge(m.status)}
                 <small className="muted">
-                  {m.checkInsCount} Check-Ins · {m.joinDate}
+                  {t("members.checkIns", { n: m.checkInsCount, date: day(m.joinDate) })}
                 </small>
               </span>
               <button
@@ -323,8 +323,8 @@ export function MembersTab({
                   loadMemberDetails(m.id);
                 }}
                 className="icon-button"
-                title="Akte öffnen"
-                aria-label="Akte öffnen"
+                title={t("members.openFile")}
+                aria-label={t("members.openFile")}
               >
                 <ChevronRight size={18} className="flip-rtl" />
               </button>
@@ -345,13 +345,13 @@ export function MembersTab({
               </span>
               <div>
                 {getStatusBadge(detailedMember.status)}
-                <small className="muted mono">Mitgliedsnummer: {detailedMember.memberNumber}</small>
+                <small className="muted mono">{t("members.memberNumber", { n: detailedMember.memberNumber })}</small>
               </div>
             </div>
 
             {/* Status Schnellwechsler */}
             <div className="stack-sm">
-              <h3>Status anpassen:</h3>
+              <h3>{t("members.changeStatus")}</h3>
               <div className="segmented">
                 {(["aktiv", "pausiert", "gesperrt", "gekuendigt"] as MemberStatus[]).map((st) => (
                   <button
@@ -360,7 +360,7 @@ export function MembersTab({
                     onClick={() => handleStatusChange(detailedMember.id, st)}
                     className={`cap ${detailedMember.status === st ? "active" : ""}`}
                   >
-                    {st}
+                    {statusLabel(st)}
                   </button>
                 ))}
               </div>
@@ -368,25 +368,25 @@ export function MembersTab({
 
             {/* Vertrag & Tarif */}
             <div className="stack-sm">
-              <h3>Tarif & Mitgliedschaft</h3>
+              <h3>{t("members.planSection")}</h3>
               <div className="fitness-panel">
                 <dl className="facts">
-                  <dt>Tarifmodell:</dt>
+                  <dt>{t("members.planModel")}</dt>
                   <dd>{detailedMember.planName}</dd>
-                  <dt>Monatlicher Beitrag:</dt>
+                  <dt>{t("members.monthlyFee")}</dt>
                   <dd>{fmtEuro(detailedMember.monthlyFee)}</dd>
-                  <dt>Mitglied seit:</dt>
-                  <dd>{detailedMember.joinDate}</dd>
-                  <dt>Laufzeit bis:</dt>
-                  <dd>{detailedMember.validUntil || "Unbefristet"}</dd>
-                  <dt>Gesamte Check-Ins:</dt>
-                  <dd>{detailedMember.checkInsCount} Besuche</dd>
+                  <dt>{t("members.memberSince")}</dt>
+                  <dd>{day(detailedMember.joinDate)}</dd>
+                  <dt>{t("members.validUntil")}</dt>
+                  <dd>{detailedMember.validUntil ? day(detailedMember.validUntil) : t("common.unlimited")}</dd>
+                  <dt>{t("members.totalCheckIns")}</dt>
+                  <dd>{t("members.visits", { n: detailedMember.checkInsCount })}</dd>
                 </dl>
 
                 {/* 10er-Karte Steuerung */}
                 {detailedMember.remainingUnits !== undefined && (
                   <div className="fitness-units">
-                    <span>Restguthaben 10er-Karte:</span>
+                    <span>{t("members.passBalance")}</span>
                     <span className="row gap">
                       <button type="button" onClick={() => handleAdjustUnits(-1)} className="icon-button" aria-label="−1">
                         <Minus size={16} />
@@ -403,7 +403,7 @@ export function MembersTab({
 
             {/* Kontaktdaten */}
             <div className="stack-sm">
-              <h3>Kontaktdaten & Notiz</h3>
+              <h3>{t("members.contactSection")}</h3>
               <div className="fitness-panel">
                 <p className="fitness-icon-line">
                   <Mail size={16} />
@@ -415,34 +415,34 @@ export function MembersTab({
                 </p>
                 <p className="fitness-icon-line">
                   <Calendar size={16} />
-                  <span>Geburtsdatum: {detailedMember.birthDate || "–"}</span>
+                  <span>{t("members.birthDate", { date: detailedMember.birthDate ? day(detailedMember.birthDate) : "–" })}</span>
                 </p>
                 {detailedMember.emergencyContact && (
                   <p className="fitness-note">
-                    <strong>Notfallkontakt: </strong>
+                    <strong>{t("members.emergency")} </strong>
                     {detailedMember.emergencyContact}
                   </p>
                 )}
-                {detailedMember.notes && <p className="fitness-note quote">„{detailedMember.notes}“</p>}
+                {detailedMember.notes && <p className="fitness-note quote">{t("members.noteQuote", { note: detailedMember.notes })}</p>}
               </div>
             </div>
 
             {/* Letzte Check-In Historie */}
             <div className="stack-sm">
-              <h3>Letzte Check-Ins</h3>
+              <h3>{t("members.lastCheckIns")}</h3>
               {historyLoading ? (
-                <p className="small muted">Verlauf wird geladen...</p>
+                <p className="small muted">{t("members.historyLoading")}</p>
               ) : memberHistory.length === 0 ? (
-                <p className="small muted">Noch keine Besuche erfasst.</p>
+                <p className="small muted">{t("members.historyEmpty")}</p>
               ) : (
                 <div className="fitness-scroll">
                   {memberHistory.map((h) => (
                     <div key={h.id} className="list-row">
                       <span className="fitness-icon-line list-main">
                         <CheckCircle2 size={15} className="pos" />
-                        <span>{new Date(h.checkedInAt).toLocaleString("de-DE")}</span>
+                        <span>{dateTime(h.checkedInAt)}</span>
                       </span>
-                      <small className="muted">{h.status === "anwesend" ? "Gerade anwesend" : "Abgeschlossen"}</small>
+                      <small className="muted">{h.status === "anwesend" ? t("members.present") : t("members.finished")}</small>
                     </div>
                   ))}
                 </div>
@@ -460,7 +460,7 @@ export function MembersTab({
                 className="button"
               >
                 <Printer size={17} />
-                Vertrag drucken
+                {t("members.printContract")}
               </button>
               <button
                 type="button"
@@ -471,13 +471,13 @@ export function MembersTab({
                 className="button"
               >
                 <CreditCard size={17} />
-                Ausweis drucken
+                {t("members.printCard")}
               </button>
             </div>
             {isManager && (
               <button type="button" onClick={() => handleDeleteMember(detailedMember.id)} className="button danger block">
                 <Trash2 size={16} />
-                Mitglied löschen
+                {t("members.delete")}
               </button>
             )}
           </div>
@@ -486,63 +486,63 @@ export function MembersTab({
 
       {/* --- NEUES MITGLIED DIALOG --- */}
       {isNewMemberOpen && (
-        <Dialog title="Neues Mitglied aufnehmen" onClose={() => setIsNewMemberOpen(false)} wide>
+        <Dialog title={t("members.newTitle")} onClose={() => setIsNewMemberOpen(false)} wide>
           <form onSubmit={handleCreateMember} className="fitness-dialog">
             <div className="grid form-grid">
-              <Field label="Vorname" required>
+              <Field label={t("members.firstName")} required>
                 <input
                   type="text"
                   required
                   value={newMemberForm.firstName}
                   onChange={(e) => setNewMemberForm({ ...newMemberForm, firstName: e.target.value })}
-                  placeholder="Max"
+                  placeholder={t("members.phFirstName")}
                 />
               </Field>
-              <Field label="Nachname" required>
+              <Field label={t("members.lastName")} required>
                 <input
                   type="text"
                   required
                   value={newMemberForm.lastName}
                   onChange={(e) => setNewMemberForm({ ...newMemberForm, lastName: e.target.value })}
-                  placeholder="Mustermann"
+                  placeholder={t("members.phLastName")}
                 />
               </Field>
-              <Field label="E-Mail">
+              <Field label={t("members.email")}>
                 <input
                   type="email"
                   value={newMemberForm.email}
                   onChange={(e) => setNewMemberForm({ ...newMemberForm, email: e.target.value })}
-                  placeholder="max@beispiel.de"
+                  placeholder={t("members.phEmail")}
                 />
               </Field>
-              <Field label="Mobiltelefon">
+              <Field label={t("members.mobile")}>
                 <input
                   type="tel"
                   value={newMemberForm.phone}
                   onChange={(e) => setNewMemberForm({ ...newMemberForm, phone: e.target.value })}
-                  placeholder="+49 171 1234567"
+                  placeholder={t("members.phPhone")}
                 />
               </Field>
-              <Field label="Tarif wählen" required wide>
+              <Field label={t("members.choosePlan")} required wide>
                 <select
                   value={newMemberForm.planId}
                   onChange={(e) => setNewMemberForm({ ...newMemberForm, planId: e.target.value })}
                 >
                   {plans.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.name} ({p.isPass10 ? "10er-Karte" : `${fmtEuro(p.priceMonthly)} / Mon.`})
+                      {p.name} ({p.isPass10 ? t("common.pass10") : t("common.perMonthShort", { amount: fmtEuro(p.priceMonthly) })})
                     </option>
                   ))}
                 </select>
               </Field>
-              <Field label="Geburtsdatum">
+              <Field label={t("members.birthDateLabel")}>
                 <input
                   type="date"
                   value={newMemberForm.birthDate}
                   onChange={(e) => setNewMemberForm({ ...newMemberForm, birthDate: e.target.value })}
                 />
               </Field>
-              <Field label="IBAN für SEPA">
+              <Field label={t("members.iban")}>
                 <input
                   type="text"
                   value={newMemberForm.iban}
@@ -551,30 +551,30 @@ export function MembersTab({
                   className="mono"
                 />
               </Field>
-              <Field label="Notfallkontakt" wide>
+              <Field label={t("members.emergencyLabel")} wide>
                 <input
                   type="text"
                   value={newMemberForm.emergencyContact}
                   onChange={(e) => setNewMemberForm({ ...newMemberForm, emergencyContact: e.target.value })}
-                  placeholder="z. B. Partner/in: +49 170 ..."
+                  placeholder={t("members.phEmergency")}
                 />
               </Field>
-              <Field label="Notiz / Besonderheit" wide>
+              <Field label={t("members.notes")} wide>
                 <textarea
                   rows={2}
                   value={newMemberForm.notes}
                   onChange={(e) => setNewMemberForm({ ...newMemberForm, notes: e.target.value })}
-                  placeholder="Besonderheiten, Trainingsziele, ärztliche Freigabe..."
+                  placeholder={t("members.phNotes")}
                 />
               </Field>
             </div>
 
             <div className="actions-end">
               <button type="button" onClick={() => setIsNewMemberOpen(false)} className="button">
-                Abbrechen
+                {t("common.cancel")}
               </button>
               <button type="submit" disabled={savingNew} className="button primary">
-                {savingNew ? "Wird gespeichert..." : "Mitglied anlegen"}
+                {savingNew ? t("common.saving") : t("members.create")}
               </button>
             </div>
           </form>

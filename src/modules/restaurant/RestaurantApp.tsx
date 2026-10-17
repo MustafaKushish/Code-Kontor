@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { api, type Me } from "../../api";
 import { AppIcon } from "../../components";
-import { useI18n } from "../../i18n";
+import { useRestaurantI18n } from "./i18n";
 import { findApp } from "../../../shared/apps";
 import type {
   MenuItem,
@@ -29,11 +29,10 @@ import { PickupTab } from "./PickupTab";
 import { KitchenTab } from "./KitchenTab";
 import { MenuTab } from "./MenuTab";
 import "./restaurant.css";
-import { currency as companyCurrency } from "../../money";
 
 export default function RestaurantApp({ me, path }: { me: Me; path: string }) {
   const isManager = me.user.role !== "staff";
-  const { appText } = useI18n();
+  const { appText, t, euro } = useRestaurantI18n();
   const app = findApp("restaurant")!;
   const [activeTab, setActiveTab] = useState<"tische" | "theke" | "abholung" | "kueche" | "speisekarte">("tische");
   const [stats, setStats] = useState<RestaurantStats>({
@@ -51,8 +50,7 @@ export default function RestaurantApp({ me, path }: { me: Me; path: string }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const fmtEuro = (amount: number) =>
-    new Intl.NumberFormat("de-DE", { style: "currency", currency: companyCurrency() }).format(amount);
+  const fmtEuro = euro;
 
   const loadData = useCallback(async (silent = false) => {
     if (!silent) setRefreshing(true);
@@ -83,19 +81,19 @@ export default function RestaurantApp({ me, path }: { me: Me; path: string }) {
   }, [loadData]);
 
   const tabs = [
-    { id: "tische" as const, label: "Tischplan", icon: LayoutGrid, count: stats.openTablesCount },
-    { id: "theke" as const, label: "Kundenschalter (Theke)", icon: ShoppingCart, count: 0 },
-    { id: "abholung" as const, label: "Abholschalter", icon: ShoppingBag, count: stats.waitingPickupCount },
-    { id: "kueche" as const, label: "Küchenmonitor (KDS)", icon: Flame, count: stats.activeKitchenTicketsCount },
+    { id: "tische" as const, label: t("tabs.tables"), icon: LayoutGrid, count: stats.openTablesCount },
+    { id: "theke" as const, label: t("tabs.counter"), icon: ShoppingCart, count: 0 },
+    { id: "abholung" as const, label: t("tabs.pickup"), icon: ShoppingBag, count: stats.waitingPickupCount },
+    { id: "kueche" as const, label: t("tabs.kitchen"), icon: Flame, count: stats.activeKitchenTicketsCount },
     // Speisekarte und Preise pflegen nur Inhaber und Admins (prüft auch der Server)
-    ...(isManager ? [{ id: "speisekarte" as const, label: "Speisekarte & Preise", icon: BookOpen, count: 0 }] : []),
+    ...(isManager ? [{ id: "speisekarte" as const, label: t("tabs.menu"), icon: BookOpen, count: 0 }] : []),
   ];
 
   if (loading) {
     return (
       <div className="restaurant restaurant-loading">
         <UtensilsCrossed size={36} aria-hidden />
-        <p className="muted">Restaurant & Café wird geladen...</p>
+        <p className="muted">{t("app.loading")}</p>
       </div>
     );
   }
@@ -114,16 +112,16 @@ export default function RestaurantApp({ me, path }: { me: Me; path: string }) {
             target="_blank"
             rel="noopener noreferrer"
             className="button"
-            title="Öffentlichen Großbildschirm für den Wartebereich öffnen"
+            title={t("app.openDisplayTitle")}
           >
-            <Tv size={18} /> Abhol-Display <ExternalLink size={14} aria-hidden />
+            <Tv size={18} /> {t("app.openDisplay")} <ExternalLink size={14} aria-hidden />
           </a>
           <button
             onClick={() => loadData()}
             disabled={refreshing}
             className={`icon-button ${refreshing ? "spinning" : ""}`}
-            title="Daten neu laden"
-            aria-label="Daten neu laden"
+            title={t("app.reload")}
+            aria-label={t("app.reload")}
           >
             <RefreshCw size={18} />
           </button>
@@ -142,28 +140,28 @@ export default function RestaurantApp({ me, path }: { me: Me; path: string }) {
       <div className="restaurant-stats">
         <div className="tile stat-tile">
           <span className="stat-icon"><Users size={18} /></span>
-          <strong>{stats.openTablesCount} <span className="stat-unit">/ {stats.totalTablesCount} Tische</span></strong>
-          <small>Tischbelegung</small>
+          <strong>{stats.openTablesCount} <span className="stat-unit">{t("stats.tablesUnit", { total: stats.totalTablesCount })}</span></strong>
+          <small>{t("stats.tablesLabel")}</small>
         </div>
         <div className="tile stat-tile">
           <span className="stat-icon warn"><Flame size={18} /></span>
-          <strong>{stats.activeKitchenTicketsCount} <span className="stat-unit">in Arbeit</span></strong>
-          <small>Küchenbons (KDS)</small>
+          <strong>{stats.activeKitchenTicketsCount} <span className="stat-unit">{t("stats.inProgress")}</span></strong>
+          <small>{t("stats.kitchenLabel")}</small>
         </div>
         <div className="tile stat-tile">
           <span className="stat-icon"><ShoppingBag size={18} /></span>
-          <strong>{stats.waitingPickupCount} <span className="stat-unit">bereit</span></strong>
-          <small>Abholschalter</small>
+          <strong>{stats.waitingPickupCount} <span className="stat-unit">{t("stats.ready")}</span></strong>
+          <small>{t("stats.pickupLabel")}</small>
         </div>
         <div className="tile stat-tile">
           <span className="stat-icon"><Clock size={18} /></span>
-          <strong>{stats.averagePrepTimeMinutes} <span className="stat-unit">Minuten</span></strong>
-          <small>Ø Zubereitung</small>
+          <strong>{stats.averagePrepTimeMinutes} <span className="stat-unit">{t("stats.minutes")}</span></strong>
+          <small>{t("stats.prepLabel")}</small>
         </div>
         <div className="tile stat-tile restaurant-stat-wide">
           <span className="stat-icon ok"><TrendingUp size={18} /></span>
           <strong>{fmtEuro(stats.revenueTodayGross)}</strong>
-          <small>Umsatz heute</small>
+          <small>{t("stats.revenueLabel")}</small>
         </div>
       </div>
 

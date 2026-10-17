@@ -1,273 +1,86 @@
-import { formatMoney } from "../../money";
+import { Fragment, createElement, type ReactNode } from "react";
+import { currencySymbol, formatMoney } from "../../money";
 import { ApiError } from "../../api";
-import { useI18n } from "../../i18n";
+import { createModuleI18n, type Loaders } from "../moduleI18n";
+import { de, type OfficeDict } from "./lang/de";
 
-export const officeDictDe = {
-  title: "Büro & Dienstleister",
-  tagline: "Projekte, Zeiterfassung, Auslagen, Angebote, Rechnungen & Mahnwesen",
-  tabs: {
-    projects: "Projekte",
-    time: "Zeiten & Timer",
-    expenses: "Auslagen & Spesen",
-    quotes: "Angebote",
-    invoices: "Rechnungen & Mahnungen",
-    clients: "Kundenkartei",
-    settings: "Einstellungen",
-  },
-  projects: {
-    title: "Projekte",
-    newProject: "Neues Projekt",
-    noProjects: "Noch keine Projekte angelegt.",
-    budget: "Budget",
-    budgetSpent: "Verbraucht",
-    hourlyRate: "Stundensatz",
-    loggedHours: "Erfasste Stunden",
-    tasksCount: "Aufgaben",
-    milestones: "Meilensteine & Aufgaben",
-    status: {
-      planned: "Geplant",
-      active: "Aktiv",
-      completed: "Abgeschlossen",
-      paused: "Pausiert",
-      canceled: "Abgebrochen",
-    },
-    fields: {
-      name: "Projektname",
-      client: "Kunde",
-      status: "Status",
-      budget: "Budget (€)",
-      hourlyRate: "Stundensatz (€/Std)",
-      startDate: "Startdatum",
-      dueDate: "Zieldatum",
-      description: "Beschreibung",
-    },
-  },
-  tasks: {
-    title: "Aufgaben & Meilensteine",
-    newTask: "Aufgabe hinzufügen",
-    noTasks: "Keine Aufgaben für dieses Projekt vorhanden.",
-    estimatedHours: "Geschätzte Stunden",
-    completed: "Erledigt",
-    open: "Offen",
-    assignee: "Verantwortlich",
-    dueDate: "Fällig am",
-  },
-  time: {
-    title: "Projekt-Zeiterfassung",
-    logTime: "Zeit erfassen",
-    minutes: "Minuten",
-    hours: "Stunden",
-    duration: "Dauer",
-    billable: "Abrechenbar",
-    billed: "Abgerechnet",
-    unbilled: "Offen zur Abrechnung",
-    noEntries: "Keine Zeiten erfasst.",
-    timerStart: "Timer starten",
-    timerStop: "Timer stoppen",
-    timesheet: "Leistungsnachweis drucken",
-    role: "Tätigkeit / Rolle",
-    task: "Zugehörige Aufgabe",
-    fields: {
-      project: "Projekt auswählen",
-      date: "Datum",
-      duration: "Dauer (z.B. 1.5 oder 90m)",
-      hourlyRate: "Stundensatz (€)",
-      description: "Tätigkeitsbeschreibung",
-    },
-  },
-  expenses: {
-    title: "Auslagen & Reisekosten",
-    newExpense: "Auslage erfassen",
-    noExpenses: "Keine Auslagen vorhanden.",
-    markup: "Aufschlag (%)",
-    billableNotice: "An Kunden weiterberechnen",
-    categories: {
-      travel: "Reisekosten & Fahrt",
-      subcontractor: "Fremdleistung / Subunternehmer",
-      software: "Software & Lizenzen",
-      material: "Material & Muster",
-      other: "Sonstige Auslagen",
-    },
-  },
-  quotes: {
-    title: "Angebote",
-    newQuote: "Angebot erstellen",
-    noQuotes: "Keine Angebote vorhanden.",
-    validUntil: "Gültig bis",
-    convertToInvoice: "In Rechnung umwandeln",
-    discount: "Rabatt (%)",
-    status: {
-      draft: "Entwurf",
-      sent: "Versendet",
-      accepted: "Angenommen",
-      rejected: "Abgelehnt",
-      expired: "Abgelaufen",
-    },
-  },
-  invoices: {
-    title: "Rechnungen & E-Rechnung",
-    newInvoice: "Rechnung schreiben",
-    noInvoices: "Keine Rechnungen vorhanden.",
-    dueDate: "Fällig am",
-    issuedAt: "Rechnungsdatum",
-    markPaid: "Als bezahlt markieren",
-    exportDatev: "DATEV-Export (CSV)",
-    eInvoiceNotice: "E-Rechnung (ZUGFeRD / XRechnung kompatibel)",
-    buyerReference: "Leitweg-ID / Käuferreferenz",
-    skontoNotice: "{percent}% Skonto bei Zahlung innerhalb von {days} Tagen",
-    dunning: "Mahnstufe",
-    dunningLevel0: "Keine Mahnung",
-    dunningLevel1: "Zahlungserinnerung",
-    dunningLevel2: "1. Mahnung",
-    dunningLevel3: "2. Mahnung (Letzte)",
-    createDunning: "Mahnung erstellen",
-    status: {
-      draft: "Entwurf",
-      sent: "Offen",
-      paid: "Bezahlt",
-      overdue: "Überfällig",
-      canceled: "Storniert",
-    },
-    draftNumber: "Entwurf",
-    saveDraft: "Als Entwurf speichern",
-    finalize: "Festschreiben",
-    finalizeConfirm: "Rechnung jetzt festschreiben? Sie bekommt ihre Nummer und lässt sich danach nicht mehr ändern, nur noch stornieren.",
-    cancel: "Stornieren",
-    cancelConfirm: "Rechnung stornieren? Sie bleibt mit ihrer Nummer erhalten, abgerechnete Zeiten und Auslagen werden wieder frei.",
-    statusOnSave: "Beim Speichern",
-  },
-  clients: {
-    title: "Kundenkartei",
-    newClient: "Neuer Kunde",
-    noClients: "Keine Kunden gefunden.",
-    contactPerson: "Ansprechpartner",
-    paymentTerms: "Zahlungsziel (Tage)",
-    vatId: "USt-IdNr.",
-    openInvoices: "Offene Rechnungen",
-    sepaTitle: "SEPA-Lastschriftmandat",
-    sepaIban: "SEPA IBAN",
-    sepaBic: "SEPA BIC",
-    sepaMandateRef: "Mandatsreferenz",
-    sepaMandateDate: "Mandatsdatum",
-    skontoDays: "Skontofrist (Tage)",
-    skontoPercent: "Skontosatz (%)",
-  },
-  settings: {
-    title: "Büro-Einstellungen",
-    defaultHourlyRate: "Standard-Stundensatz (€/Std)",
-    defaultPaymentTerms: "Standard-Zahlungsziel (Tage)",
-    quotePrefix: "Angebots-Präfix",
-    invoicePrefix: "Rechnungs-Präfix",
-    buyerReferenceDefault: "Standard Leitweg-ID / Käuferreferenz",
-    eInvoiceEnabled: "E-Rechnungs-Standard (EN 16931) aktivieren",
-    dunningFees: "Mahngebühren",
-    feeLevel2: "Gebühr 1. Mahnung (€)",
-    feeLevel3: "Gebühr 2. Mahnung (€)",
-    roleRates: "Stundensätze nach Rolle / Qualifikation",
-    saved: "Einstellungen erfolgreich gespeichert.",
-  },
-  common: {
-    save: "Speichern",
-    cancel: "Abbrechen",
-    delete: "Löschen",
-    edit: "Bearbeiten",
-    total: "Gesamt",
-    net: "Netto",
-    vat: "MwSt.",
-    gross: "Brutto",
-    qty: "Menge",
-    unitPrice: "Einzelpreis",
-    addItem: "Position hinzufügen",
-    removeItem: "Position entfernen",
-    details: "Details",
-    all: "Alle",
-    search: "Suchen...",
-    print: "Drucken",
-    actions: "Aktionen",
-    back: "Zurück",
-    yes: "Ja",
-    no: "Nein",
-    confirmDelete: "Wirklich löschen?",
-    close: "Schließen",
-  },
-  errors: {
-    clientRequired: "Bitte wählen Sie einen Kunden aus.",
-    clientNameRequired: "Der Kundenname darf nicht leer sein.",
-    clientHasProjects: "Dieser Kunde hat noch verknüpfte Projekte und kann nicht gelöscht werden.",
-    projectNameRequired: "Der Projektname darf nicht leer sein.",
-    projectRequired: "Bitte wählen Sie ein Projekt aus.",
-    taskTitleRequired: "Bitte geben Sie einen Aufgabentitel ein.",
-    expenseTitleRequired: "Bitte geben Sie einen Titel für die Auslage ein.",
-    durationInvalid: "Bitte geben Sie eine gültige Dauer an.",
-    quoteNotFound: "Angebot nicht gefunden.",
-    invoiceNotFound: "Rechnung nicht gefunden.",
-    projectNotFound: "Projekt nicht gefunden.",
-    clientNotFound: "Kunde nicht gefunden.",
-    clientHasInvoices: "Dieser Kunde hat Rechnungen oder Angebote. Sie müssen aufbewahrt werden, deshalb kann er nicht gelöscht werden.",
-    invoiceLocked: "Die Rechnung ist schon ausgestellt und lässt sich nicht mehr ändern oder löschen. Bitte stornieren.",
-    invoiceNotCancelable: "Nur offene oder überfällige Rechnungen lassen sich stornieren.",
-    invoiceNotOpen: "Die Rechnung ist nicht offen (Entwurf, bezahlt oder storniert).",
-    invoiceNotDue: "Die Rechnung ist noch nicht fällig.",
-    dunningLevelInvalid: "Diese Mahnstufe passt nicht zur bisherigen Mahnung.",
-    alreadyBilled: "Ein Eintrag ist schon abgerechnet oder gehört zu einem anderen Kunden.",
-    invalidItem: "Bitte die Positionen prüfen (Bezeichnung, Menge, Preis, Steuersatz).",
-  },
-  print: {
-    quoteTitle: "Angebot",
-    invoiceTitle: "Rechnung",
-    quoteValid: "Dieses Angebot ist freibleibend und gültig bis zum angegebenen Datum.",
-    payNotice: "Zahlbar innerhalb von {days} Tagen ohne Abzug.",
-    bankDetails: "Bankverbindung",
-    giroCodeNotice: "Mit der Banking-App scannen und sofort überweisen:",
-    eInvoiceXml: "E-Rechnung (XML)",
-    downloadXml: "XRechnung XML herunterladen",
-    copyXml: "XML kopieren",
-    copied: "Kopiert!",
-    datevSuccess: "DATEV-Export heruntergeladen.",
-    paidWith: "Bezahlt am {date} per {method}",
-    timesheetTitle: "Leistungsnachweis",
-    dunningTitle: "Zahlungserinnerung / Mahnung",
-    dunningNotice: "Trotz Fälligkeit konnten wir für die nachfolgende Rechnung bisher keinen Zahlungseingang feststellen:",
-  },
+// Eigene Texte des Systems „Büro & Dienstleister“. Deutsch ist eingebaut, andere Sprachen werden bei Bedarf nachgeladen.
+
+export type { OfficeDict };
+/** Alter Name des deutschen Wörterbuchs, bleibt für bestehende Importe erhalten. */
+export const officeDictDe = de;
+
+const loaders: Loaders<OfficeDict> = {
+  en: () => import("./lang/en").then((m) => m.en),
+  tr: () => import("./lang/tr").then((m) => m.tr),
+  ar: () => import("./lang/ar").then((m) => m.ar),
+  fr: () => import("./lang/fr").then((m) => m.fr),
+  es: () => import("./lang/es").then((m) => m.es),
+  it: () => import("./lang/it").then((m) => m.it),
+  pl: () => import("./lang/pl").then((m) => m.pl),
+  ru: () => import("./lang/ru").then((m) => m.ru),
+  uk: () => import("./lang/uk").then((m) => m.uk),
 };
 
-export type OfficeDict = typeof officeDictDe;
+const useOfficeTexts = createModuleI18n(de, loaders);
+
+/** Gespeicherte Zahlungsarten (Werte in der Datenbank) → Schlüssel der Texte. */
+const PAY_METHOD_KEYS: Record<string, string> = {
+  Überweisung: "transfer",
+  Lastschrift: "debit",
+  Bar: "cash",
+  Karte: "card",
+  PayPal: "paypal",
+};
 
 export function useOfficeI18n() {
-  const core = useI18n();
+  const { core, t, has, ready } = useOfficeTexts();
 
-  const o = (path: string, vars?: Record<string, string | number>): string => {
-    const keys = path.split(".");
-    let current: unknown = officeDictDe;
-    for (const key of keys) {
-      if (current && typeof current === "object" && key in current) {
-        current = (current as Record<string, unknown>)[key];
-      } else {
-        return path;
-      }
-    }
-    let text = typeof current === "string" ? current : path;
-    if (vars) {
-      for (const [k, v] of Object.entries(vars)) {
-        text = text.replaceAll(`{${k}}`, String(v));
-      }
-    }
-    return text;
-  };
+  const o = t;
 
+  /** Wie `o`, setzt aber React-Elemente (z. B. <strong>) für die Platzhalter ein. */
+  const oRich = (path: string, vars: Record<string, ReactNode>): ReactNode =>
+    t(path)
+      .split(/(\{\w+\})/)
+      .map((part, i) => {
+        const m = /^\{(\w+)\}$/.exec(part);
+        return createElement(Fragment, { key: i }, m && m[1] in vars ? vars[m[1]] : part);
+      });
+
+  /** Fehler aus dem System zuerst mit eigenen Texten, sonst wie in der Plattform. */
   const officeError = (error: unknown) => {
     if (error instanceof ApiError && error.code?.startsWith("office.")) {
-      const code = error.code.slice(7);
-      const translated = o(`errors.${code}`);
-      return translated !== `errors.${code}` ? translated : core.errorText(error);
+      const path = `errors.${error.code.slice(7)}`;
+      if (has(path)) return t(path);
     }
     return core.errorText(error);
   };
 
-  const euro = (cents: number) => formatMoney(cents, core.lang);
+  // Name „euro“ bleibt, rechnet aber in der Währung der Firma
+  const euro = (cents: number, code?: string) => formatMoney(cents, core.lang, code);
+
+  /** Währungszeichen der Firma in der Schreibweise der Sprache. */
+  const cur = () => currencySymbol(core.lang);
+
+  /** Zahl in der Schreibweise der Sprache, z. B. 1.5 → „1,5“. */
+  const num = (n: number, digits = 2) =>
+    new Intl.NumberFormat(core.lang, { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(n);
 
   const day = (iso: string) =>
-    iso ? new Intl.DateTimeFormat(core.lang, { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(iso.length === 10 ? `${iso}T00:00:00Z` : iso)) : "";
+    iso
+      ? new Intl.DateTimeFormat(core.lang, { day: "2-digit", month: "2-digit", year: "numeric", ...(iso.length === 10 ? { timeZone: "UTC" } : {}) }).format(
+          new Date(iso.length === 10 ? `${iso}T00:00:00Z` : iso),
+        )
+      : "";
 
-  return { ...core, o, euro, day, officeError };
+  /** Einheit einer Position (gespeichert als „Std“, „Tag“ …) in der Sprache anzeigen. */
+  const unitLabel = (unit: string) => (has(`units.${unit}`) ? t(`units.${unit}`) : unit);
+
+  /** Gespeicherte Zahlungsart (z. B. „Überweisung“) in der Sprache anzeigen. */
+  const payMethodLabel = (method: string) => {
+    const key = PAY_METHOD_KEYS[method];
+    return key ? t(`invoices.paidMethods.${key}`) : method;
+  };
+
+  return { ...core, o, t, has, oRich, ready, euro, cur, num, day, unitLabel, payMethodLabel, officeError };
 }

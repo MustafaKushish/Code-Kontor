@@ -14,7 +14,7 @@ export function CalendarTab({
   isManager: boolean;
   onNavigateToCheckout?: (app: SalonAppointment) => void;
 }) {
-  const { s, euro, day: formatDay, time } = useSalonI18n();
+  const { s, euro, day: formatDay, errorText } = useSalonI18n();
   const [selectedDay, setSelectedDay] = useState(new Date().toISOString().slice(0, 10));
   const [staff, setStaff] = useState<SalonStaff[]>([]);
   const [services, setServices] = useState<SalonService[]>([]);
@@ -96,11 +96,11 @@ export function CalendarTab({
     const chosenServices = services.filter((srv) => form.serviceIds.includes(srv.id));
 
     if (!selectedStaff) {
-      setErrorMsg("Bitte wählen Sie einen Stylisten.");
+      setErrorMsg(s("calendar.pickStaff"));
       return;
     }
     if (chosenServices.length === 0) {
-      setErrorMsg("Bitte wählen Sie mindestens eine Dienstleistung.");
+      setErrorMsg(s("calendar.pickService"));
       return;
     }
 
@@ -112,7 +112,7 @@ export function CalendarTab({
         method: "POST",
         body: {
           clientId: form.clientId || undefined,
-          clientName: form.clientName || "Kunde",
+          clientName: form.clientName || s("calendar.defaultClient"),
           clientPhone: form.clientPhone,
           clientEmail: form.clientEmail,
           staffId: form.staffId,
@@ -129,8 +129,8 @@ export function CalendarTab({
       });
       setModalOpen(false);
       await loadData();
-    } catch (err: any) {
-      setErrorMsg(err?.message || "Fehler beim Buchen des Termins");
+    } catch (err) {
+      setErrorMsg(errorText(err));
     }
   };
 
@@ -148,8 +148,8 @@ export function CalendarTab({
         setSelectedApp((prev) => (prev ? { ...prev, status: newStatus } : null));
       }
       await loadData();
-    } catch (err: any) {
-      setUpdateError(err?.message || "Fehler beim Aktualisieren des Termins");
+    } catch (err) {
+      setUpdateError(errorText(err));
     }
   };
 
@@ -188,11 +188,11 @@ export function CalendarTab({
       {/* Datumsauswahl & Schnellaktionen */}
       <div className="salon-toolbar">
         <div className="salon-day">
-          <button className="icon-button" onClick={() => handleDayShift(-1)} title="Vorheriger Tag" aria-label="Vorheriger Tag">
+          <button className="icon-button" onClick={() => handleDayShift(-1)} title={s("calendar.prevDay")} aria-label={s("calendar.prevDay")}>
             <ChevronLeft size={20} className="flip-rtl" />
           </button>
           <input type="date" value={selectedDay} onChange={(e) => setSelectedDay(e.target.value)} />
-          <button className="icon-button" onClick={() => handleDayShift(1)} title="Nächster Tag" aria-label="Nächster Tag">
+          <button className="icon-button" onClick={() => handleDayShift(1)} title={s("calendar.nextDay")} aria-label={s("calendar.nextDay")}>
             <ChevronRight size={20} className="flip-rtl" />
           </button>
           <button className="button" onClick={() => setSelectedDay(new Date().toISOString().slice(0, 10))}>
@@ -218,7 +218,7 @@ export function CalendarTab({
                   <span className="salon-dot" style={st.colorHex ? { background: st.colorHex } : undefined} />
                   <span className="list-main">
                     <strong>{st.name}</strong>
-                    <small className="muted">{st.title} ({st.workStart} - {st.workEnd})</small>
+                    <small className="muted">{st.title} ({s("common.timeRange", { from: st.workStart, to: st.workEnd })})</small>
                   </span>
                 </div>
               ))
@@ -246,8 +246,8 @@ export function CalendarTab({
                     type="button"
                     className="salon-cal-cell"
                     onClick={() => handleOpenSlot(st.id, ts)}
-                    title={`Freier Termin um ${ts} bei ${st.name} buchen`}
-                    aria-label={`Freier Termin um ${ts} bei ${st.name} buchen`}
+                    title={s("calendar.bookFreeSlot", { time: ts, name: st.name })}
+                    aria-label={s("calendar.bookFreeSlot", { time: ts, name: st.name })}
                   />
                 ))}
 
@@ -265,7 +265,7 @@ export function CalendarTab({
                       className={`salon-appt ${app.status}`}
                       style={{ top: `${topPx}px`, height: `${heightPx}px`, ...(st.colorHex ? { borderInlineStartColor: st.colorHex } : {}) }}
                       onClick={() => setSelectedApp(app)}
-                      title={`${app.clientName} (${app.startTime} - ${app.endTime})`}
+                      title={`${app.clientName} (${s("common.timeRange", { from: app.startTime, to: app.endTime })})`}
                     >
                       <span className="salon-appt-line">
                         <strong>{app.clientName}</strong>
@@ -296,7 +296,7 @@ export function CalendarTab({
             {errorMsg && <p className="error" role="alert">{errorMsg}</p>}
 
             <div className="grid form-grid">
-              <Field label="Stylist" required>
+              <Field label={s("common.stylist")} required>
                 <select required value={form.staffId} onChange={(e) => setForm({ ...form, staffId: e.target.value })}>
                   {staff.map((st) => (
                     <option key={st.id} value={st.id}>
@@ -306,7 +306,7 @@ export function CalendarTab({
                 </select>
               </Field>
 
-              <Field label="Datum & Uhrzeit" required>
+              <Field label={s("calendar.dateTime")} required>
                 <div className="row gap">
                   <input type="date" required value={form.day} onChange={(e) => setForm({ ...form, day: e.target.value })} />
                   <input type="time" required value={form.startTime} onChange={(e) => setForm({ ...form, startTime: e.target.value })} />
@@ -314,7 +314,7 @@ export function CalendarTab({
               </Field>
 
               {/* Kunde wählen oder neu eingeben */}
-              <Field label="Bestehender Kunde (optional)">
+              <Field label={s("calendar.existingClient")}>
                 <select
                   value={form.clientId}
                   onChange={(e) => {
@@ -332,7 +332,7 @@ export function CalendarTab({
                     }
                   }}
                 >
-                  <option value="">-- Neuer Kunde / Freie Eingabe --</option>
+                  <option value="">{s("calendar.newClientOption")}</option>
                   {clients.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name} {c.phone ? `(${c.phone})` : ""}
@@ -341,19 +341,19 @@ export function CalendarTab({
                 </select>
               </Field>
 
-              <Field label="Kundenname" required>
-                <input type="text" required placeholder="Vor- und Nachname" value={form.clientName} onChange={(e) => setForm({ ...form, clientName: e.target.value })} />
+              <Field label={s("calendar.clientName")} required>
+                <input type="text" required placeholder={s("common.fullNamePlaceholder")} value={form.clientName} onChange={(e) => setForm({ ...form, clientName: e.target.value })} />
               </Field>
 
-              <Field label="Telefonnummer">
-                <input type="tel" placeholder="+49 171 1234567" value={form.clientPhone} onChange={(e) => setForm({ ...form, clientPhone: e.target.value })} />
+              <Field label={s("common.phone")}>
+                <input type="tel" placeholder={s("common.phonePlaceholder")} value={form.clientPhone} onChange={(e) => setForm({ ...form, clientPhone: e.target.value })} />
               </Field>
-              <Field label="E-Mail-Adresse">
-                <input type="email" placeholder="kunde@example.de" value={form.clientEmail} onChange={(e) => setForm({ ...form, clientEmail: e.target.value })} />
+              <Field label={s("common.email")}>
+                <input type="email" placeholder={s("common.emailPlaceholder")} value={form.clientEmail} onChange={(e) => setForm({ ...form, clientEmail: e.target.value })} />
               </Field>
 
               {/* Dienstleistungen auswählen */}
-              <Field label="Dienstleistungen auswählen (Mehrfachauswahl möglich)" required wide>
+              <Field label={s("calendar.chooseServices")} required wide>
                 <div className="salon-picker">
                   {services.map((srv) => {
                     const checked = form.serviceIds.includes(srv.id);
@@ -372,7 +372,7 @@ export function CalendarTab({
                         />
                         <span className="list-main">
                           <strong>{srv.name}</strong>
-                          <small className="muted">({srv.durationMinutes} Min)</small>
+                          <small className="muted">({s("common.minutes", { n: srv.durationMinutes })})</small>
                         </span>
                         <strong>{euro(srv.priceCents)}</strong>
                       </label>
@@ -381,8 +381,8 @@ export function CalendarTab({
                 </div>
               </Field>
 
-              <Field label="Notizen / Besonderheiten" wide>
-                <input type="text" placeholder="z.B. Neukunde, Farbwunsch Blond, Getränkewunsch" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+              <Field label={s("calendar.notes")} wide>
+                <input type="text" placeholder={s("calendar.notesPlaceholder")} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
               </Field>
             </div>
 
@@ -403,30 +403,30 @@ export function CalendarTab({
         <Dialog title={selectedApp.clientName} onClose={() => setSelectedApp(null)}>
           <div className="salon-dialog stack">
             <p className="muted">
-              {formatDay(selectedApp.day)} · {selectedApp.startTime} - {selectedApp.endTime} ({selectedApp.durationMinutes} Min)
+              {formatDay(selectedApp.day)} · {s("common.timeRange", { from: selectedApp.startTime, to: selectedApp.endTime })} ({s("common.minutes", { n: selectedApp.durationMinutes })})
             </p>
 
             <dl className="facts">
-              <dt>Stylist:</dt>
+              <dt>{s("calendar.stylistLabel")}</dt>
               <dd>{selectedApp.staffName}</dd>
               {selectedApp.clientPhone && (
                 <>
-                  <dt>Telefon:</dt>
+                  <dt>{s("calendar.phoneLabel")}</dt>
                   <dd>{selectedApp.clientPhone}</dd>
                 </>
               )}
-              <dt>Dienstleistungen:</dt>
+              <dt>{s("calendar.servicesLabel")}</dt>
               <dd>{selectedApp.serviceNames.join(", ")}</dd>
             </dl>
 
             <div className="salon-total">
-              <span>Gesamtbetrag:</span>
+              <span>{s("calendar.totalLabel")}</span>
               <strong>{euro(selectedApp.totalCents)}</strong>
             </div>
 
             {/* Status-Wechsler */}
             <div className="stack-sm">
-              <small className="muted">Terminstatus ändern:</small>
+              <small className="muted">{s("calendar.changeStatus")}</small>
               <div className="row wrap gap">
                 <button
                   className={`button small-button ${selectedApp.status === "in_progress" ? "primary" : ""}`}
@@ -457,20 +457,20 @@ export function CalendarTab({
                         setSelectedApp(null);
                         setDeleteConfirmAppId(null);
                         await loadData();
-                      } catch (err: any) {
-                        setUpdateError(err?.message || "Fehler beim Löschen");
+                      } catch (err) {
+                        setUpdateError(errorText(err));
                       }
                     }}
                   >
-                    Wirklich löschen
+                    {s("actions.reallyDelete")}
                   </button>
                   <button className="button small-button" onClick={() => setDeleteConfirmAppId(null)}>
-                    Abbrechen
+                    {s("actions.cancel")}
                   </button>
                 </div>
               ) : (
                 <button className="button danger" onClick={() => setDeleteConfirmAppId(selectedApp.id)}>
-                  Löschen
+                  {s("actions.delete")}
                 </button>
               )}
 
