@@ -1,53 +1,147 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { Building2, Landmark, Languages, Palette, Pencil, Receipt, ShieldCheck } from "lucide-react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { Building2, Check, Image, Landmark, Palette, Receipt, ShieldCheck, type LucideIcon } from "lucide-react";
 import { ThemeSwitch } from "../layout/Shell";
 import { LanguageSwitch } from "../layout/LanguageSwitch";
 import { useI18n } from "../i18n";
-import { api, type Me } from "../api";
-import { emptyCompanyProfile, type CompanyProfile } from "../../shared/company";
-import { COUNTRY_TAX, countryTax, type TaxSettings } from "../../shared/countries";
-import { methodLabels } from "../../shared/payments";
-import { formatRate } from "../money";
+import { api, ApiError, type Me } from "../api";
+import { type CompanyErrors, type CompanyProfile } from "../../shared/company";
+import { COUNTRY_TAX, type TaxSettings } from "../../shared/countries";
+import { CompanyFields, PART_FIELDS, partErrors, useCountryName, withDefaults, type CompanyPart } from "./CompanyForm";
 
 type TaxInfo = TaxSettings & { country: string; custom: boolean };
+type Privacy = NonNullable<Me["privacy"]>;
 
 const CURRENCIES = [...new Set(Object.values(COUNTRY_TAX).map((c) => c.currency))].sort();
 
+type SectionId = "address" | "tax" | "bank" | "logo" | "privacy" | "display";
+const SECTIONS: { id: SectionId; icon: LucideIcon; title: string }[] = [
+  { id: "address", icon: Building2, title: "settings.companyAddress" },
+  { id: "tax", icon: Receipt, title: "settings.taxes" },
+  { id: "bank", icon: Landmark, title: "settings.bankPayment" },
+  { id: "logo", icon: Image, title: "settings.logo" },
+  { id: "privacy", icon: ShieldCheck, title: "settings.privacyTitle" },
+  { id: "display", icon: Palette, title: "settings.display" },
+];
+
+const rateText = (rates: number[], lang: string) => rates.map((r) => String(r).replace(".", lang === "en" ? "." : ",")).join("; ");
+
+/** Ein Bereich der Einstellungen als Karte mit Sprungziel für die Navigation. */
+function Section({ id, icon: Icon, title, intro, children }: { id: SectionId; icon: LucideIcon; title: string; intro?: string; children: ReactNode }) {
+  return (
+    <section id={`einstellung-${id}`} className="card stack settings-section">
+      <div>
+        <h2 className="card-title"><Icon size={20} /> {title}</h2>
+        {intro && <p className="muted small">{intro}</p>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/** Speichern / Verwerfen unter einem Formular; „Gespeichert“ bleibt kurz stehen. */
+function SaveBar({ dirty, busy, saved, error, onDiscard }: { dirty: boolean; busy: boolean; saved: boolean; error: string; onDiscard: () => void }) {
+  const { t } = useI18n();
+  if (!dirty && !saved && !error) return null;
+  return (
+    <div className="stack-sm">
+      {error && <p className="error" role="alert">{error}</p>}
+      <div className="row wrap gap settings-save">
+        <button className="button primary" disabled={!dirty || busy}>{busy ? t("wizard.saving") : t("settings.save")}</button>
+        {dirty && <button type="button" className="button" onClick={onDiscard} disabled={busy}>{t("settings.discard")}</button>}
+        {!dirty && saved && !error && <span className="success-text row gap" role="status"><Check size={16} /> {t("settings.saved")}</span>}
+        {dirty && !busy && <span className="muted small">{t("settings.unsaved")}</span>}
+      </div>
+    </div>
+  );
+}
+
+/** Firmendaten eines Bereichs direkt bearbeiten und einzeln speichern. */
+function CompanySection({ part, saved, onSaved, canEdit, addressLookup, children }: {
+  part: CompanyPart;
+  saved: CompanyProfile;
+  onSaved: (company: CompanyProfile) => void;
+  canEdit: boolean;
+  addressLookup: boolean;
+  children?: ReactNode;
+}) {
+  const { errorText } = useI18n();
+  const [draft, setDraft] = useState(saved);
+  const [errors, setErrors] = useState<CompanyErrors>({});
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState("");
+  const fields = PART_FIELDS[part];
+  // Felder anderer Bereiche immer vom gespeicherten Stand, damit nur dieser Bereich gespeichert wird
+  const merged: CompanyProfile = { ...saved, ...Object.fromEntries(fields.map((f) => [f, draft[f]])) };
+  const dirty = fields.some((f) => draft[f] !== saved[f]) || (part === "address" && draft.paymentMethods !== saved.paymentMethods);
+
+  const update = (fn: (c: CompanyProfile) => CompanyProfile) => {
+    setDone(false);
+    setDraft(fn);
+  };
+  const discard = () => {
+    setDraft(saved);
+    setErrors({});
+    setError("");
+  };
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    // Beim Land ändern sich die vorgeschlagenen Zahlarten mit
+    const body = part === "address" ? { ...merged, paymentMethods: draft.paymentMethods } : merged;
+    const found = partErrors(body, [part]);
+    setErrors(found);
+    if (Object.keys(found).length) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api("/company", { method: "PUT", body });
+      onSaved(body);
+      setDraft(body);
+      setDone(true);
+    } catch (err) {
+      if (err instanceof ApiError && err.errors) setErrors(err.errors as CompanyErrors);
+      setError(errorText(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form className="stack" onSubmit={submit} noValidate>
+      <CompanyFields part={part} company={draft} setCompany={update} errors={errors} setErrors={setErrors} addressLookup={addressLookup} disabled={!canEdit} />
+      {children}
+      {canEdit && <SaveBar dirty={dirty} busy={busy} saved={done} error={error} onDiscard={discard} />}
+    </form>
+  );
+}
+
 /** Land, Währung und Steuersätze: Vorgaben des Landes, vom Inhaber oder Admin anpassbar. */
-function TaxSettingsCard({ canEdit, onChanged, company }: { canEdit: boolean; onChanged: () => void; company: CompanyProfile }) {
+function TaxRates({ canEdit, onChanged }: { canEdit: boolean; onChanged: () => void }) {
   const { t, lang, errorText } = useI18n();
+  const countryName = useCountryName();
   const [tax, setTax] = useState<TaxInfo | null>(null);
-  const [editing, setEditing] = useState(false);
   const [currency, setCurrency] = useState("EUR");
   const [rates, setRates] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
 
+  const load = (next: TaxInfo) => {
+    setTax(next);
+    setCurrency(next.currency);
+    setRates(rateText(next.vatRates, lang));
+  };
   useEffect(() => {
-    api<{ tax: TaxInfo }>("/tax").then((r) => setTax(r.tax)).catch(() => undefined);
+    api<{ tax: TaxInfo }>("/tax").then((r) => load(r.tax)).catch(() => undefined);
   }, []);
 
-  const countryName = (code: string) => {
-    try {
-      return new Intl.DisplayNames([lang], { type: "region" }).of(code) ?? code;
-    } catch {
-      return code;
-    }
-  };
-  const startEdit = () => {
-    if (!tax) return;
-    setCurrency(tax.currency);
-    setRates(tax.vatRates.map((r) => String(r).replace(".", lang === "en" ? "." : ",")).join("; "));
-    setError("");
-    setEditing(true);
-  };
   const save = async (body: object) => {
     setBusy(true);
     setError("");
     try {
       const r = await api<{ tax: TaxInfo }>("/tax", { method: "PUT", body });
-      setTax(r.tax);
-      setEditing(false);
+      load(r.tax);
+      setDone(true);
       onChanged();
     } catch (e) {
       setError(errorText(e));
@@ -64,49 +158,38 @@ function TaxSettingsCard({ canEdit, onChanged, company }: { canEdit: boolean; on
   };
 
   if (!tax) return null;
+  const dirty = currency !== tax.currency || rates !== rateText(tax.vatRates, lang);
   return (
-    <div className="stack-sm">
-      <dl className="facts">
-        <dt>{t("settings.taxNumber")}</dt><dd>{company.taxNumber || "–"}</dd>
-        <dt>{t("settings.vatId")}</dt><dd>{company.vatId || "–"}</dd>
-        <dt>{t("settings.country")}</dt><dd>{countryName(tax.country)}</dd>
-        <dt>{t("settings.currency")}</dt><dd>{tax.currency}</dd>
-        <dt>{t("settings.vatRates")}</dt>
-        <dd>{tax.vatRates.length ? tax.vatRates.map((r) => formatRate(r, lang)).join(", ") : t("settings.noVat")}</dd>
-      </dl>
-      <p className="muted small">{tax.custom ? t("settings.customValues") : t("settings.countryDefaults", { country: countryName(tax.country) })}</p>
-      {editing ? (
-        <form className="stack-sm" onSubmit={submit}>
-          <label className="field">
-            <span className="field-label">{t("settings.currency")}</span>
-            <select value={currency} onChange={(e) => setCurrency(e.target.value)}>
-              {(CURRENCIES.includes(currency) ? CURRENCIES : [currency, ...CURRENCIES]).map((code) => <option key={code} value={code}>{code}</option>)}
-            </select>
-          </label>
-          <label className="field">
-            <span className="field-label">{t("settings.ratesLabel")}</span>
-            <input value={rates} onChange={(e) => setRates(e.target.value)} inputMode="decimal" placeholder="19; 7" />
-            <small className="muted">{t("settings.ratesHint")}</small>
-          </label>
-          {error && <p className="error" role="alert">{error}</p>}
-          <div className="actions" style={{ justifyContent: "flex-start", flexWrap: "wrap" }}>
-            <button className="button primary" disabled={busy}>{t("settings.save")}</button>
-            <button type="button" className="button" onClick={() => setEditing(false)}>{t("common.cancel")}</button>
-            {tax.custom && <button type="button" className="text-button" disabled={busy} onClick={() => save({ reset: true })}>{t("settings.resetDefaults")}</button>}
-          </div>
-        </form>
-      ) : (
-        canEdit && <button className="button" onClick={startEdit}><Pencil size={16} /> {t("settings.adjust")}</button>
+    <form className="stack settings-subform" onSubmit={submit}>
+      <div className="section-head">
+        <strong>{t("settings.vatRates")}</strong>
+        <span className="pill">{tax.custom ? t("settings.customValues") : t("settings.countryDefaults", { country: countryName(tax.country) })}</span>
+      </div>
+      <fieldset className="grid" disabled={!canEdit}>
+        <label className="field">
+          <span className="field-label">{t("settings.currency")}</span>
+          <select value={currency} onChange={(e) => (setCurrency(e.target.value), setDone(false))}>
+            {(CURRENCIES.includes(currency) ? CURRENCIES : [currency, ...CURRENCIES]).map((code) => <option key={code} value={code}>{code}</option>)}
+          </select>
+        </label>
+        <label className="field">
+          <span className="field-label">{t("settings.ratesLabel")}</span>
+          <input value={rates} onChange={(e) => (setRates(e.target.value), setDone(false))} inputMode="decimal" placeholder="19; 7" />
+        </label>
+        <small className="muted wide">{t("settings.ratesHint")} {t("settings.taxNote")}</small>
+      </fieldset>
+      {canEdit && (
+        <>
+          <SaveBar dirty={dirty} busy={busy} saved={done} error={error} onDiscard={() => load(tax)} />
+          {tax.custom && <button type="button" className="text-button" disabled={busy} onClick={() => save({ reset: true })}>{t("settings.resetDefaults")}</button>}
+        </>
       )}
-      <p className="muted small">{t("settings.taxNote")}</p>
-    </div>
+    </form>
   );
 }
 
-type Privacy = NonNullable<Me["privacy"]>;
-
-/** Ob KI-Assistent und Adressvorschläge Daten an fremde Dienste senden dürfen. */
-function PrivacyCard({ me, canEdit, onChanged }: { me: Me; canEdit: boolean; onChanged: () => void }) {
+/** Ob KI-Assistent und Adressvorschläge Daten an fremde Dienste senden dürfen; wirkt sofort. */
+function PrivacyOptions({ me, canEdit, onChanged }: { me: Me; canEdit: boolean; onChanged: () => void }) {
   const { t, errorText } = useI18n();
   const [privacy, setPrivacy] = useState<Privacy>(me.privacy ?? { assistant: false, addressLookup: false });
   const [error, setError] = useState("");
@@ -128,34 +211,69 @@ function PrivacyCard({ me, canEdit, onChanged }: { me: Me; canEdit: boolean; onC
   };
 
   const option = (key: keyof Privacy, label: string, hint: string) => (
-    <label className="check" style={{ alignItems: "flex-start" }}>
-      <input type="checkbox" checked={privacy[key]} disabled={!canEdit || busy} onChange={(e) => toggle(key, e.target.checked)} />
-      <span>{label}<br /><span className="muted small">{hint}</span></span>
+    <label className="settings-toggle">
+      <span className="list-main">
+        <strong>{label}</strong>
+        <small className="muted">{hint}</small>
+      </span>
+      <input type="checkbox" role="switch" checked={privacy[key]} disabled={!canEdit || busy} onChange={(e) => toggle(key, e.target.checked)} />
     </label>
   );
 
   return (
     <div className="stack-sm">
-      <p className="muted">{t("settings.privacyText")}</p>
-      {option("assistant", t("settings.privacyAssistant"), t("settings.privacyAssistantHint"))}
-      {option("addressLookup", t("settings.privacyAddress"), t("settings.privacyAddressHint"))}
+      <div className="list-card settings-toggles">
+        {option("assistant", t("settings.privacyAssistant"), t("settings.privacyAssistantHint"))}
+        {option("addressLookup", t("settings.privacyAddress"), t("settings.privacyAddressHint"))}
+      </div>
       {!canEdit && <p className="muted small">{t("settings.privacyStaff")}</p>}
       {error && <p className="error" role="alert">{error}</p>}
     </div>
   );
 }
 
-export function Settings({ me, onEdit, onTaxChanged }: { me: Me; onEdit: () => void; onTaxChanged: () => void }) {
+export function Settings({ me, onChanged }: { me: Me; onChanged: () => void }) {
   const [company, setCompany] = useState<CompanyProfile | null>(null);
+  const [active, setActive] = useState<SectionId>("address");
   const canEdit = me.user.role !== "staff";
+  const addressLookup = !!me.privacy?.addressLookup;
   const { t } = useI18n();
 
   useEffect(() => {
-    api<{ company: CompanyProfile | null }>("/company").then((r) => setCompany(r.company ?? emptyCompanyProfile));
+    api<{ company: CompanyProfile | null }>("/company").then((r) => {
+      const c = withDefaults(r.company);
+      // Mitarbeiter sehen die Kontonummer nur gekürzt
+      setCompany(canEdit || !c.iban ? c : { ...c, iban: `•••• ${c.iban.slice(-4)}` });
+    });
   }, []);
 
-  const c = company;
-  const maskedIban = !c?.iban ? "–" : c.iban.length > 10 ? `${c.iban.slice(0, 4)} •••• •••• ${c.iban.slice(-4)}` : `•••• ${c.iban.slice(-4)}`;
+  // Aktiven Bereich in der Navigation mitführen
+  useEffect(() => {
+    if (!company) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+        if (visible) setActive(visible.target.id.replace("einstellung-", "") as SectionId);
+      },
+      { rootMargin: "-20% 0px -60% 0px" },
+    );
+    SECTIONS.forEach((s) => {
+      const el = document.getElementById(`einstellung-${s.id}`);
+      if (el) observer.observe(el);
+    });
+    return () => observer.disconnect();
+  }, [!!company]);
+
+  const jump = (id: SectionId) => {
+    setActive(id);
+    document.getElementById(`einstellung-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const saved = (next: CompanyProfile) => {
+    setCompany(next);
+    onChanged();
+  };
+
   return (
     <div className="stack-lg">
       <header className="page-head">
@@ -163,50 +281,45 @@ export function Settings({ me, onEdit, onTaxChanged }: { me: Me; onEdit: () => v
           <h1 className="display">{t("nav.company")}</h1>
           <p className="muted">{t("settings.subtitle")}</p>
         </div>
-        {canEdit && <button className="button primary" onClick={onEdit}><Pencil size={18} /> {t("common.edit")}</button>}
       </header>
 
       {!me.setupComplete && <p className="notice">{canEdit ? t("settings.incomplete") : t("settings.incompleteStaff")}</p>}
+      {!canEdit && <p className="notice">{t("settings.staffReadOnly")}</p>}
 
-      {c ? (
-        <div className="columns">
-          <section className="card">
-            <h2 className="card-title"><Building2 size={20} /> {t("settings.companyAddress")}</h2>
-            {c.logoDataUrl && <img className="company-logo" src={c.logoDataUrl} alt={t("settings.logoAlt")} />}
-            <dl className="facts">
-              <dt>{t("settings.name")}</dt><dd>{c.name || "–"}{c.legalForm && ` (${c.legalForm})`}</dd>
-              <dt>{t("settings.address")}</dt><dd>{[c.street, `${c.postalCode} ${c.city}`.trim()].filter(Boolean).join(", ") || "–"}</dd>
-              <dt>{t("settings.email")}</dt><dd>{c.email || "–"}</dd>
-              <dt>{t("settings.phone")}</dt><dd>{c.phone || "–"}</dd>
-            </dl>
-          </section>
-          <section className="card stack">
-            <h2 className="card-title"><Receipt size={20} /> {t("settings.taxes")}</h2>
-            <TaxSettingsCard canEdit={canEdit} onChanged={onTaxChanged} company={c} />
-          </section>
-          <section className="card">
-            <h2 className="card-title"><Landmark size={20} /> {t("settings.bank")}</h2>
-            <dl className="facts">
-              <dt>{countryTax(c.country).iban ? t("settings.iban") : t("settings.accountNumber")}</dt><dd>{maskedIban}</dd>
-              <dt>{countryTax(c.country).iban ? t("settings.bic") : "SWIFT"}</dt><dd>{c.bic || "–"}</dd>
-              <dt>{t("settings.bankName")}</dt><dd>{c.bankName || "–"}</dd>
-              <dt>{t("settings.paymentMethods")}</dt><dd>{methodLabels(c.paymentMethods, { cash: t("payments.cash"), transfer: t("payments.transfer") }) || "–"}</dd>
-              {c.paymentAccount && <><dt>{t("settings.paymentAccount")}</dt><dd>{c.paymentAccount}</dd></>}
-            </dl>
-          </section>
-          <section className="card stack">
-            <h2 className="card-title"><ShieldCheck size={20} /> {t("settings.privacyTitle")}</h2>
-            <PrivacyCard me={me} canEdit={canEdit} onChanged={onTaxChanged} />
-          </section>
-          <section className="card">
-            <h2 className="card-title"><Palette size={20} /> {t("theme.label")}</h2>
-            <p className="muted">{t("theme.text")}</p>
-            <ThemeSwitch />
-          </section>
-          <section className="card">
-            <h2 className="card-title"><Languages size={20} /> {t("common.language")}</h2>
-            <LanguageSwitch />
-          </section>
+      {company ? (
+        <div className="settings-layout">
+          <nav className="settings-nav" aria-label={t("nav.company")}>
+            {SECTIONS.map(({ id, icon: Icon, title }) => (
+              <button key={id} type="button" className={active === id ? "active" : ""} aria-current={active === id ? "true" : undefined} onClick={() => jump(id)}>
+                <Icon size={17} aria-hidden /> {t(title)}
+              </button>
+            ))}
+          </nav>
+
+          <div className="stack-lg settings-sections">
+            <Section id="address" icon={Building2} title={t("settings.companyAddress")} intro={t("wizard.step1Intro")}>
+              <CompanySection part="address" saved={company} onSaved={saved} canEdit={canEdit} addressLookup={addressLookup} />
+            </Section>
+            <Section id="tax" icon={Receipt} title={t("settings.taxes")} intro={t("wizard.step2Intro")}>
+              <CompanySection part="tax" saved={company} onSaved={saved} canEdit={canEdit} addressLookup={addressLookup} />
+              <TaxRates canEdit={canEdit} onChanged={onChanged} />
+            </Section>
+            <Section id="bank" icon={Landmark} title={t("settings.bankPayment")}>
+              <CompanySection part="bank" saved={company} onSaved={saved} canEdit={canEdit} addressLookup={addressLookup} />
+            </Section>
+            <Section id="logo" icon={Image} title={t("settings.logo")}>
+              <CompanySection part="logo" saved={company} onSaved={saved} canEdit={canEdit} addressLookup={addressLookup} />
+            </Section>
+            <Section id="privacy" icon={ShieldCheck} title={t("settings.privacyTitle")} intro={t("settings.privacyText")}>
+              <PrivacyOptions me={me} canEdit={canEdit} onChanged={onChanged} />
+            </Section>
+            <Section id="display" icon={Palette} title={t("settings.display")} intro={t("theme.text")}>
+              <div className="row wrap gap settings-display">
+                <ThemeSwitch />
+                <LanguageSwitch />
+              </div>
+            </Section>
+          </div>
         </div>
       ) : (
         <p className="muted">{t("common.loading")}</p>
