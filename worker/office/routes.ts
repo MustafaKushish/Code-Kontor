@@ -261,6 +261,8 @@ officeRoutes.delete("/quotes/:id", managers, async (c) => {
 officeRoutes.get("/invoices", async (c) => {
   const status = c.req.query("status");
   const clientId = c.req.query("clientId");
+  // Fällige wiederkehrende Rechnungen als Entwurf anlegen, bevor die Liste gezeigt wird
+  await store(c.env, c.get("user").tenantId).runDueRecurring();
   const res = await store(c.env, c.get("user").tenantId).listInvoices(status, clientId);
   if (!res.ok) return moduleError(c, res.code);
   return c.json({ invoices: res.value });
@@ -279,6 +281,18 @@ officeRoutes.post("/invoices", managers, async (c) => {
   const res = await store(c.env, c.get("user").tenantId).saveInvoice(body);
   if (!res.ok) return moduleError(c, res.code);
   return c.json({ invoice: res.value }, 201);
+});
+
+officeRoutes.post("/invoices/:id/finalize", managers, async (c) => {
+  const res = await store(c.env, c.get("user").tenantId).finalizeInvoice(c.req.param("id"));
+  if (!res.ok) return moduleError(c, res.code);
+  return c.json({ invoice: res.value });
+});
+
+officeRoutes.post("/invoices/:id/cancel", managers, async (c) => {
+  const res = await store(c.env, c.get("user").tenantId).cancelInvoice(c.req.param("id"));
+  if (!res.ok) return moduleError(c, res.code);
+  return c.json({ invoice: res.value });
 });
 
 officeRoutes.post("/invoices/:id/pay", managers, async (c) => {
@@ -347,12 +361,26 @@ officeRoutes.delete("/recurring/:id", managers, async (c) => {
 
 // ---------- DATEV Export ----------
 
+// DATEV liest ANSI (Windows-1252); als UTF-8 geschickt wurden Umlaute zu „Ã¤“
+const CP1252: Record<string, number> = {
+  "€": 0x80, "‚": 0x82, "„": 0x84, "…": 0x85, "‘": 0x91, "’": 0x92, "“": 0x93, "”": 0x94, "•": 0x95, "–": 0x96, "—": 0x97, "™": 0x99,
+};
+function windows1252(text: string): ArrayBuffer {
+  const out = new Uint8Array(text.length);
+  let n = 0;
+  for (const ch of text) {
+    const code = ch.codePointAt(0)!;
+    out[n++] = CP1252[ch] ?? (code < 0x80 || (code >= 0xa0 && code <= 0xff) ? code : 0x3f);
+  }
+  return out.slice(0, n).buffer;
+}
+
 officeRoutes.get("/export/datev", managers, async (c) => {
   const res = await store(c.env, c.get("user").tenantId).exportDatevCsv();
   if (!res.ok) return moduleError(c, res.code);
 
   const filename = `DATEV-Export-${new Date().toISOString().slice(0, 10)}.csv`;
-  return new Response(res.value, {
+  return new Response(windows1252(res.value), {
     headers: {
       "Content-Type": "text/csv; charset=windows-1252",
       "Content-Disposition": `attachment; filename="${filename}"`,

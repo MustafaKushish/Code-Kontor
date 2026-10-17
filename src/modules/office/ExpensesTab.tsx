@@ -107,8 +107,10 @@ export function ExpensesTab({
 
   const handleInvoiceUnbilled = () => {
     if (unbilledExpenses.length === 0 || !onNavigateToInvoiceWithItems) return;
+    // Eine Rechnung je Kunde: nur die Auslagen des ersten Kunden
     const firstClient = unbilledExpenses[0].clientId;
-    const items: LineItem[] = unbilledExpenses.map((exp) => {
+    const entries = unbilledExpenses.filter((e) => e.clientId === firstClient);
+    const items: LineItem[] = entries.map((exp) => {
       const markupFactor = 1 + (exp.markupPercent / 100);
       const unitCents = Math.round(exp.netCents * markupFactor);
       return {
@@ -120,10 +122,11 @@ export function ExpensesTab({
         unitCents,
         vatRate: exp.vatRate,
         totalCents: unitCents,
+        source: { kind: "expense" as const, id: exp.id },
       };
     });
 
-    onNavigateToInvoiceWithItems(firstClient, unbilledExpenses[0].projectId, items);
+    onNavigateToInvoiceWithItems(firstClient, entries.every((e) => e.projectId === entries[0].projectId) ? entries[0].projectId : null, items);
   };
 
   const getCategoryIcon = (cat: ExpenseCategory) => {

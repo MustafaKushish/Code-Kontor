@@ -87,7 +87,7 @@ export function PrintDocument({
         <cbc:Description>${escapeXml(it.description || it.title)}</cbc:Description>
         <cbc:Name>${escapeXml(it.title)}</cbc:Name>
         <cac:ClassifiedTaxCategory>
-          <cbc:ID>S</cbc:ID>
+          <cbc:ID>${it.vatRate > 0 ? "S" : "E"}</cbc:ID>
           <cbc:Percent>${it.vatRate}</cbc:Percent>
           <cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme>
         </cac:ClassifiedTaxCategory>
@@ -99,6 +99,26 @@ export function PrintDocument({
       )
       .join("");
 
+    // Je Steuersatz eine Zwischensumme (vorher immer 19 %, auch bei 7 % oder 0 %)
+    const factor = doc.discountPercent && doc.discountPercent > 0 && doc.discountPercent <= 100 ? (100 - doc.discountPercent) / 100 : 1;
+    const rates = new Map<number, number>();
+    for (const it of doc.items) rates.set(it.vatRate, (rates.get(it.vatRate) ?? 0) + Math.round(it.qty * it.unitCents));
+    const taxSubtotals = [...rates]
+      .map(([rate, netCents]) => {
+        const base = Math.round(netCents * factor);
+        const tax = Math.round(Math.round(netCents * (rate / 100)) * factor);
+        return `    <cac:TaxSubtotal>
+      <cbc:TaxableAmount currencyID="${companyCurrency()}">${(base / 100).toFixed(2)}</cbc:TaxableAmount>
+      <cbc:TaxAmount currencyID="${companyCurrency()}">${(tax / 100).toFixed(2)}</cbc:TaxAmount>
+      <cac:TaxCategory>
+        <cbc:ID>${rate > 0 ? "S" : "E"}</cbc:ID>
+        <cbc:Percent>${rate}</cbc:Percent>${rate > 0 ? "" : "\n        <cbc:TaxExemptionReason>Steuerfrei</cbc:TaxExemptionReason>"}
+        <cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme>
+      </cac:TaxCategory>
+    </cac:TaxSubtotal>`;
+      })
+      .join("\n");
+
     return `<?xml version="1.0" encoding="UTF-8"?>
 <Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
          xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
@@ -109,7 +129,7 @@ export function PrintDocument({
   <cbc:IssueDate>${issueDate}</cbc:IssueDate>
   <cbc:DueDate>${dueDate}</cbc:DueDate>
   <cbc:InvoiceTypeCode>380</cbc:InvoiceTypeCode>
-  <cbc:DocumentCurrencyCode>EUR</cbc:DocumentCurrencyCode>
+  <cbc:DocumentCurrencyCode>${companyCurrency()}</cbc:DocumentCurrencyCode>
   <cbc:BuyerReference>${escapeXml(invoice?.buyerReference || "KUNDENREFERENZ")}</cbc:BuyerReference>
   <cac:AccountingSupplierParty>
     <cac:Party>
@@ -134,15 +154,7 @@ export function PrintDocument({
   </cac:AccountingCustomerParty>
   <cac:TaxTotal>
     <cbc:TaxAmount currencyID="${companyCurrency()}">${vat}</cbc:TaxAmount>
-    <cac:TaxSubtotal>
-      <cbc:TaxableAmount currencyID="${companyCurrency()}">${net}</cbc:TaxableAmount>
-      <cbc:TaxAmount currencyID="${companyCurrency()}">${vat}</cbc:TaxAmount>
-      <cac:TaxCategory>
-        <cbc:ID>S</cbc:ID>
-        <cbc:Percent>19</cbc:Percent>
-        <cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme>
-      </cac:TaxCategory>
-    </cac:TaxSubtotal>
+${taxSubtotals}
   </cac:TaxTotal>
   <cac:LegalMonetaryTotal>
     <cbc:LineExtensionAmount currencyID="${companyCurrency()}">${net}</cbc:LineExtensionAmount>

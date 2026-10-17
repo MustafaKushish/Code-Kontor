@@ -1,5 +1,5 @@
 import {
-  DEFAULT_OFFICE_SETTINGS, computeDocumentTotals, type LineItem, type OfficeClient,
+  DEFAULT_OFFICE_SETTINGS, computeDocumentTotals, computeLineTotal, type LineItem, type OfficeClient,
   type OfficeInvoice, type OfficeProject, type OfficeQuote, type OfficeSettings, type OfficeTimeEntry,
   type ProjectStatus, type QuoteStatus, type InvoiceStatus, type OfficeTask, type OfficeExpense,
   type OfficeDunning, type OfficeRecurring, type ExpenseCategory,
@@ -120,7 +120,37 @@ export const OFFICE_MIGRATIONS: string[] = [
    ALTER TABLE office_invoices ADD COLUMN last_dunning_at TEXT;
 
    ALTER TABLE office_quotes ADD COLUMN discount_percent REAL NOT NULL DEFAULT 0;`,
+
+  // Migration 3 (GoBD): Entwürfe ohne Rechnungsnummer (Jahr 0), Storno mit Datum
+  `ALTER TABLE office_invoices ADD COLUMN canceled_at TEXT;`,
 ];
+
+/** Kalendertag in deutscher Zeit (YYYY-MM-DD). */
+const berlinDay = (d = new Date()) => d.toLocaleDateString("en-CA", { timeZone: "Europe/Berlin" });
+
+/** Positionen prüfen und Beträge selbst rechnen; Summen aus dem Browser zählen nicht. */
+function cleanItems(input: unknown): LineItem[] {
+  return (Array.isArray(input) ? input : []).slice(0, 200).map((raw) => {
+    const i = (raw && typeof raw === "object" ? raw : {}) as Partial<LineItem>;
+    const qty = Number(i.qty);
+    const unitCents = Math.round(Number(i.unitCents));
+    const vatRate = Number(i.vatRate);
+    if (!String(i.title ?? "").trim() || !Number.isFinite(qty) || qty === 0 || !Number.isFinite(unitCents)) throw new OfficeError("invalidItem");
+    if (!Number.isFinite(vatRate) || vatRate < 0 || vatRate > 100) throw new OfficeError("invalidItem");
+    const source = i.source && (i.source.kind === "time" || i.source.kind === "expense") && typeof i.source.id === "string" ? { kind: i.source.kind, id: i.source.id } : undefined;
+    return {
+      id: typeof i.id === "string" && i.id ? i.id.slice(0, 60) : crypto.randomUUID(),
+      title: String(i.title).trim().slice(0, 300),
+      description: String(i.description ?? "").slice(0, 2000),
+      qty,
+      unit: String(i.unit ?? "Stk").slice(0, 20),
+      unitCents,
+      vatRate,
+      totalCents: computeLineTotal(qty, unitCents),
+      ...(source ? { source } : {}),
+    };
+  });
+}
 
 type Row = Record<string, string | number | null>;
 
@@ -212,6 +242,11 @@ export class OfficeStore {
   deleteClient(id: string): { ok: boolean } {
     const hasProjects = this.sql.exec<{ c: number }>("SELECT COUNT(*) AS c FROM office_projects WHERE client_id = ?", id).one().c;
     if (hasProjects > 0) throw new OfficeError("clientHasProjects");
+    // Rechnungen müssen 10 Jahre bleiben und dürfen nicht aus Liste und DATEV verschwinden
+    const hasDocuments = this.sql.exec<{ c: number }>(
+      "SELECT (SELECT COUNT(*) FROM office_invoices WHERE client_id = ?) + (SELECT COUNT(*) FROM office_quotes WHERE client_id = ?) AS c", id, id,
+    ).one().c;
+    if (hasDocuments > 0) throw new OfficeError("clientHasInvoices");
     this.sql.exec("DELETE FROM office_clients WHERE id = ?", id);
     return { ok: true };
   }
@@ -521,7 +556,8 @@ export class OfficeStore {
     const hourlyRate = Number(input.hourlyRateCents) || project.hourlyRateCents || client?.hourlyRateCents || this.getSettings().defaultHourlyRateCents;
 
     const id = input.id || crypto.randomUUID();
-    const day = input.day || new Date().toISOString().slice(0, 10);
+    if (input.id && this.isBilled("office_times", input.id)) throw new OfficeError("alreadyBilled");
+    const day = input.day || berlinDay();
     const billable = input.billable !== undefined ? (input.billable ? 1 : 0) : 1;
 
     this.sql.exec(
@@ -538,7 +574,7 @@ export class OfficeStore {
          task_id = excluded.task_id,
          role_name = excluded.role_name`,
       id, projectId, project.clientId, actor.id, actor.name, day, minutes, hourlyRate,
-      (input.description ?? "").trim(), billable, input.billedInvoiceId || null,
+      (input.description ?? "").trim(), billable, null,
       input.taskId || null, (input.roleName ?? "").trim(),
     );
 
@@ -557,12 +593,18 @@ export class OfficeStore {
       hourlyRateCents: hourlyRate,
       description: (input.description ?? "").trim(),
       billable: Boolean(billable),
-      billedInvoiceId: input.billedInvoiceId || null,
+      billedInvoiceId: null,
       createdAt: new Date().toISOString(),
     };
   }
 
+  /** Abgerechnete Zeiten und Auslagen gehören zur Rechnung und bleiben, wie sie sind. */
+  private isBilled(table: "office_times" | "office_expenses", id: string): boolean {
+    return !!this.sql.exec<{ b: string | null }>(`SELECT billed_invoice_id AS b FROM ${table} WHERE id = ?`, id).toArray()[0]?.b;
+  }
+
   deleteTime(id: string): { ok: boolean } {
+    if (this.isBilled("office_times", id)) throw new OfficeError("alreadyBilled");
     this.sql.exec("DELETE FROM office_times WHERE id = ?", id);
     return { ok: true };
   }
@@ -642,14 +684,16 @@ export class OfficeStore {
     const project = this.getProject(projectId);
     if (!project) throw new OfficeError("projectNotFound");
 
-    const netCents = Number(input.netCents) || 0;
-    const vatRate = Number(input.vatRate) || 19;
+    const netCents = Math.round(Number(input.netCents) || 0);
+    // 0 % ist ein gültiger Satz (vorher wurde daraus 19 %)
+    const vatRate = Number.isFinite(Number(input.vatRate)) && input.vatRate !== null && input.vatRate !== undefined ? Number(input.vatRate) : 19;
     const vatCents = Math.round(netCents * (vatRate / 100));
     const totalCents = netCents + vatCents;
 
     const id = input.id || crypto.randomUUID();
     const isNew = !input.id;
     const now = new Date().toISOString();
+    if (!isNew && this.isBilled("office_expenses", id)) throw new OfficeError("alreadyBilled");
 
     if (isNew) {
       this.sql.exec(
@@ -658,16 +702,16 @@ export class OfficeStore {
         id, projectId, project.clientId, title, input.category || "other",
         input.day || now.slice(0, 10), netCents, vatRate, vatCents, totalCents,
         input.billable !== false ? 1 : 0, Number(input.markupPercent) || 0,
-        input.billedInvoiceId || null, (input.notes ?? "").trim(), now,
+        null, (input.notes ?? "").trim(), now,
       );
     } else {
       this.sql.exec(
-        `UPDATE office_expenses SET project_id = ?, client_id = ?, title = ?, category = ?, day = ?, net_cents = ?, vat_rate = ?, vat_cents = ?, total_cents = ?, billable = ?, markup_percent = ?, billed_invoice_id = ?, notes = ?
+        `UPDATE office_expenses SET project_id = ?, client_id = ?, title = ?, category = ?, day = ?, net_cents = ?, vat_rate = ?, vat_cents = ?, total_cents = ?, billable = ?, markup_percent = ?, notes = ?
          WHERE id = ?`,
         projectId, project.clientId, title, input.category || "other",
         input.day || now.slice(0, 10), netCents, vatRate, vatCents, totalCents,
         input.billable !== false ? 1 : 0, Number(input.markupPercent) || 0,
-        input.billedInvoiceId || null, (input.notes ?? "").trim(), id,
+        (input.notes ?? "").trim(), id,
       );
     }
 
@@ -694,6 +738,7 @@ export class OfficeStore {
   }
 
   deleteExpense(id: string): { ok: boolean } {
+    if (this.isBilled("office_expenses", id)) throw new OfficeError("alreadyBilled");
     this.sql.exec("DELETE FROM office_expenses WHERE id = ?", id);
     return { ok: true };
   }
@@ -855,7 +900,7 @@ export class OfficeStore {
       .exec<Row>(
         `SELECT i.*, c.name AS client_name, c.street, c.postal_code, c.city, c.vat_id AS client_vat_id, p.name AS project_name
            FROM office_invoices i
-           JOIN office_clients c ON c.id = i.client_id
+           LEFT JOIN office_clients c ON c.id = i.client_id
            LEFT JOIN office_projects p ON p.id = i.project_id
           ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
           ORDER BY i.year DESC, i.seq DESC`,
@@ -871,7 +916,7 @@ export class OfficeStore {
       .exec<Row>(
         `SELECT i.*, c.name AS client_name, c.street, c.postal_code, c.city, c.vat_id AS client_vat_id, p.name AS project_name
            FROM office_invoices i
-           JOIN office_clients c ON c.id = i.client_id
+           LEFT JOIN office_clients c ON c.id = i.client_id
            LEFT JOIN office_projects p ON p.id = i.project_id
           WHERE i.id = ?`,
         id,
@@ -880,64 +925,130 @@ export class OfficeStore {
     return r ? this.mapInvoice(r) : null;
   }
 
+  /**
+   * Entwurf speichern. Entwürfe haben noch keine Rechnungsnummer (GoBD: lückenlos nur für
+   * ausgestellte Rechnungen); mit Status „sent“ wird der Entwurf gleich festgeschrieben.
+   * Ausgestellte Rechnungen ändert niemand mehr, sie werden storniert.
+   */
   saveInvoice(input: Partial<OfficeInvoice>): OfficeInvoice {
     const clientId = input.clientId;
     if (!clientId) throw new OfficeError("clientRequired");
-    const items = input.items && input.items.length ? input.items : [];
-    const discount = Number(input.discountPercent) || 0;
+    if (!this.getClient(clientId)) throw new OfficeError("clientNotFound");
+    const items = cleanItems(input.items);
+    if (!items.length) throw new OfficeError("invalidItem");
+    const discount = Math.min(100, Math.max(0, Number(input.discountPercent) || 0));
     const totals = computeDocumentTotals(items, discount);
     const settings = this.getSettings();
 
-    const id = input.id || crypto.randomUUID();
-    const isNew = !input.id;
-    const now = new Date();
-    const year = now.getFullYear();
-    const nowIso = now.toISOString();
+    const existing = input.id ? this.getInvoice(input.id) : null;
+    if (input.id && !existing) throw new OfficeError("invoiceNotFound");
+    if (existing && existing.status !== "draft") throw new OfficeError("invoiceLocked");
+
+    const id = existing?.id ?? crypto.randomUUID();
+    const nowIso = new Date().toISOString();
+    const dueDate = input.dueDate || new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10);
 
     this.transaction(() => {
-      if (isNew) {
-        const nextSeq = (this.sql.exec<{ s: number | null }>("SELECT MAX(seq) AS s FROM office_invoices WHERE year = ?", year).one().s ?? 0) + 1;
-        const number = `${settings.invoicePrefix}-${year}-${String(nextSeq).padStart(3, "0")}`;
-        const dueDate = input.dueDate || new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10);
+      if (!existing) {
+        const draftSeq = (this.sql.exec<{ s: number | null }>("SELECT MAX(seq) AS s FROM office_invoices WHERE year = 0").toArray()[0]?.s ?? 0) + 1;
         this.sql.exec(
           `INSERT INTO office_invoices (id, number, year, seq, client_id, project_id, quote_id, status, title, items, discount_percent, skonto_days, skonto_percent, net_cents, vat_cents, total_cents, due_date, issued_at, buyer_reference, dunning_level, notes, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          id, number, year, nextSeq, clientId, input.projectId || null, input.quoteId || null,
-          (input.status as InvoiceStatus) || "draft", (input.title ?? "Rechnung").trim(),
-          JSON.stringify(items), discount, Number(input.skontoDays) || 0, Number(input.skontoPercent) || 0,
-          totals.netCents, totals.vatCents, totals.totalCents,
-          dueDate, input.issuedAt || nowIso, (input.buyerReference ?? settings.buyerReferenceDefault).trim(),
-          Number(input.dunningLevel) || 0, (input.notes ?? "").trim(), nowIso, nowIso,
+           VALUES (?, ?, 0, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
+          id, `ENTWURF-${draftSeq}`, draftSeq, clientId, input.projectId || null, input.quoteId || null,
+          (input.title ?? "Rechnung").trim(), JSON.stringify(items), discount, Number(input.skontoDays) || 0, Number(input.skontoPercent) || 0,
+          totals.netCents, totals.vatCents, totals.totalCents, dueDate, input.issuedAt || nowIso,
+          (input.buyerReference ?? settings.buyerReferenceDefault).trim(), (input.notes ?? "").trim(), nowIso, nowIso,
         );
       } else {
         this.sql.exec(
-          `UPDATE office_invoices SET client_id = ?, project_id = ?, quote_id = ?, status = ?, title = ?, items = ?, discount_percent = ?, skonto_days = ?, skonto_percent = ?, net_cents = ?, vat_cents = ?, total_cents = ?, due_date = ?, buyer_reference = ?, dunning_level = ?, notes = ?, updated_at = ?
-           WHERE id = ?`,
-          clientId, input.projectId || null, input.quoteId || null, (input.status as InvoiceStatus) || "draft",
-          (input.title ?? "Rechnung").trim(), JSON.stringify(items), discount, Number(input.skontoDays) || 0, Number(input.skontoPercent) || 0,
-          totals.netCents, totals.vatCents, totals.totalCents, input.dueDate || "", (input.buyerReference ?? "").trim(),
-          Number(input.dunningLevel) || 0, (input.notes ?? "").trim(), nowIso, id,
+          `UPDATE office_invoices SET client_id = ?, project_id = ?, title = ?, items = ?, discount_percent = ?, skonto_days = ?, skonto_percent = ?, net_cents = ?, vat_cents = ?, total_cents = ?, due_date = ?, issued_at = ?, buyer_reference = ?, notes = ?, updated_at = ?
+           WHERE id = ? AND status = 'draft'`,
+          clientId, input.projectId || null, (input.title ?? "Rechnung").trim(), JSON.stringify(items), discount,
+          Number(input.skontoDays) || 0, Number(input.skontoPercent) || 0, totals.netCents, totals.vatCents, totals.totalCents,
+          dueDate, input.issuedAt || existing.issuedAt, (input.buyerReference ?? "").trim(), (input.notes ?? "").trim(), nowIso, id,
         );
       }
+      this.syncBilled(id, clientId, items);
+      if (input.status === "sent") this.finalizeInvoice(id);
     });
 
     return this.getInvoice(id)!;
   }
 
+  /** Zeiten und Auslagen aus den Positionen als abgerechnet markieren (nur vom selben Kunden, nur einmal). */
+  private syncBilled(invoiceId: string, clientId: string, items: LineItem[]) {
+    for (const table of ["office_times", "office_expenses"] as const) {
+      this.sql.exec(`UPDATE ${table} SET billed_invoice_id = NULL WHERE billed_invoice_id = ?`, invoiceId);
+    }
+    for (const item of items) {
+      if (!item.source) continue;
+      const table = item.source.kind === "time" ? "office_times" : "office_expenses";
+      const done = this.sql.exec(
+        `UPDATE ${table} SET billed_invoice_id = ? WHERE id = ? AND client_id = ? AND billed_invoice_id IS NULL`,
+        invoiceId, item.source.id, clientId,
+      ).rowsWritten;
+      if (!done) throw new OfficeError("alreadyBilled");
+    }
+  }
+
+  /** Festschreiben: fortlaufende Nummer im Jahr der Ausstellung, Datum heute; danach unveränderlich. */
+  finalizeInvoice(id: string): OfficeInvoice {
+    return this.transaction(() => {
+      const inv = this.getInvoice(id);
+      if (!inv) throw new OfficeError("invoiceNotFound");
+      if (inv.status !== "draft") throw new OfficeError("invoiceLocked");
+      const settings = this.getSettings();
+      const today = berlinDay();
+      const year = Number(today.slice(0, 4));
+      const seq = (this.sql.exec<{ s: number | null }>("SELECT MAX(seq) AS s FROM office_invoices WHERE year = ?", year).toArray()[0]?.s ?? 0) + 1;
+      const number = `${settings.invoicePrefix}-${year}-${String(seq).padStart(3, "0")}`;
+      const nowIso = new Date().toISOString();
+      this.sql.exec(
+        "UPDATE office_invoices SET status = 'sent', number = ?, year = ?, seq = ?, issued_at = ?, updated_at = ? WHERE id = ?",
+        number, year, seq, nowIso, nowIso, id,
+      );
+      return this.getInvoice(id)!;
+    });
+  }
+
+  /** Storno einer ausgestellten Rechnung: Nummer bleibt, Zeiten und Auslagen werden wieder frei. */
+  cancelInvoice(id: string): OfficeInvoice {
+    return this.transaction(() => {
+      const inv = this.getInvoice(id);
+      if (!inv) throw new OfficeError("invoiceNotFound");
+      if (inv.status !== "sent" && inv.status !== "overdue") throw new OfficeError("invoiceNotCancelable");
+      const nowIso = new Date().toISOString();
+      this.sql.exec("UPDATE office_invoices SET status = 'canceled', canceled_at = ?, updated_at = ? WHERE id = ?", nowIso, nowIso, id);
+      for (const table of ["office_times", "office_expenses"] as const) {
+        this.sql.exec(`UPDATE ${table} SET billed_invoice_id = NULL WHERE billed_invoice_id = ?`, id);
+      }
+      return this.getInvoice(id)!;
+    });
+  }
+
   markInvoicePaid(id: string, paymentMethod = "Überweisung"): OfficeInvoice {
     const inv = this.getInvoice(id);
     if (!inv) throw new OfficeError("invoiceNotFound");
+    if (inv.status !== "sent" && inv.status !== "overdue") throw new OfficeError("invoiceNotOpen");
     const nowIso = new Date().toISOString();
     this.sql.exec(
       "UPDATE office_invoices SET status = 'paid', paid_at = ?, paid_method = ?, updated_at = ? WHERE id = ?",
-      nowIso, paymentMethod, nowIso, id,
+      nowIso, paymentMethod.slice(0, 60), nowIso, id,
     );
     return this.getInvoice(id)!;
   }
 
+  /** Nur Entwürfe lassen sich löschen; ausgestellte Rechnungen werden storniert. */
   deleteInvoice(id: string): { ok: boolean } {
-    this.sql.exec("DELETE FROM office_dunning WHERE invoice_id = ?", id);
-    this.sql.exec("DELETE FROM office_invoices WHERE id = ?", id);
+    const inv = this.getInvoice(id);
+    if (!inv) return { ok: true };
+    if (inv.status !== "draft") throw new OfficeError("invoiceLocked");
+    this.transaction(() => {
+      for (const table of ["office_times", "office_expenses"] as const) {
+        this.sql.exec(`UPDATE ${table} SET billed_invoice_id = NULL WHERE billed_invoice_id = ?`, id);
+      }
+      this.sql.exec("DELETE FROM office_invoices WHERE id = ?", id);
+    });
     return { ok: true };
   }
 
@@ -967,6 +1078,7 @@ export class OfficeStore {
       issuedAt: String(r.issued_at),
       paidAt: r.paid_at ? String(r.paid_at) : null,
       paidMethod: r.paid_method ? String(r.paid_method) : null,
+      canceledAt: r.canceled_at ? String(r.canceled_at) : null,
       buyerReference: String(r.buyer_reference ?? ""),
       dunningLevel: Number(r.dunning_level ?? 0),
       lastDunningAt: r.last_dunning_at ? String(r.last_dunning_at) : null,
@@ -1003,6 +1115,10 @@ export class OfficeStore {
   createDunning(invoiceId: string, level: 1 | 2 | 3, notes = ""): OfficeDunning {
     const inv = this.getInvoice(invoiceId);
     if (!inv) throw new OfficeError("invoiceNotFound");
+    // Gemahnt werden nur offene, ausgestellte Rechnungen, und nur nach Fälligkeit
+    if (inv.status !== "sent" && inv.status !== "overdue") throw new OfficeError("invoiceNotOpen");
+    if (inv.dueDate && inv.dueDate >= berlinDay()) throw new OfficeError("invoiceNotDue");
+    if (![1, 2, 3].includes(level) || level < inv.dunningLevel) throw new OfficeError("dunningLevelInvalid");
     const settings = this.getSettings();
 
     const id = crypto.randomUUID();
@@ -1121,43 +1237,71 @@ export class OfficeStore {
       dueDate: new Date(Date.now() + (client?.paymentTermsDays || 14) * 86_400_000).toISOString().slice(0, 10),
     });
 
-    // Advance next_run_day by intervalMonths
-    const [y, m, d] = rec.nextRunDay.split("-").map(Number);
-    const nextDate = new Date(y, (m - 1) + rec.intervalMonths, d);
-    const nextRunStr = nextDate.toISOString().slice(0, 10);
-    this.sql.exec("UPDATE office_recurring SET next_run_day = ? WHERE id = ?", nextRunStr, id);
-
+    this.sql.exec("UPDATE office_recurring SET next_run_day = ? WHERE id = ?", addMonths(rec.nextRunDay, rec.intervalMonths), id);
     return invoice;
+  }
+
+  /**
+   * Fällige wiederkehrende Rechnungen als Entwurf anlegen (vorher liefen sie nie von selbst).
+   * Läuft beim Öffnen der Rechnungen; höchstens 12 nachgeholte Läufe je Vorlage.
+   */
+  runDueRecurring(today = berlinDay()): number {
+    let created = 0;
+    for (const rec of this.listRecurring()) {
+      if (!rec.active) continue;
+      for (let i = 0; i < 12 && (this.listRecurring().find((r) => r.id === rec.id)?.nextRunDay ?? "9999") <= today; i++) {
+        this.triggerRecurring(rec.id);
+        created++;
+      }
+    }
+    return created;
   }
 
   // ---------- DATEV Export ----------
 
+  /**
+   * Buchungsstapel für DATEV (SKR03): nur ausgestellte Rechnungen, je Steuersatz eine Zeile
+   * mit dem passenden Erlöskonto; stornierte Rechnungen mit Gegenbuchung.
+   */
   exportDatevCsv(): string {
-    const invoices = this.listInvoices();
+    const ACCOUNT: Record<number, string> = { 19: "8400", 7: "8300", 0: "8100" };
     const rows = [
       ["Umsatz (ohne Soll/Haben-Kz)", "Soll/Haben-Kennzeichen", "Konto", "Gegenkonto", "Belegdatum", "Belegfeld 1", "Buchungstext", "Festschreibung"].join(";"),
     ];
+    const quote = (v: string) => `"${v.replace(/"/g, '""')}"`;
+    const money = (cents: number) => (cents / 100).toFixed(2).replace(".", ",");
+    const date = (iso: string) => berlinDay(new Date(iso)).replace(/-/g, "");
 
-    for (const inv of invoices) {
-      if (inv.status === "canceled") continue;
-      const amountEur = (inv.totalCents / 100).toFixed(2).replace(".", ",");
-      const dateFormatted = inv.issuedAt.slice(0, 10).replace(/-/g, "");
-      const beleg = inv.number;
+    for (const inv of this.listInvoices()) {
+      if (inv.status === "draft") continue;
+      // Brutto je Steuersatz, Rabatt anteilig
+      const discount = inv.discountPercent ?? 0;
+      const factor = discount > 0 && discount <= 100 ? (100 - discount) / 100 : 1;
+      const byRate = new Map<number, number>();
+      for (const item of inv.items) {
+        const net = computeLineTotal(item.qty, item.unitCents);
+        byRate.set(item.vatRate, (byRate.get(item.vatRate) ?? 0) + Math.round(net * factor) + Math.round(Math.round(net * (item.vatRate / 100)) * factor));
+      }
       const text = `${inv.clientName} - ${inv.title}`.slice(0, 60);
-
-      // Standardkontenrahmen SKR03/SKR04: Erlöskonto 8400 (19% USt) gegen Debitor 10000
-      rows.push([
-        amountEur,
-        "S",
-        "10000",
-        "8400",
-        dateFormatted,
-        `"${beleg}"`,
-        `"${text.replace(/"/g, '""')}"`,
-        "0",
-      ].join(";"));
+      const book = (sign: "S" | "H", when: string) => {
+        for (const [rate, cents] of byRate) {
+          if (!cents) continue;
+          rows.push([money(Math.abs(cents)), cents < 0 ? (sign === "S" ? "H" : "S") : sign, "10000", ACCOUNT[rate] ?? "8400", date(when), quote(inv.number), quote(text), "0"].join(";"));
+        }
+      };
+      book("S", inv.issuedAt);
+      if (inv.status === "canceled") book("H", inv.canceledAt ?? inv.updatedAt);
     }
 
     return rows.join("\r\n");
   }
+}
+
+/** Tag (YYYY-MM-DD) plus n Monate; am Monatsende auf den letzten Tag gekürzt (31.01. → 28./29.02.). */
+export function addMonths(day: string, months: number): string {
+  const [y, m, d] = day.split("-").map(Number);
+  const target = new Date(Date.UTC(y, m - 1 + months, 1));
+  const last = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+  target.setUTCDate(Math.min(d, last));
+  return target.toISOString().slice(0, 10);
 }

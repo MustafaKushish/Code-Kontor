@@ -329,6 +329,26 @@ export function InvoicesTab({
     }
   };
 
+  const handleFinalize = async (id: string) => {
+    if (!confirm(o("invoices.finalizeConfirm"))) return;
+    try {
+      await api(`/office/invoices/${id}/finalize`, { method: "POST" });
+      await loadData();
+    } catch (err) {
+      alert(officeError(err));
+    }
+  };
+
+  const handleCancel = async (id: string) => {
+    if (!confirm(o("invoices.cancelConfirm"))) return;
+    try {
+      await api(`/office/invoices/${id}/cancel`, { method: "POST" });
+      await loadData();
+    } catch (err) {
+      alert(officeError(err));
+    }
+  };
+
   const handleDelete = async (id: string) => {
     if (!confirm(o("common.confirmDelete"))) return;
     try {
@@ -416,7 +436,7 @@ export function InvoicesTab({
           {filteredInvoices.map((inv) => (
             <div key={inv.id} className="office-item">
               <div className="list-row office-row">
-                <span className="office-date">{inv.number}</span>
+                <span className="office-date">{inv.status === "draft" ? o("invoices.draftNumber") : inv.number}</span>
                 <span className="list-main">
                   <strong>{inv.clientName}</strong>
                   <small className="muted">{[inv.projectName, `${day(inv.issuedAt)} · fällig ${day(inv.dueDate)}`].filter(Boolean).join(" · ")}</small>
@@ -433,7 +453,7 @@ export function InvoicesTab({
                 <button className="button small-button" onClick={() => setPrintDoc(inv)} title="Drucken / E-Rechnung / GiroCode">
                   <Printer size={15} /> Druck / XML
                 </button>
-                {inv.status !== "paid" && inv.status !== "canceled" && (
+                {(inv.status === "sent" || inv.status === "overdue") && (
                   <>
                     <button className="button small-button success-button" onClick={() => setPayModalInvoice(inv)} title="Als bezahlt markieren">
                       <CheckCircle size={15} /> Bezahlt
@@ -447,7 +467,17 @@ export function InvoicesTab({
                     </button>
                   </>
                 )}
-                {isManager && (
+                {isManager && inv.status === "draft" && (
+                  <button className="button small-button primary" onClick={() => handleFinalize(inv.id)}>
+                    <CheckCircle size={15} /> {o("invoices.finalize")}
+                  </button>
+                )}
+                {isManager && (inv.status === "sent" || inv.status === "overdue") && (
+                  <button className="button small-button" onClick={() => handleCancel(inv.id)}>
+                    {o("invoices.cancel")}
+                  </button>
+                )}
+                {isManager && inv.status === "draft" && (
                   <>
                     <button className="icon-button" onClick={() => openEdit(inv)} title={o("common.edit")} aria-label={o("common.edit")}>
                       <Pencil size={16} />
@@ -531,13 +561,11 @@ export function InvoicesTab({
               <Field label={o("invoices.dueDate")} required>
                 <input type="date" required value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} />
               </Field>
-              <Field label="Status">
-                <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as InvoiceStatus })}>
-                  <option value="draft">{o("invoices.status.draft")}</option>
-                  <option value="sent">{o("invoices.status.sent")}</option>
-                  <option value="paid">{o("invoices.status.paid")}</option>
-                  <option value="overdue">{o("invoices.status.overdue")}</option>
-                  <option value="canceled">{o("invoices.status.canceled")}</option>
+              <Field label={o("invoices.statusOnSave")}>
+                {/* Bezahlt, überfällig und storniert entstehen nur durch Zahlung, Mahnung oder Storno */}
+                <select value={form.status === "sent" ? "sent" : "draft"} onChange={(e) => setForm({ ...form, status: e.target.value as InvoiceStatus })}>
+                  <option value="draft">{o("invoices.saveDraft")}</option>
+                  <option value="sent">{o("invoices.finalize")}</option>
                 </select>
               </Field>
             </div>
