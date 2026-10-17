@@ -79,7 +79,8 @@ describe("Nummernkreise nach dem Löschen", () => {
 
   it("Restaurant: Abholnummer läuft nach 99 wieder ab 1 weiter", () => {
     const s = new RestaurantStore(memorySql(RESTAURANT_MIGRATIONS), tx);
-    const numbers = Array.from({ length: 101 }, () => s.createOrder({ type: "theke", items: [] }).pickupNumber);
+    const m = s.saveMenuItem({ itemNumber: "K1", name: "Kaffee", priceGross: 2.5 });
+    const numbers = Array.from({ length: 101 }, () => s.createOrder({ type: "theke", items: [{ menuItemId: m.id, quantity: 1 } as never] }).pickupNumber);
     expect(numbers.slice(0, 2)).toEqual([1, 2]);
     expect(numbers.slice(97, 101)).toEqual([98, 99, 1, 2]);
   });

@@ -113,12 +113,8 @@ export function TablesTab({ tables, menu, orders, isManager, onRefresh }: Tables
       };
 
       if (activeOrder) {
-        // Update existing order
-        const updatedItems = [...activeOrder.items, newItem];
-        await api(`/restaurant/orders/${activeOrder.id}`, {
-          method: "PUT",
-          body: { items: updatedItems },
-        });
+        // Anhängen statt die ganze Liste zu schicken: so gehen Positionen anderer Kellner nicht verloren
+        await api(`/restaurant/orders/${activeOrder.id}/items`, { method: "POST", body: { items: [newItem] } });
       } else {
         // Create new order for this table
         await api("/restaurant/orders", {
@@ -145,19 +141,8 @@ export function TablesTab({ tables, menu, orders, isManager, onRefresh }: Tables
     if (!activeOrder) return;
     setIsBusy(true);
     try {
-      const updatedItems = activeOrder.items.filter((i) => i.id !== itemId);
-      if (updatedItems.length === 0) {
-        // Cancel/reset table order
-        await api(`/restaurant/orders/${activeOrder.id}/status`, {
-          method: "POST",
-          body: { status: "storniert" },
-        });
-      } else {
-        await api(`/restaurant/orders/${activeOrder.id}`, {
-          method: "PUT",
-          body: { items: updatedItems },
-        });
-      }
+      // Ist die letzte Position weg, storniert der Server die Bestellung und gibt den Tisch frei
+      await api(`/restaurant/orders/${activeOrder.id}/items/${itemId}`, { method: "DELETE" });
       onRefresh();
     } catch (err) {
       console.error(err);
@@ -403,7 +388,7 @@ export function TablesTab({ tables, menu, orders, isManager, onRefresh }: Tables
                 </div>
 
                 <div className="restaurant-actions">
-                  <button onClick={() => setPaying(activeOrder.id)} disabled={isBusy} className="button primary">
+                  <button onClick={() => setPaying(activeOrder.id)} disabled={isBusy} className="button primary block">
                     <Banknote size={18} />
                     Bezahlen
                   </button>

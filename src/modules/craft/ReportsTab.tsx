@@ -28,7 +28,7 @@ import type {
 } from "../../../shared/craft";
 import { SignaturePad } from "./SignaturePad";
 import { CraftPrint } from "./CraftPrint";
-import { currency as companyCurrency, currencySymbol } from "../../money";
+import { currency as companyCurrency, currencySymbol, standardVat } from "../../money";
 
 interface ReportsTabProps {
   isManager: boolean;
@@ -61,7 +61,7 @@ export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsT
       unit: "Std.",
       unitPriceNet: 68.0,
       totalNet: 544.0,
-      taxRate: 19,
+      taxRate: standardVat(),
     },
     {
       id: "item-2",
@@ -71,7 +71,7 @@ export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsT
       unit: "km",
       unitPriceNet: 1.6,
       totalNet: 24.0,
-      taxRate: 19,
+      taxRate: standardVat(),
     },
   ]);
 
@@ -135,7 +135,7 @@ export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsT
       unit: type === "lohn" ? "Std." : type === "fahrt" ? "km" : "Stk.",
       unitPriceNet: type === "lohn" ? 68.0 : type === "fahrt" ? 1.6 : 25.0,
       totalNet: type === "lohn" ? 68.0 : type === "fahrt" ? 1.6 : 25.0,
-      taxRate: 19,
+      taxRate: standardVat(),
     };
     setNewItems([...newItems, newItem]);
   };
@@ -297,7 +297,7 @@ export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsT
                     >
                       <Printer size={17} />
                     </button>
-                    {isManager && (
+                    {isManager && report.status === "entwurf" && (
                       <button
                         onClick={() => handleDelete(report.id)}
                         className="icon-button danger"

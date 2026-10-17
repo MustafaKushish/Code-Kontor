@@ -321,6 +321,7 @@ export function ClassesTab({ onRefreshStats, isManager }: ClassesTabProps) {
             <div className="stack-sm">
               <h3>
                 Gebuchte Plätze ({activeClass.bookedMemberIds.length} / {activeClass.maxParticipants})
+                {activeClass.bookingsFor && <> · am {new Date(`${activeClass.bookingsFor}T12:00:00Z`).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" })}</>}
               </h3>
 
               {activeClass.bookedMemberIds.length === 0 ? (

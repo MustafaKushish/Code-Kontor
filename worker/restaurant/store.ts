@@ -635,6 +635,8 @@ export class RestaurantStore {
     paymentMethod?: "bar" | "karte" | "rechnung" | "pos";
   }): RestaurantOrder {
     return this.tx(() => {
+      data = { ...data, items: this.resolveItems(data.items) };
+      if (!data.items.length) throw new RestaurantError("noItems");
       const id = crypto.randomUUID();
       const orderNumber = `BON-${nextNumber(this.sql, "restaurant_orders", "order_number", "BON-", 101)}`;
 
@@ -759,7 +761,7 @@ export class RestaurantStore {
       );
 
       if (updated.tableId) {
-        if (updated.status === "abgeschlossen" || updated.paymentStatus === "bezahlt") {
+        if (updated.status === "abgeschlossen" || updated.status === "storniert" || updated.paymentStatus === "bezahlt") {
           this.sql.exec(
             "UPDATE restaurant_tables SET status = 'frei', current_order_id = NULL, total_gross = 0, guest_count = 0 WHERE id = ?",
             updated.tableId,
@@ -774,6 +776,56 @@ export class RestaurantStore {
       }
 
       return updated;
+    });
+  }
+
+  /**
+   * Positionen aus der Speisekarte: Name, Preis, Steuersatz und Bon-Ziel kommen vom Server,
+   * aus dem Browser nur Speise, Menge, Gang und Hinweis.
+   */
+  private resolveItems(input: unknown): OrderItem[] {
+    const menu = new Map(this.listMenu().map((m) => [m.id, m]));
+    return (Array.isArray(input) ? input : []).slice(0, 100).map((raw) => {
+      const i = (raw && typeof raw === "object" ? raw : {}) as Partial<OrderItem>;
+      const m = typeof i.menuItemId === "string" ? menu.get(i.menuItemId) : undefined;
+      if (!m || !m.active) throw new RestaurantError("menuItemNotFound");
+      const quantity = Math.trunc(Number(i.quantity));
+      if (!(quantity >= 1 && quantity <= 99)) throw new RestaurantError("invalidQuantity");
+      return {
+        id: crypto.randomUUID(),
+        menuItemId: m.id,
+        name: m.name,
+        quantity,
+        unitPriceGross: m.priceGross,
+        taxRate: m.taxRate,
+        course: (typeof i.course === "string" ? i.course.slice(0, 30) : "Sofort") as OrderItem["course"],
+        note: typeof i.note === "string" && i.note.trim() ? i.note.trim().slice(0, 200) : undefined,
+        status: "bestellt",
+        destination: m.destination,
+      };
+    });
+  }
+
+  /** Positionen anhängen. Zwei Kellner am selben Tisch überschreiben sich so nicht mehr gegenseitig. */
+  addOrderItems(id: string, items: unknown): RestaurantOrder {
+    return this.tx(() => {
+      const order = this.getOrder(id);
+      if (order.paymentStatus === "bezahlt" || order.status === "abgeschlossen" || order.status === "storniert") throw new RestaurantError("orderClosed");
+      const added = this.resolveItems(items);
+      if (!added.length) throw new RestaurantError("noItems");
+      // Neue Positionen gehen wieder in die Küche
+      return this.updateOrder(id, { items: [...order.items, ...added], status: order.status === "fertig" ? "in_zubereitung" : order.status });
+    });
+  }
+
+  /** Eine Position entfernen; ist danach nichts mehr übrig, wird die Bestellung storniert und der Tisch frei. */
+  removeOrderItem(id: string, itemId: string): RestaurantOrder {
+    return this.tx(() => {
+      const order = this.getOrder(id);
+      if (order.paymentStatus === "bezahlt" || order.status === "abgeschlossen" || order.status === "storniert") throw new RestaurantError("orderClosed");
+      const items = order.items.filter((i) => i.id !== itemId);
+      if (items.length === order.items.length) throw new RestaurantError("itemNotFound");
+      return items.length ? this.updateOrder(id, { items }) : this.updateOrder(id, { items: order.items, status: "storniert", completedAt: new Date().toISOString() });
     });
   }
 

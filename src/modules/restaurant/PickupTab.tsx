@@ -102,7 +102,7 @@ export function PickupTab({ orders, menu, tenantId, onRefresh }: PickupTabProps)
         name: menuItem.name,
         quantity,
         unitPriceGross: menuItem.priceGross,
-        taxRate: 7, // Takeaway = 7% MwSt
+        taxRate: menuItem.taxRate,
         course: "Sofort",
         status: "bestellt",
         destination: menuItem.destination,

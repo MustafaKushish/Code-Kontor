@@ -14,6 +14,7 @@ import {
 import { api } from "../../api";
 import { Field } from "../../components";
 import { Dialog } from "../../pos/ui";
+import { evaluateFormula } from "../../../shared/formula";
 import type {
   CraftMeasurement,
   CraftProject,
@@ -60,15 +61,7 @@ export function MeasurementsTab({ measurements, projects, onRefresh, isManager }
   };
 
   const handleFormulaChange = (val: string) => {
-    let result = 0;
-    try {
-      const sanitized = val.replace(/[^\d.+*\- /()]/g, "");
-      if (sanitized.trim()) {
-        result = Math.round(Function(`'use strict'; return (${sanitized})`)() * 100) / 100;
-      }
-    } catch {
-      result = 0;
-    }
+    const result = evaluateFormula(val) ?? 0;
     setEditingMeasurement({ ...editingMeasurement, formula: val, result });
   };
 

@@ -1,4 +1,5 @@
 import { berlinYear, nextNumber } from "../numbers";
+import { evaluateFormula } from "../../shared/formula";
 import type { PosArticle, PosLine } from "../../shared/pos";
 import type { PosModule } from "../pos/store";
 import type {
@@ -477,17 +478,9 @@ export class CraftStore {
     const id = m.id || "m-" + Math.random().toString(36).slice(2, 9);
     const category = m.category || "Fläche";
     const formula = m.formula || "";
-    let result = m.result || 0;
-
-    // Einfache sichere Auswertung für L x B Formeln
-    if (formula && !m.result) {
-      try {
-        const sanitized = formula.replace(/[^\d.+*\- /()]/g, "");
-        result = Math.round(Function(`'use strict'; return (${sanitized})`)() * 100) / 100;
-      } catch {
-        result = 0;
-      }
-    }
+    // Das Ergebnis rechnet der Server aus der Formel; ohne Formel gilt die eingegebene Zahl
+    const result = formula ? evaluateFormula(formula) : typeof m.result === "number" && Number.isFinite(m.result) ? Math.round(m.result * 100) / 100 : 0;
+    if (result === null) throw new CraftError("invalidFormula");
 
     const unit = m.unit || (category === "Fläche" ? "m²" : category === "Länge / Umfang" ? "m" : category === "Volumen" ? "m³" : "stk");
 
@@ -564,30 +557,47 @@ export class CraftStore {
 
     const reportNumber = `RAP-${nextNumber(this.sql, "craft_reports", "report_number", "RAP-", 101)}`;
 
-    const items: CraftReportItem[] = data.items || [];
+    // Positionen prüfen und Beträge selbst rechnen; Summen aus dem Browser zählen nicht
+    const TYPES = ["lohn", "fahrt", "material", "geraet"];
+    const items: CraftReportItem[] = (Array.isArray(data.items) ? data.items : []).slice(0, 200).map((i) => {
+      const quantity = Number(i?.quantity);
+      const unitPriceNet = Number(i?.unitPriceNet);
+      const taxRate = i?.taxRate === undefined ? 19 : Number(i.taxRate);
+      if (!TYPES.includes(i?.type) || !String(i?.name ?? "").trim()) throw new CraftError("invalidItem");
+      if (!Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(unitPriceNet) || unitPriceNet < 0) throw new CraftError("invalidItem");
+      if (!Number.isFinite(taxRate) || taxRate < 0 || taxRate > 100) throw new CraftError("invalidItem");
+      return {
+        id: typeof i.id === "string" && i.id ? i.id.slice(0, 40) : "item-" + Math.random().toString(36).slice(2, 9),
+        type: i.type, name: String(i.name).trim().slice(0, 200), quantity, unit: i.unit, unitPriceNet, taxRate,
+        totalNet: Math.round(quantity * unitPriceNet * 100) / 100,
+      };
+    });
+    const hours = Number(data.hoursWorked) || 0;
+    const km = Number(data.travelKm) || 0;
+    if (hours < 0 || km < 0) throw new CraftError("invalidItem");
     // Falls keine Items übergeben wurden, mindestens Lohnposition generieren
-    if (items.length === 0 && data.hoursWorked > 0) {
+    if (items.length === 0 && hours > 0) {
       items.push({
         id: "item-" + Math.random().toString(36).slice(2, 9),
         type: "lohn",
         name: `Arbeitszeit vor Ort (${data.workerName})`,
-        quantity: data.hoursWorked,
+        quantity: hours,
         unit: "Std.",
         unitPriceNet: 65.0,
-        totalNet: Math.round(data.hoursWorked * 65.0 * 100) / 100,
+        totalNet: Math.round(hours * 65.0 * 100) / 100,
         taxRate: 19,
       });
     }
 
-    if (data.travelKm && data.travelKm > 0 && !items.some((i) => i.type === "fahrt")) {
+    if (km > 0 && !items.some((i) => i.type === "fahrt")) {
       items.push({
         id: "item-" + Math.random().toString(36).slice(2, 9),
         type: "fahrt",
         name: "An- und Abfahrt zur Baustelle",
-        quantity: data.travelKm,
+        quantity: km,
         unit: "km",
         unitPriceNet: 1.5,
-        totalNet: Math.round(data.travelKm * 1.5 * 100) / 100,
+        totalNet: Math.round(km * 1.5 * 100) / 100,
         taxRate: 19,
       });
     }
@@ -604,8 +614,11 @@ export class CraftStore {
       }
     }
 
+    totalWageNet = Math.round(totalWageNet * 100) / 100;
+    totalMaterialNet = Math.round(totalMaterialNet * 100) / 100;
     const totalNet = totalWageNet + totalMaterialNet;
-    const totalTax = Math.round(totalNet * 0.19 * 100) / 100;
+    // Steuer je Position mit ihrem Satz (Material kann 7 % haben, Kleinunternehmer 0 %)
+    const totalTax = Math.round(items.reduce((sum, i) => sum + (i.totalNet * i.taxRate) / 100, 0) * 100) / 100;
     const totalGross = Math.round((totalNet + totalTax) * 100) / 100;
 
     this.sql.exec(
@@ -622,8 +635,8 @@ export class CraftStore {
       project.siteAddress,
       data.date,
       data.workerName,
-      data.hoursWorked,
-      data.travelKm || 0,
+      hours,
+      km,
       JSON.stringify(items),
       data.workDescription,
       "entwurf",
@@ -639,6 +652,9 @@ export class CraftStore {
 
   signReport(id: string, signatureDataUrl: string, signedByName: string): CraftReport {
     const report = this.getReport(id);
+    // Unterschrieben ist unterschrieben: keine zweite Unterschrift über eine erste
+    if (report.status !== "entwurf") throw new CraftError("reportLocked");
+    if (!/^data:image\/(png|jpeg);base64,/.test(signatureDataUrl) || signatureDataUrl.length > 400_000) throw new CraftError("invalidSignature");
     const signedAt = new Date().toISOString();
 
     this.sql.exec(
@@ -715,6 +731,9 @@ export class CraftStore {
   }
 
   deleteReport(id: string): { success: boolean } {
+    // Unterschriebene oder bezahlte Rapporte sind Nachweise und bleiben
+    const report = this.getReport(id);
+    if (report.status !== "entwurf" || report.paymentStatus === "bezahlt") throw new CraftError("reportLocked");
     this.sql.exec("DELETE FROM craft_reports WHERE id = ?", id);
     return { success: true };
   }
@@ -747,7 +766,8 @@ export class CraftStore {
     const id = entry.id || "diary-" + Math.random().toString(36).slice(2, 9);
     const date = entry.date || new Date().toISOString().slice(0, 10);
     const weather = entry.weather || "Sonnig";
-    const temperatureCelsius = entry.temperatureCelsius || 18;
+    // 0 °C ist eine gültige Temperatur (vorher wurde daraus 18 °C)
+    const temperatureCelsius = typeof entry.temperatureCelsius === "number" && Number.isFinite(entry.temperatureCelsius) ? entry.temperatureCelsius : 18;
     const tradesJson = JSON.stringify(entry.tradesPresent || []);
 
     this.sql.exec(

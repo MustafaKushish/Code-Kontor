@@ -232,7 +232,7 @@ export function ServicesTab({ isManager }: { isManager: boolean }) {
                 <input type="text" required placeholder="48.00" value={form.priceEuro} onChange={(e) => setForm({ ...form, priceEuro: e.target.value })} />
               </Field>
               <Field label="MwSt.-Satz (%)">
-                <select value={form.vatRate} onChange={(e) => setForm({ ...form, vatRate: parseFloat(e.target.value) || 19 })}>
+                <select value={form.vatRate} onChange={(e) => setForm({ ...form, vatRate: Number(e.target.value) })}>
                   <option value="19">19% (Regulär)</option>
                   <option value="7">7% (Ermäßigt)</option>
                   <option value="0">0% (Steuerfrei)</option>
