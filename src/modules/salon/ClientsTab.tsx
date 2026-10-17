@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { Plus, Users, Search, Phone, Mail, Sparkles, Pencil, Trash2, X, AlertTriangle, Calendar, Heart, Palette } from "lucide-react";
+import { Plus, Search, Phone, Mail, Pencil, Trash2, AlertTriangle, Calendar, Heart, Palette } from "lucide-react";
 import { api } from "../../api";
 import { Field } from "../../components";
 import type { SalonClient, SalonColorFormula, SalonStaff } from "../../../shared/salon";
 import { useSalonI18n } from "./i18n";
+import { Dialog } from "../../pos/ui";
 
 export function ClientsTab({ isManager }: { isManager: boolean }) {
   const { s, euro, day: formatDay } = useSalonI18n();
@@ -185,307 +186,194 @@ export function ClientsTab({ isManager }: { isManager: boolean }) {
 
   return (
     <div className="stack">
-      {/* Toolbar */}
-      <div className="toolbar" style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
-        <div style={{ position: "relative", minWidth: "260px", flex: 1, maxWidth: "420px" }}>
-          <input
-            type="text"
-            className="input"
-            placeholder={s("clients.search")}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-
-        <button className="button primary push-end" onClick={openNewClient}>
+      {/* Suche & Aktion */}
+      <div className="salon-toolbar">
+        <label className="search">
+          <Search size={18} />
+          <input type="search" placeholder={s("clients.search")} aria-label={s("clients.search")} value={search} onChange={(e) => setSearch(e.target.value)} />
+        </label>
+        <button className="button primary" onClick={openNewClient}>
           <Plus size={18} /> {s("actions.newClient")}
         </button>
       </div>
 
-      {clientError && <div className="notice warning">{clientError}</div>}
+      {clientError && <p className="error" role="alert">{clientError}</p>}
 
-      {/* Grid */}
       {loading ? (
         <p className="muted">Lade Kundenkartei...</p>
-      ) : clients.length === 0 ? (
-        <div className="card" style={{ textAlign: "center", padding: "40px" }}>
-          <Users size={36} style={{ color: "var(--muted)", margin: "0 auto 12px" }} />
-          <h3>{s("clients.noClients")}</h3>
-        </div>
       ) : (
-        <div className="salon-grid">
+        <section className="card list-card">
+          {clients.length === 0 && <p className="empty muted">{s("clients.noClients")}</p>}
           {clients.map((c) => {
             const preferredStaff = staff.find((st) => st.id === c.preferredStaffId);
 
             return (
-              <div key={c.id} className="salon-card">
-                <div className="salon-card-header">
-                  <div>
-                    <h3 style={{ margin: "0 0 2px" }}>{c.name}</h3>
-                    <small className="muted">Kunden-Nr. #{c.number}</small>
-                  </div>
+              <div key={c.id} className="list-row salon-row">
+                <span className="salon-avatar" aria-hidden>{initials(c.name)}</span>
+                <span className="list-main">
+                  <strong>{c.name} <small className="muted">· Kunden-Nr. #{c.number}</small></strong>
+                  {(c.phone || c.email) && (
+                    <small className="muted">
+                      {c.phone && <><Phone size={13} /> {c.phone} </>}
+                      {c.email && <><Mail size={13} /> {c.email}</>}
+                    </small>
+                  )}
+                  {(c.birthday || preferredStaff) && (
+                    <small className="muted">
+                      {c.birthday && <><Calendar size={13} /> Geburtstag: {c.birthday} </>}
+                      {preferredStaff && <><Heart size={13} /> Wunsch-Stylist: {preferredStaff.name}</>}
+                    </small>
+                  )}
+                  {c.allergies && (
+                    <small className="error"><AlertTriangle size={13} /> {s("clients.allergies")}: {c.allergies}</small>
+                  )}
+                  {c.notes && <small className="muted">„{c.notes}“</small>}
+                </span>
+                <span className="salon-row-meta">
                   {c.totalVisits ? (
-                    <span className="pill success">
+                    <span className="pill pos">
                       {c.totalVisits} Besuche ({euro(c.totalSpentCents || 0)})
                     </span>
                   ) : (
                     <span className="pill">Neu</span>
                   )}
-                </div>
-
-                <div className="stack-sm" style={{ fontSize: "0.88rem", color: "var(--muted)" }}>
-                  {c.phone && (
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      <Phone size={14} /> <span>{c.phone}</span>
-                    </div>
-                  )}
-                  {c.email && (
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      <Mail size={14} /> <span>{c.email}</span>
-                    </div>
-                  )}
-                  {c.birthday && (
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      <Calendar size={14} /> <span>Geburtstag: {c.birthday}</span>
-                    </div>
-                  )}
-                  {preferredStaff && (
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      <Heart size={14} style={{ color: "var(--accent)" }} />
-                      <span>Wunsch-Stylist: <strong style={{ color: "var(--ink)" }}>{preferredStaff.name}</strong></span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Allergien / Besonderheiten */}
-                {c.allergies && (
-                  <div className="notice warning" style={{ padding: "8px 12px", fontSize: "0.82rem", borderRadius: "10px" }}>
-                    <strong>{s("clients.allergies")}:</strong> {c.allergies}
-                  </div>
-                )}
-
-                {/* Notizen */}
-                {c.notes && (
-                  <p className="small muted" style={{ margin: 0, fontStyle: "italic" }}>
-                    „{c.notes}“
-                  </p>
-                )}
-
-                {/* Fußzeile mit Aktionen */}
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--line)", paddingTop: "12px", marginTop: "auto", flexWrap: "wrap", gap: "8px" }}>
-                  <button
-                    className="button small"
-                    onClick={() => openFormulasModal(c)}
-                    style={{ background: "color-mix(in srgb, var(--accent) 12%, var(--panel))", borderColor: "color-mix(in srgb, var(--accent) 30%, var(--line))", color: "var(--accent)" }}
-                    title="Farbrezepturen und Behandlungshistorie ansehen"
-                  >
-                    <Palette size={15} /> Farbkarten
-                  </button>
-
-                  <div className="row gap" style={{ flexWrap: "wrap", alignItems: "center" }}>
-                    <button className="button small" onClick={() => openEditClient(c)} title={s("actions.edit")}>
-                      <Pencil size={14} />
+                  <span className="salon-row-actions">
+                    <button className="button small-button" onClick={() => openFormulasModal(c)} title="Farbrezepturen und Behandlungshistorie ansehen">
+                      <Palette size={15} /> Farbkarten
+                    </button>
+                    <button className="icon-button" onClick={() => openEditClient(c)} title={s("actions.edit")} aria-label={s("actions.edit")}>
+                      <Pencil size={16} />
                     </button>
                     {isManager && (
                       deleteConfirmClientId === c.id ? (
-                        <div className="row gap" style={{ alignItems: "center" }}>
-                          <button
-                            className="button danger small"
-                            onClick={() => handleDeleteClient(c.id)}
-                            title="Unwiderruflich löschen"
-                          >
+                        <>
+                          <button className="button danger small-button" onClick={() => handleDeleteClient(c.id)} title="Unwiderruflich löschen">
                             Löschen
                           </button>
-                          <button
-                            className="button small"
-                            onClick={() => setDeleteConfirmClientId(null)}
-                          >
+                          <button className="button small-button" onClick={() => setDeleteConfirmClientId(null)}>
                             Abbr.
                           </button>
-                        </div>
+                        </>
                       ) : (
-                        <button className="button small danger" onClick={() => setDeleteConfirmClientId(c.id)} title={s("actions.delete")}>
-                          <Trash2 size={14} />
+                        <button className="icon-button danger" onClick={() => setDeleteConfirmClientId(c.id)} title={s("actions.delete")} aria-label={s("actions.delete")}>
+                          <Trash2 size={16} />
                         </button>
                       )
                     )}
-                  </div>
-                </div>
+                  </span>
+                </span>
               </div>
             );
           })}
-        </div>
+        </section>
       )}
 
-      {/* Modal: Kunde anlegen / bearbeiten */}
+      {/* Dialog: Kunde anlegen / bearbeiten */}
       {modalOpen && (
-        <div className="salon-modal-overlay" onClick={() => setModalOpen(false)}>
-          <div className="salon-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="salon-modal-head">
-              <h3>{editingClient ? "Kunde bearbeiten" : s("actions.newClient")}</h3>
-              <button className="icon-button" onClick={() => setModalOpen(false)}>
-                <X size={20} />
-              </button>
-            </div>
+        <Dialog title={editingClient ? "Kunde bearbeiten" : s("actions.newClient")} onClose={() => setModalOpen(false)} wide>
+          <form onSubmit={handleSaveClient} className="salon-dialog stack">
+            {errorMsg && <p className="error" role="alert">{errorMsg}</p>}
 
-            {errorMsg && <div className="notice warning">{errorMsg}</div>}
-
-            <form onSubmit={handleSaveClient} className="stack">
-              <Field label="Name des Kunden" required>
-                <input
-                  type="text"
-                  required
-                  className="input"
-                  placeholder="Vor- und Nachname"
-                  value={clientForm.name}
-                  onChange={(e) => setClientForm({ ...clientForm, name: e.target.value })}
-                />
+            <div className="grid form-grid">
+              <Field label="Name des Kunden" required wide>
+                <input type="text" required placeholder="Vor- und Nachname" value={clientForm.name} onChange={(e) => setClientForm({ ...clientForm, name: e.target.value })} />
               </Field>
 
-              <div className="row-grid">
-                <Field label="Telefonnummer">
-                  <input
-                    type="tel"
-                    className="input"
-                    placeholder="+49 171 1234567"
-                    value={clientForm.phone}
-                    onChange={(e) => setClientForm({ ...clientForm, phone: e.target.value })}
-                  />
-                </Field>
-                <Field label="E-Mail-Adresse">
-                  <input
-                    type="email"
-                    className="input"
-                    placeholder="kunde@example.de"
-                    value={clientForm.email}
-                    onChange={(e) => setClientForm({ ...clientForm, email: e.target.value })}
-                  />
-                </Field>
-              </div>
+              <Field label="Telefonnummer">
+                <input type="tel" placeholder="+49 171 1234567" value={clientForm.phone} onChange={(e) => setClientForm({ ...clientForm, phone: e.target.value })} />
+              </Field>
+              <Field label="E-Mail-Adresse">
+                <input type="email" placeholder="kunde@example.de" value={clientForm.email} onChange={(e) => setClientForm({ ...clientForm, email: e.target.value })} />
+              </Field>
 
-              <div className="row-grid">
-                <Field label="Geburtstag (für Gratulation / Rabatt)">
-                  <input
-                    type="date"
-                    className="input"
-                    value={clientForm.birthday}
-                    onChange={(e) => setClientForm({ ...clientForm, birthday: e.target.value })}
-                  />
-                </Field>
-                <Field label="Bevorzugter Stylist">
-                  <select
-                    className="input"
-                    value={clientForm.preferredStaffId}
-                    onChange={(e) => setClientForm({ ...clientForm, preferredStaffId: e.target.value })}
-                  >
-                    <option value="">-- Keine Präferenz --</option>
-                    {staff.map((st) => (
-                      <option key={st.id} value={st.id}>
-                        {st.name} ({st.title})
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-              </div>
+              <Field label="Geburtstag (für Gratulation / Rabatt)">
+                <input type="date" value={clientForm.birthday} onChange={(e) => setClientForm({ ...clientForm, birthday: e.target.value })} />
+              </Field>
+              <Field label="Bevorzugter Stylist">
+                <select value={clientForm.preferredStaffId} onChange={(e) => setClientForm({ ...clientForm, preferredStaffId: e.target.value })}>
+                  <option value="">-- Keine Präferenz --</option>
+                  {staff.map((st) => (
+                    <option key={st.id} value={st.id}>
+                      {st.name} ({st.title})
+                    </option>
+                  ))}
+                </select>
+              </Field>
 
-              <Field label="Allergien, Kopfhautempfindlichkeit oder Unverträglichkeiten">
+              <Field label="Allergien, Kopfhautempfindlichkeit oder Unverträglichkeiten" wide>
                 <input
                   type="text"
-                  className="input"
                   placeholder="z.B. PPD-Allergie, brennt bei 9%, empfindlicher Nacken"
                   value={clientForm.allergies}
                   onChange={(e) => setClientForm({ ...clientForm, allergies: e.target.value })}
                 />
               </Field>
 
-              <Field label="Notizen & Vorlieben">
+              <Field label="Notizen & Vorlieben" wide>
                 <textarea
                   rows={3}
-                  className="input"
                   placeholder="Haarstruktur, bevorzugter Scheitel, Getränkewunsch (Espresso, Latte, Prosecco)..."
                   value={clientForm.notes}
                   onChange={(e) => setClientForm({ ...clientForm, notes: e.target.value })}
                 />
               </Field>
-
-              <div className="row gap" style={{ justifyContent: "flex-end", marginTop: "12px" }}>
-                <button type="button" className="button" onClick={() => setModalOpen(false)}>
-                  {s("actions.cancel")}
-                </button>
-                <button type="submit" className="button primary">
-                  {s("actions.save")}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Modal: Farbrezepturen (Farbkartei) */}
-      {formulaModalClient && (
-        <div className="salon-modal-overlay" onClick={() => setFormulaModalClient(null)}>
-          <div className="salon-modal" style={{ maxWidth: "680px" }} onClick={(e) => e.stopPropagation()}>
-            <div className="salon-modal-head">
-              <div>
-                <h3 style={{ margin: 0, display: "flex", alignItems: "center", gap: "8px" }}>
-                  <Palette size={20} style={{ color: "var(--accent)" }} />
-                  Farbrezepturen & Behandlungsakte
-                </h3>
-                <small className="muted">Kunde: {formulaModalClient.name}</small>
-              </div>
-              <button className="icon-button" onClick={() => setFormulaModalClient(null)}>
-                <X size={20} />
-              </button>
             </div>
 
-            {formulaError && <div className="notice warning">{formulaError}</div>}
+            <div className="actions">
+              <button type="button" className="button" onClick={() => setModalOpen(false)}>
+                {s("actions.cancel")}
+              </button>
+              <button type="submit" className="button primary">
+                {s("actions.save")}
+              </button>
+            </div>
+          </form>
+        </Dialog>
+      )}
+
+      {/* Dialog: Farbrezepturen (Farbkartei) */}
+      {formulaModalClient && (
+        <Dialog title="Farbrezepturen & Behandlungsakte" onClose={() => setFormulaModalClient(null)} wide>
+          <div className="salon-dialog stack">
+            <p className="muted">Kunde: {formulaModalClient.name}</p>
+
+            {formulaError && <p className="error" role="alert">{formulaError}</p>}
 
             {/* Neue Rezeptur anlegen */}
-            <form onSubmit={handleSaveFormula} className="card" style={{ padding: "14px", background: "var(--panel-2)", border: "1px solid var(--line)" }}>
-              <strong style={{ display: "block", marginBottom: "8px", fontSize: "0.92rem" }}>
-                Neue Rezeptur dokumentieren
-              </strong>
-              <div className="row-grid">
+            <form onSubmit={handleSaveFormula} className="salon-formula">
+              <strong>Neue Rezeptur dokumentieren</strong>
+              <div className="grid form-grid">
                 <Field label="Farbmarke / Produktlinie">
                   <input
                     type="text"
-                    className="input"
                     placeholder="z.B. Wella Koleston / Color Touch"
                     value={formulaForm.brand}
                     onChange={(e) => setFormulaForm({ ...formulaForm, brand: e.target.value })}
                   />
                 </Field>
                 <Field label="Stylist">
-                  <select
-                    className="input"
-                    value={formulaForm.staffId}
-                    onChange={(e) => setFormulaForm({ ...formulaForm, staffId: e.target.value })}
-                  >
+                  <select value={formulaForm.staffId} onChange={(e) => setFormulaForm({ ...formulaForm, staffId: e.target.value })}>
                     {staff.map((st) => (
                       <option key={st.id} value={st.id}>{st.name}</option>
                     ))}
                   </select>
                 </Field>
-              </div>
 
-              <Field label="Rezeptur & Mischungsverhältnis" required>
-                <input
-                  type="text"
-                  required
-                  className="input"
-                  placeholder="z.B. 40g 8/1 + 20g 9/16 mit 6% Welloxon (1:1)"
-                  value={formulaForm.formula}
-                  onChange={(e) => setFormulaForm({ ...formulaForm, formula: e.target.value })}
-                />
-              </Field>
+                <Field label="Rezeptur & Mischungsverhältnis" required wide>
+                  <input
+                    type="text"
+                    required
+                    placeholder="z.B. 40g 8/1 + 20g 9/16 mit 6% Welloxon (1:1)"
+                    value={formulaForm.formula}
+                    onChange={(e) => setFormulaForm({ ...formulaForm, formula: e.target.value })}
+                  />
+                </Field>
 
-              <div className="row-grid">
                 <Field label="Einwirkzeit (Minuten)">
                   <input
                     type="number"
                     min="1"
                     max="120"
-                    className="input"
                     value={formulaForm.developmentMinutes}
                     onChange={(e) => setFormulaForm({ ...formulaForm, developmentMinutes: Number(e.target.value) || 35 })}
                   />
@@ -493,7 +381,6 @@ export function ClientsTab({ isManager }: { isManager: boolean }) {
                 <Field label="Anwendung / Technik / Notizen">
                   <input
                     type="text"
-                    className="input"
                     placeholder="z.B. Ansatz 6%, Längen & Spitzen mit 1.9% glossed"
                     value={formulaForm.notes}
                     onChange={(e) => setFormulaForm({ ...formulaForm, notes: e.target.value })}
@@ -501,69 +388,56 @@ export function ClientsTab({ isManager }: { isManager: boolean }) {
                 </Field>
               </div>
 
-              <button type="submit" className="button primary" style={{ marginTop: "6px", justifySelf: "start" }}>
-                <Plus size={16} /> Rezeptur speichern
-              </button>
+              <div>
+                <button type="submit" className="button primary">
+                  <Plus size={17} /> Rezeptur speichern
+                </button>
+              </div>
             </form>
 
             {/* Bisherige Rezepturen */}
-            <div className="stack-sm" style={{ maxHeight: "320px", overflowY: "auto" }}>
-              <span className="small muted">Gespeicherte Farbkarten:</span>
+            <div className="stack-sm salon-formula-list">
+              <small className="muted">Gespeicherte Farbkarten:</small>
               {clientFormulas.length === 0 ? (
-                <p className="muted" style={{ textAlign: "center", padding: "16px" }}>
-                  Bisher keine Farbrezepturen für diesen Kunden hinterlegt.
-                </p>
+                <p className="empty muted">Bisher keine Farbrezepturen für diesen Kunden hinterlegt.</p>
               ) : (
                 clientFormulas.map((f) => (
-                  <div key={f.id} className="formula-card">
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <span className="formula-brand">{f.brand}</span>
-                      <div className="row gap" style={{ fontSize: "0.8rem", color: "var(--muted)" }}>
-                        <span>{formatDay(f.date)}</span>
-                        {f.staffName && <span>· {f.staffName}</span>}
+                  <div key={f.id} className="salon-formula">
+                    <div className="section-head">
+                      <strong>{f.brand}</strong>
+                      <span className="row gap">
+                        <small className="muted">{formatDay(f.date)}{f.staffName ? ` · ${f.staffName}` : ""}</small>
                         {isManager && (
                           deleteConfirmFormulaId === f.id ? (
-                            <div className="row gap" style={{ alignItems: "center" }}>
-                              <button
-                                className="button danger small"
-                                style={{ padding: "2px 6px", fontSize: "0.75rem" }}
-                                onClick={() => handleDeleteFormula(f.id)}
-                              >
+                            <>
+                              <button className="button danger small-button" onClick={() => handleDeleteFormula(f.id)}>
                                 Löschen
                               </button>
-                              <button
-                                className="button small"
-                                style={{ padding: "2px 6px", fontSize: "0.75rem" }}
-                                onClick={() => setDeleteConfirmFormulaId(null)}
-                              >
+                              <button className="button small-button" onClick={() => setDeleteConfirmFormulaId(null)}>
                                 Abbr.
                               </button>
-                            </div>
+                            </>
                           ) : (
-                            <button
-                              className="icon-button danger"
-                              style={{ width: "28px", height: "28px" }}
-                              onClick={() => setDeleteConfirmFormulaId(f.id)}
-                              title="Löschen"
-                            >
-                              <Trash2 size={13} />
+                            <button className="icon-button danger" onClick={() => setDeleteConfirmFormulaId(f.id)} title="Löschen" aria-label="Löschen">
+                              <Trash2 size={15} />
                             </button>
                           )
                         )}
-                      </div>
+                      </span>
                     </div>
-                    <div className="formula-text">{f.formula}</div>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", color: "var(--muted)" }}>
-                      <span>Einwirkzeit: <strong>{f.developmentMinutes} Min</strong></span>
-                      {f.notes && <span>{f.notes}</span>}
-                    </div>
+                    <code>{f.formula}</code>
+                    <small className="muted">
+                      Einwirkzeit: <strong>{f.developmentMinutes} Min</strong>{f.notes ? ` · ${f.notes}` : ""}
+                    </small>
                   </div>
                 ))
               )}
             </div>
           </div>
-        </div>
+        </Dialog>
       )}
     </div>
   );
 }
+
+const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]!.toUpperCase()).join("") || "?";

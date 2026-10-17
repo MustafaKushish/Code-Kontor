@@ -14,6 +14,9 @@ import {
   Users,
 } from "lucide-react";
 import { api, type Me } from "../../api";
+import { AppIcon } from "../../components";
+import { useI18n } from "../../i18n";
+import { findApp } from "../../../shared/apps";
 import type {
   MenuItem,
   RestaurantOrder,
@@ -25,8 +28,11 @@ import { CounterTab } from "./CounterTab";
 import { PickupTab } from "./PickupTab";
 import { KitchenTab } from "./KitchenTab";
 import { MenuTab } from "./MenuTab";
+import "./restaurant.css";
 
 export default function RestaurantApp({ me, path }: { me: Me; path: string }) {
+  const { appText } = useI18n();
+  const app = findApp("restaurant")!;
   const [activeTab, setActiveTab] = useState<"tische" | "theke" | "abholung" | "kueche" | "speisekarte">("tische");
   const [stats, setStats] = useState<RestaurantStats>({
     openTablesCount: 0,
@@ -74,214 +80,90 @@ export default function RestaurantApp({ me, path }: { me: Me; path: string }) {
     return () => clearInterval(interval);
   }, [loadData]);
 
+  const tabs = [
+    { id: "tische" as const, label: "Tischplan", icon: LayoutGrid, count: stats.openTablesCount },
+    { id: "theke" as const, label: "Kundenschalter (Theke)", icon: ShoppingCart, count: 0 },
+    { id: "abholung" as const, label: "Abholschalter", icon: ShoppingBag, count: stats.waitingPickupCount },
+    { id: "kueche" as const, label: "Küchenmonitor (KDS)", icon: Flame, count: stats.activeKitchenTicketsCount },
+    { id: "speisekarte" as const, label: "Speisekarte & Preise", icon: BookOpen, count: 0 },
+  ];
+
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[500px] text-slate-400 space-y-3">
-        <UtensilsCrossed className="w-10 h-10 animate-bounce text-amber-500" />
-        <p className="text-sm">Restaurant & Café wird geladen...</p>
+      <div className="restaurant restaurant-loading">
+        <UtensilsCrossed size={36} aria-hidden />
+        <p className="muted">Restaurant & Café wird geladen...</p>
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6 font-sans">
-      {/* Top Banner: Module Title & Real-time KPIs */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-slate-200 dark:border-slate-800">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center font-bold shadow-md shadow-amber-500/10">
-            <UtensilsCrossed className="w-6 h-6" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-slate-900 dark:text-white">
-                Restaurant & Café
-              </h1>
-              <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300">
-                Gastro-System
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Tischbedienung, Kundenschalter, Abholschalter & KDS Küchenmonitor
-            </p>
-          </div>
+    <div className="stack-lg restaurant">
+      <header className="page-head with-icon restaurant-head">
+        <AppIcon app={app} size="lg" />
+        <div>
+          <h1 className="display">{appText(app.id).name}</h1>
+          <p className="muted">{appText(app.id).tagline}</p>
         </div>
-
-        {/* Live Display & Refresh controls */}
-        <div className="flex items-center gap-3">
+        <div className="row gap push-end">
           <a
             href={`/abholung/${me.user.tenantId}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold transition-colors"
+            className="button"
             title="Öffentlichen Großbildschirm für den Wartebereich öffnen"
           >
-            <Tv className="w-4 h-4 text-amber-500" />
-            <span>Abhol-Display</span>
-            <ExternalLink className="w-3 h-3 opacity-60" />
+            <Tv size={18} /> Abhol-Display <ExternalLink size={14} aria-hidden />
           </a>
-
           <button
             onClick={() => loadData()}
             disabled={refreshing}
-            className="p-2 text-slate-500 hover:text-slate-900 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            className={`icon-button ${refreshing ? "spinning" : ""}`}
             title="Daten neu laden"
+            aria-label="Daten neu laden"
           >
-            <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin text-amber-500" : ""}`} />
+            <RefreshCw size={18} />
           </button>
         </div>
+      </header>
+
+      <div className="page-tabs" role="tablist">
+        {tabs.map(({ id, label, icon: Icon, count }) => (
+          <button key={id} role="tab" aria-selected={activeTab === id} className={activeTab === id ? "active" : ""} onClick={() => setActiveTab(id)}>
+            <Icon size={17} aria-hidden /> {label}
+            {count > 0 && <span className="restaurant-tab-count">{count}</span>}
+          </button>
+        ))}
       </div>
 
-      {/* KPI Stats Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        {/* Offene Tische */}
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 text-xs">
-            <span>Tischbelegung</span>
-            <Users className="w-4 h-4 text-amber-500" />
-          </div>
-          <div className="mt-2 flex items-baseline gap-1.5">
-            <span className="text-2xl font-mono font-bold text-slate-900 dark:text-white">
-              {stats.openTablesCount}
-            </span>
-            <span className="text-xs text-slate-400 font-mono">/ {stats.totalTablesCount} Tische</span>
-          </div>
+      <div className="restaurant-stats">
+        <div className="tile stat-tile">
+          <span className="stat-icon"><Users size={18} /></span>
+          <strong>{stats.openTablesCount} <span className="stat-unit">/ {stats.totalTablesCount} Tische</span></strong>
+          <small>Tischbelegung</small>
         </div>
-
-        {/* Aktive Küchenbons */}
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 text-xs">
-            <span>Küchenbons (KDS)</span>
-            <Flame className="w-4 h-4 text-red-500" />
-          </div>
-          <div className="mt-2 flex items-baseline gap-1.5">
-            <span className="text-2xl font-mono font-bold text-slate-900 dark:text-white">
-              {stats.activeKitchenTicketsCount}
-            </span>
-            <span className="text-xs text-red-500 font-medium">in Arbeit</span>
-          </div>
+        <div className="tile stat-tile">
+          <span className="stat-icon warn"><Flame size={18} /></span>
+          <strong>{stats.activeKitchenTicketsCount} <span className="stat-unit">in Arbeit</span></strong>
+          <small>Küchenbons (KDS)</small>
         </div>
-
-        {/* Wartende Abholungen */}
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 text-xs">
-            <span>Abholschalter</span>
-            <ShoppingBag className="w-4 h-4 text-amber-500" />
-          </div>
-          <div className="mt-2 flex items-baseline gap-1.5">
-            <span className="text-2xl font-mono font-bold text-slate-900 dark:text-white">
-              {stats.waitingPickupCount}
-            </span>
-            <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">bereit</span>
-          </div>
+        <div className="tile stat-tile">
+          <span className="stat-icon"><ShoppingBag size={18} /></span>
+          <strong>{stats.waitingPickupCount} <span className="stat-unit">bereit</span></strong>
+          <small>Abholschalter</small>
         </div>
-
-        {/* Durchschnittl. Zubereitung */}
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 text-xs">
-            <span>Ø Zubereitung</span>
-            <Clock className="w-4 h-4 text-blue-500" />
-          </div>
-          <div className="mt-2 flex items-baseline gap-1.5">
-            <span className="text-2xl font-mono font-bold text-slate-900 dark:text-white">
-              {stats.averagePrepTimeMinutes}
-            </span>
-            <span className="text-xs text-slate-400 font-mono">Minuten</span>
-          </div>
+        <div className="tile stat-tile">
+          <span className="stat-icon"><Clock size={18} /></span>
+          <strong>{stats.averagePrepTimeMinutes} <span className="stat-unit">Minuten</span></strong>
+          <small>Ø Zubereitung</small>
         </div>
-
-        {/* Tagesumsatz brutto */}
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs col-span-2 sm:col-span-1">
-          <div className="flex items-center justify-between text-slate-500 text-xs">
-            <span>Umsatz heute</span>
-            <TrendingUp className="w-4 h-4 text-emerald-500" />
-          </div>
-          <div className="mt-2 flex items-baseline gap-1.5">
-            <span className="text-xl font-mono font-bold text-slate-900 dark:text-white">
-              {fmtEuro(stats.revenueTodayGross)}
-            </span>
-          </div>
+        <div className="tile stat-tile restaurant-stat-wide">
+          <span className="stat-icon ok"><TrendingUp size={18} /></span>
+          <strong>{fmtEuro(stats.revenueTodayGross)}</strong>
+          <small>Umsatz heute</small>
         </div>
       </div>
 
-      {/* Primary Navigation Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 overflow-x-auto pb-px">
-        <button
-          onClick={() => setActiveTab("tische")}
-          className={`flex items-center gap-2 py-3 px-4 text-xs font-semibold border-b-2 transition-all whitespace-nowrap ${
-            activeTab === "tische"
-              ? "border-amber-500 text-amber-600 dark:text-amber-400"
-              : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-          }`}
-        >
-          <LayoutGrid className="w-4 h-4" />
-          <span>Tischplan</span>
-          {stats.openTablesCount > 0 && (
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 font-mono">
-              {stats.openTablesCount}
-            </span>
-          )}
-        </button>
-
-        <button
-          onClick={() => setActiveTab("theke")}
-          className={`flex items-center gap-2 py-3 px-4 text-xs font-semibold border-b-2 transition-all whitespace-nowrap ${
-            activeTab === "theke"
-              ? "border-amber-500 text-amber-600 dark:text-amber-400"
-              : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-          }`}
-        >
-          <ShoppingCart className="w-4 h-4" />
-          <span>Kundenschalter (Theke)</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab("abholung")}
-          className={`flex items-center gap-2 py-3 px-4 text-xs font-semibold border-b-2 transition-all whitespace-nowrap ${
-            activeTab === "abholung"
-              ? "border-amber-500 text-amber-600 dark:text-amber-400"
-              : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-          }`}
-        >
-          <ShoppingBag className="w-4 h-4" />
-          <span>Abholschalter</span>
-          {stats.waitingPickupCount > 0 && (
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-mono">
-              {stats.waitingPickupCount}
-            </span>
-          )}
-        </button>
-
-        <button
-          onClick={() => setActiveTab("kueche")}
-          className={`flex items-center gap-2 py-3 px-4 text-xs font-semibold border-b-2 transition-all whitespace-nowrap ${
-            activeTab === "kueche"
-              ? "border-amber-500 text-amber-600 dark:text-amber-400"
-              : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-          }`}
-        >
-          <Flame className="w-4 h-4" />
-          <span>Küchenmonitor (KDS)</span>
-          {stats.activeKitchenTicketsCount > 0 && (
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300 font-mono">
-              {stats.activeKitchenTicketsCount}
-            </span>
-          )}
-        </button>
-
-        <button
-          onClick={() => setActiveTab("speisekarte")}
-          className={`flex items-center gap-2 py-3 px-4 text-xs font-semibold border-b-2 transition-all whitespace-nowrap ${
-            activeTab === "speisekarte"
-              ? "border-amber-500 text-amber-600 dark:text-amber-400"
-              : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-          }`}
-        >
-          <BookOpen className="w-4 h-4" />
-          <span>Speisekarte & Preise</span>
-        </button>
-      </div>
-
-      {/* Tab Panels */}
       <div>
         {activeTab === "tische" && (
           <TablesTab

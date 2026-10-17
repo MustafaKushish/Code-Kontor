@@ -51,6 +51,8 @@ export interface Env {
   TENANT_DB: DurableObjectNamespace<TenantDatabase>;
   /** Nur für wrangler dev: „1“ schaltet die EU-Jurisdiktion ab, die lokal nicht unterstützt wird */
   LOCAL_NO_JURISDICTION?: string;
+  /** Nur für lokale Tests und Vorschau: „1“ öffnet das Demo-Konto (POST /api/auth/demo). Online nie setzen. */
+  DEMO_LOGIN?: string;
   ASSETS: Fetcher;
   /** Schlüssel für den KI-Assistenten (Google Gemini), gesetzt mit `wrangler secret put GEMINI_API_KEY`. */
   GEMINI_API_KEY?: string;
@@ -91,8 +93,8 @@ const TOKEN_HOURS = { verify: 72, reset: 1 } as const;
 const INVITE_DAYS = 7;
 
 const app = new Hono<App>().basePath("/api");
-app.use(csrf({ origin: () => true }));
-app.use(secureHeaders({ xFrameOptions: false, crossOriginOpenerPolicy: false, crossOriginResourcePolicy: false }));
+app.use(csrf());
+app.use(secureHeaders({ crossOriginResourcePolicy: "same-origin" }));
 
 function tenantDb(env: Env, tenantId: string) {
   return tenantStub(env, tenantId);
@@ -112,7 +114,7 @@ async function startSession(c: Ctx, userId: string): Promise<string> {
   setCookie(c, SESSION_COOKIE, token, {
     httpOnly: true,
     secure: isHttps,
-    sameSite: isHttps ? "None" : "Lax",
+    sameSite: "Lax",
     path: "/",
     expires,
   });
@@ -282,18 +284,15 @@ async function ensureDemoAccount(env: Env) {
   if (!apps.includes("buero")) await db.installApp("buero");
   if (!apps.includes(SALON_APP_ID)) await db.installApp(SALON_APP_ID);
   if (!apps.includes(RETAIL_APP_ID)) await db.installApp(RETAIL_APP_ID);
+  for (const id of ["werkstatt", "restaurant", "handwerk", "fitness"]) if (!apps.includes(id)) await db.installApp(id);
 
-  try {
-    await db.salon("seedIfEmpty", []);
-  } catch (e) {
-    console.error("[salon seed]", e);
-  }
-
-  try {
-    await db.retail("seedIfEmpty", []);
-  } catch (e) {
-    console.error("[retail seed]", e);
-  }
+  // Beispieldaten nur für das Demo-Konto
+  await db.salon("seedIfEmpty", []);
+  await db.retail("seedIfEmpty", []);
+  await db.workshop("seedIfEmpty", []);
+  await db.restaurant("seedIfEmpty", []);
+  await db.craft("seedIfEmpty", []);
+  await db.fitness("seedIfEmpty", []);
     const listRes = (await db.repairs("list", ["all", "", 10])) as { ok: boolean; value?: { orders: unknown[] } };
     if (listRes.ok && (!listRes.value?.orders || listRes.value.orders.length === 0)) {
       await db.repairs("create", [
@@ -442,6 +441,8 @@ async function ensureDemoAccount(env: Env) {
 }
 
 app.post("/auth/demo", async (c) => {
+  // Feste Zugangsdaten: online abgeschaltet, sonst könnte sich jeder anmelden
+  if (c.env.DEMO_LOGIN !== "1") return fail(c, "notFound", 404);
   await ensureDemoAccount(c.env);
   const user = await c.env.PLATFORM_DB.prepare("SELECT id, name, tenant_id AS tenantId FROM users WHERE email = ?")
     .bind(DEMO_EMAIL)

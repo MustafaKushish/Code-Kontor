@@ -1,18 +1,8 @@
 import { useEffect, useState, useCallback } from "react";
-import {
-  Dumbbell,
-  UserCheck,
-  Users,
-  Calendar,
-  CreditCard,
-  RefreshCw,
-  Clock,
-  TrendingUp,
-  Sparkles,
-  Activity,
-  Award,
-} from "lucide-react";
+import { UserCheck, Users, Calendar, CreditCard, RefreshCw, TrendingUp, Activity } from "lucide-react";
 import { api, type Me } from "../../api";
+import { AppIcon } from "../../components";
+import { findApp } from "../../../shared/apps";
 import type {
   FitnessMember,
   FitnessPlan,
@@ -23,8 +13,10 @@ import { MembersTab } from "./MembersTab";
 import { ClassesTab } from "./ClassesTab";
 import { PlansTab } from "./PlansTab";
 import { FitnessPrint } from "./FitnessPrint";
+import "./fitness.css";
 
 export default function FitnessApp({ me, path }: { me: Me; path: string }) {
+  const app = findApp("fitness")!;
   const [activeTab, setActiveTab] = useState<"checkin" | "members" | "classes" | "plans">("checkin");
   const [stats, setStats] = useState<FitnessStats>({
     activeMembersCount: 0,
@@ -83,151 +75,62 @@ export default function FitnessApp({ me, path }: { me: Me; path: string }) {
     Math.round((stats.checkedInNowCount / (stats.maxCapacity || 120)) * 100)
   );
 
+  const tabs = [
+    { id: "checkin" as const, label: "Theken-Check-In", icon: UserCheck },
+    { id: "members" as const, label: `Mitgliederkartei (${stats.totalMembersCount})`, icon: Users },
+    { id: "classes" as const, label: "Wochenkursplan", icon: Calendar },
+    { id: "plans" as const, label: "Tarife & 10er-Karten", icon: CreditCard },
+  ];
+
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-      {/* --- KOPFZEILE & KPIs --- */}
-      <div className="bg-white rounded-2xl border border-zinc-200 shadow-xs p-6">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white flex items-center justify-center shadow-md shadow-emerald-500/20 shrink-0">
-              <Dumbbell className="w-7 h-7" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-extrabold text-zinc-900 tracking-tight">
-                  Fitnessstudio & Kurse
-                </h1>
-                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  Live
-                </span>
-              </div>
-              <p className="text-xs text-zinc-500 mt-1">
-                Empfangstresen, Barcode-Check-In, Studioauslastung, Mitgliederkartei und Kursplan
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 self-end lg:self-auto">
-            <button
-              onClick={() => loadData()}
-              disabled={refreshing}
-              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-zinc-600 hover:text-zinc-900 bg-zinc-100 hover:bg-zinc-200 rounded-xl transition-colors cursor-pointer"
-              title="Daten aktualisieren"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} />
-              <span>Aktualisieren</span>
-            </button>
-          </div>
+    <div className="stack-lg fitness">
+      {/* --- KOPFZEILE --- */}
+      <header className="page-head with-icon fitness-head">
+        <AppIcon app={app} size="lg" />
+        <div>
+          <h1 className="display">
+            Fitnessstudio & Kurse <span className="pill pos">Live</span>
+          </h1>
+          <p className="muted">Empfangstresen, Barcode-Check-In, Studioauslastung, Mitgliederkartei und Kursplan</p>
         </div>
-
-        {/* KPI-Kacheln */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-6 border-t border-zinc-100">
-          {/* 1. Studioauslastung */}
-          <div className="p-3.5 bg-zinc-50 rounded-xl border border-zinc-100">
-            <div className="flex items-center justify-between text-xs text-zinc-500 mb-1">
-              <span className="font-medium">Studioauslastung</span>
-              <Activity className="w-3.5 h-3.5 text-emerald-600" />
-            </div>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl font-extrabold text-zinc-900">
-                {stats.checkedInNowCount}
-              </span>
-              <span className="text-xs text-zinc-400">
-                / {stats.maxCapacity} ({occupancyPercent}%)
-              </span>
-            </div>
-          </div>
-
-          {/* 2. Aktive Mitglieder */}
-          <div className="p-3.5 bg-zinc-50 rounded-xl border border-zinc-100">
-            <div className="flex items-center justify-between text-xs text-zinc-500 mb-1">
-              <span className="font-medium">Aktive Mitglieder</span>
-              <Users className="w-3.5 h-3.5 text-emerald-600" />
-            </div>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl font-extrabold text-zinc-900">
-                {stats.activeMembersCount}
-              </span>
-              <span className="text-xs text-zinc-400">von {stats.totalMembersCount}</span>
-            </div>
-          </div>
-
-          {/* 3. Beitrags-Volumen */}
-          <div className="p-3.5 bg-zinc-50 rounded-xl border border-zinc-100">
-            <div className="flex items-center justify-between text-xs text-zinc-500 mb-1">
-              <span className="font-medium">Beiträge / Monat</span>
-              <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
-            </div>
-            <div className="text-2xl font-extrabold text-zinc-900">
-              {fmtEuro(stats.monthlyRevenueGross)}
-            </div>
-          </div>
-
-          {/* 4. Kurse heute */}
-          <div className="p-3.5 bg-zinc-50 rounded-xl border border-zinc-100">
-            <div className="flex items-center justify-between text-xs text-zinc-500 mb-1">
-              <span className="font-medium">Kurse heute</span>
-              <Calendar className="w-3.5 h-3.5 text-emerald-600" />
-            </div>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl font-extrabold text-zinc-900">
-                {stats.classesTodayCount}
-              </span>
-              <span className="text-xs text-zinc-400">Einheiten geplant</span>
-            </div>
-          </div>
+        <div className="row gap push-end">
+          <button className="button" onClick={() => loadData()} disabled={refreshing} title="Daten aktualisieren">
+            <RefreshCw size={18} className={refreshing ? "spin" : ""} /> Aktualisieren
+          </button>
         </div>
-      </div>
+      </header>
 
       {/* --- TAB NAVIGATION --- */}
-      <div className="flex items-center gap-2 border-b border-zinc-200 pb-1 overflow-x-auto">
-        <button
-          onClick={() => setActiveTab("checkin")}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer whitespace-nowrap ${
-            activeTab === "checkin"
-              ? "bg-emerald-600 text-white shadow-xs"
-              : "text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100"
-          }`}
-        >
-          <UserCheck className="w-4 h-4" />
-          <span>Theken-Check-In</span>
-        </button>
+      <div className="page-tabs fitness-tabs" role="tablist">
+        {tabs.map(({ id, label, icon: Icon }) => (
+          <button key={id} role="tab" aria-selected={activeTab === id} className={activeTab === id ? "active" : ""} onClick={() => setActiveTab(id)}>
+            <Icon size={17} aria-hidden /> {label}
+          </button>
+        ))}
+      </div>
 
-        <button
-          onClick={() => setActiveTab("members")}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer whitespace-nowrap ${
-            activeTab === "members"
-              ? "bg-emerald-600 text-white shadow-xs"
-              : "text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100"
-          }`}
-        >
-          <Users className="w-4 h-4" />
-          <span>Mitgliederkartei ({stats.totalMembersCount})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab("classes")}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer whitespace-nowrap ${
-            activeTab === "classes"
-              ? "bg-emerald-600 text-white shadow-xs"
-              : "text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100"
-          }`}
-        >
-          <Calendar className="w-4 h-4" />
-          <span>Wochenkursplan</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab("plans")}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer whitespace-nowrap ${
-            activeTab === "plans"
-              ? "bg-emerald-600 text-white shadow-xs"
-              : "text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100"
-          }`}
-        >
-          <CreditCard className="w-4 h-4" />
-          <span>Tarife & 10er-Karten</span>
-        </button>
+      {/* --- KPI-KACHELN --- */}
+      <div className="fitness-stats">
+        <div className="tile stat-tile">
+          <span className="stat-icon"><Activity size={18} /></span>
+          <strong>{stats.checkedInNowCount}<span className="unit">/ {stats.maxCapacity} ({occupancyPercent}%)</span></strong>
+          <small>Studioauslastung</small>
+        </div>
+        <div className="tile stat-tile">
+          <span className="stat-icon"><Users size={18} /></span>
+          <strong>{stats.activeMembersCount}<span className="unit">von {stats.totalMembersCount}</span></strong>
+          <small>Aktive Mitglieder</small>
+        </div>
+        <div className="tile stat-tile">
+          <span className="stat-icon"><TrendingUp size={18} /></span>
+          <strong>{fmtEuro(stats.monthlyRevenueGross)}</strong>
+          <small>Beiträge / Monat</small>
+        </div>
+        <div className="tile stat-tile">
+          <span className="stat-icon"><Calendar size={18} /></span>
+          <strong>{stats.classesTodayCount}<span className="unit">Einheiten geplant</span></strong>
+          <small>Kurse heute</small>
+        </div>
       </div>
 
       {/* --- TAB INHALTE --- */}

@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { Plus, Package, CheckCircle2, Clock, AlertCircle, Trash2, X, Check, Truck, ArrowRight, ShoppingCart, Calendar } from "lucide-react";
+import { Plus, CheckCircle2, Trash2, X, Check, Truck, Calendar } from "lucide-react";
 import { api } from "../../api";
 import { Field } from "../../components";
 import type { OrderStatus, RetailOrderItem, RetailProduct, RetailPurchaseOrder, RetailSupplier } from "../../../shared/retail";
 import { useRetailI18n } from "./i18n";
+import { Dialog } from "../../pos/ui";
 
 export function OrdersTab({ isManager }: { isManager: boolean }) {
   const { r, euro, day: formatDay } = useRetailI18n();
@@ -161,12 +162,15 @@ export function OrdersTab({ isManager }: { isManager: boolean }) {
     }
   };
 
+  const statusPill = (status: OrderStatus) =>
+    status === "received" ? "pill pos" : status === "ordered" || status === "partially_received" ? "pill warn" : status === "canceled" ? "pill neg" : "pill";
+
   return (
     <div className="stack">
-      {errorMsg && <div className="notice warning">{errorMsg}</div>}
+      {errorMsg && <p className="error" role="alert">{errorMsg}</p>}
 
-      {/* Toolbar */}
-      <div className="toolbar" style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
+      {/* Filter & Aktion */}
+      <div className="retail-toolbar">
         <div className="chips" role="tablist">
           {["all", "draft", "ordered", "partially_received", "received", "canceled"].map((st) => (
             <button
@@ -188,396 +192,257 @@ export function OrdersTab({ isManager }: { isManager: boolean }) {
         )}
       </div>
 
-      {/* Liste / Tabelle der Bestellungen */}
+      {/* Bestellungen */}
       {loading ? (
         <p className="muted">Lade Bestellungen...</p>
-      ) : orders.length === 0 ? (
-        <div className="card" style={{ textAlign: "center", padding: "40px" }}>
-          <Package size={36} style={{ color: "var(--muted)", margin: "0 auto 12px" }} />
-          <h3>Keine Bestellungen vorhanden</h3>
-          <p className="muted">Erstellen Sie eine Einkaufsbestellung für Ihre Lieferanten.</p>
-        </div>
       ) : (
-        <div className="office-table-wrap">
-          <table className="office-table">
-            <thead>
-              <tr>
-                <th>Bestell-Nr. & Datum</th>
-                <th>Lieferant</th>
-                <th>Positionen</th>
-                <th>Liefertermin</th>
-                <th className="num">Einkaufswert</th>
-                <th>Status</th>
-                <th className="num">Aktionen</th>
-              </tr>
-            </thead>
-            <tbody>
-              {orders.map((o) => {
-                const totalQty = o.items.reduce((sum, i) => sum + i.qtyOrdered, 0);
-                const receivedQty = o.items.reduce((sum, i) => sum + i.qtyReceived, 0);
+        <section className="card list-card">
+          {orders.length === 0 && (
+            <p className="empty muted">
+              <strong>Keine Bestellungen vorhanden</strong> · Erstellen Sie eine Einkaufsbestellung für Ihre Lieferanten.
+            </p>
+          )}
+          {orders.map((o) => {
+            const totalQty = o.items.reduce((sum, i) => sum + i.qtyOrdered, 0);
+            const receivedQty = o.items.reduce((sum, i) => sum + i.qtyReceived, 0);
 
-                return (
-                  <tr key={o.id}>
-                    <td>
-                      <strong>Bestellung #{o.number}</strong>
-                      <div style={{ fontSize: "0.82rem", color: "var(--muted)" }}>
-                        {formatDay(o.date)}
-                      </div>
-                    </td>
-                    <td>
-                      <strong>{o.supplierName}</strong>
-                      {o.supplierEmail && (
-                        <small className="muted" style={{ display: "block" }}>
-                          {o.supplierEmail}
-                        </small>
-                      )}
-                    </td>
-                    <td>
-                      <div style={{ fontSize: "0.88rem" }}>
-                        <strong>{o.items.length} Artikel</strong> ({receivedQty} von {totalQty} geliefert)
-                      </div>
-                      <div className="small muted" style={{ maxWidth: "260px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {o.items.map((i) => i.name).join(", ")}
-                      </div>
-                    </td>
-                    <td>
-                      <span style={{ fontSize: "0.85rem", color: o.expectedDeliveryDate ? "var(--ink)" : "var(--muted)" }}>
-                        {o.expectedDeliveryDate ? formatDay(o.expectedDeliveryDate) : "–"}
-                      </span>
-                    </td>
-                    <td className="num" style={{ fontWeight: 800 }}>
-                      {euro(o.totalCents)}
-                    </td>
-                    <td>
-                      <span
-                        className={`pill ${
-                          o.status === "ordered"
-                            ? "warning"
-                            : o.status === "received"
-                            ? "success"
-                            : o.status === "partially_received"
-                            ? "warning"
-                            : ""
-                        }`}
+            return (
+              <div key={o.id} className="list-row retail-row">
+                <span className="retail-number">
+                  <strong>Bestellung #{o.number}</strong>
+                  <small className="muted">{formatDay(o.date)}</small>
+                </span>
+                <span className="list-main">
+                  <strong>{o.supplierName}{o.supplierEmail ? ` · ${o.supplierEmail}` : ""}</strong>
+                  <small className="muted">
+                    {o.items.length} Artikel ({receivedQty} von {totalQty} geliefert) · {o.items.map((i) => i.name).join(", ")}
+                  </small>
+                  <small className="muted"><Calendar size={13} /> Liefertermin: {o.expectedDeliveryDate ? formatDay(o.expectedDeliveryDate) : "–"}</small>
+                </span>
+                <span className="retail-row-meta">
+                  <span className={statusPill(o.status)}>{r(`orderStatus.${o.status}`)}</span>
+                  <strong className="retail-price">{euro(o.totalCents)}</strong>
+                  <span className="retail-row-actions">
+                    {o.status !== "received" && o.status !== "canceled" && (
+                      <button
+                        className="button small-button primary"
+                        onClick={() => openReceiveModal(o)}
+                        title="Lieferschein abgleichen und Wareneingang ins Lager buchen"
                       >
-                        {r(`orderStatus.${o.status}`)}
-                      </span>
-                    </td>
-                    <td className="num">
-                      <div className="row gap" style={{ justifyContent: "flex-end", flexWrap: "wrap", minWidth: "160px" }}>
-                        {o.status !== "received" && o.status !== "canceled" && (
-                          <button
-                            className="button small primary"
-                            onClick={() => openReceiveModal(o)}
-                            title="Lieferschein abgleichen und Wareneingang ins Lager buchen"
-                          >
-                            <Truck size={14} /> Wareneingang
+                        <Truck size={14} /> Wareneingang
+                      </button>
+                    )}
+
+                    {isManager && (
+                      deleteConfirmId === o.id ? (
+                        <>
+                          <button className="button danger small-button" onClick={() => handleDelete(o.id)} title="Unwiderruflich löschen">
+                            Löschen
                           </button>
-                        )}
-
-                        {isManager && (
-                          deleteConfirmId === o.id ? (
-                            <div className="row gap" style={{ alignItems: "center" }}>
-                              <button
-                                className="button danger small"
-                                onClick={() => handleDelete(o.id)}
-                                title="Unwiderruflich löschen"
-                              >
-                                Löschen
-                              </button>
-                              <button className="button small" onClick={() => setDeleteConfirmId(null)}>
-                                Abbr.
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              className="button small danger"
-                              onClick={() => setDeleteConfirmId(o.id)}
-                              title={r("actions.delete")}
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          )
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                          <button className="button small-button" onClick={() => setDeleteConfirmId(null)}>
+                            Abbr.
+                          </button>
+                        </>
+                      ) : (
+                        <button className="icon-button danger" onClick={() => setDeleteConfirmId(o.id)} title={r("actions.delete")} aria-label={r("actions.delete")}>
+                          <Trash2 size={16} />
+                        </button>
+                      )
+                    )}
+                  </span>
+                </span>
+              </div>
+            );
+          })}
+        </section>
       )}
 
-      {/* Modal: Neue Bestellung erstellen */}
+      {/* Dialog: Neue Bestellung erstellen */}
       {modalOpen && (
-        <div className="retail-modal-overlay" onClick={() => setModalOpen(false)}>
-          <div className="retail-modal" style={{ maxWidth: "720px" }} onClick={(e) => e.stopPropagation()}>
-            <div className="retail-modal-head">
-              <h3 style={{ margin: 0, display: "flex", alignItems: "center", gap: "8px" }}>
-                <Package size={20} style={{ color: "var(--accent)" }} />
-                {r("actions.newOrder")}
-              </h3>
-              <button className="icon-button" onClick={() => setModalOpen(false)}>
-                <X size={20} />
-              </button>
+        <Dialog title={r("actions.newOrder")} onClose={() => setModalOpen(false)} wide>
+          <form onSubmit={handleSaveOrder} className="retail-dialog stack">
+            {errorMsg && <p className="error" role="alert">{errorMsg}</p>}
+
+            <div className="grid form-grid">
+              <Field label="Lieferant" required wide>
+                <select value={selectedSupplierId} onChange={(e) => setSelectedSupplierId(e.target.value)}>
+                  {suppliers.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Bestelldatum" required>
+                <input type="date" required value={orderDate} onChange={(e) => setOrderDate(e.target.value)} />
+              </Field>
+              <Field label="Erwarteter Liefertermin">
+                <input type="date" value={expectedDate} onChange={(e) => setExpectedDate(e.target.value)} />
+              </Field>
             </div>
 
-            <form onSubmit={handleSaveOrder} className="stack">
-              <div className="row-grid">
-                <Field label="Lieferant" required>
-                  <select
-                    className="input"
-                    value={selectedSupplierId}
-                    onChange={(e) => setSelectedSupplierId(e.target.value)}
-                  >
-                    {suppliers.map((s) => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Bestelldatum" required>
-                  <input
-                    type="date"
-                    required
-                    className="input"
-                    value={orderDate}
-                    onChange={(e) => setOrderDate(e.target.value)}
-                  />
-                </Field>
-                <Field label="Erwarteter Liefertermin">
-                  <input
-                    type="date"
-                    className="input"
-                    value={expectedDate}
-                    onChange={(e) => setExpectedDate(e.target.value)}
-                  />
-                </Field>
+            {/* Artikel zur Bestellung hinzufügen */}
+            <div className="retail-calc">
+              <div className="section-head">
+                <strong>Artikel zur Bestellung hinzufügen</strong>
+                <small className="muted">Aus Sortiment wählen</small>
               </div>
 
-              {/* Artikel zur Bestellung hinzufügen */}
-              <div className="card" style={{ padding: "14px", background: "var(--panel-2)", border: "1px solid var(--line)", display: "grid", gap: "10px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <strong style={{ fontSize: "0.92rem" }}>Artikel zur Bestellung hinzufügen</strong>
-                  <span className="small muted">Aus Sortiment wählen</span>
+              <select
+                onChange={(e) => {
+                  if (e.target.value) {
+                    handleAddItemToOrder(e.target.value);
+                    e.target.value = "";
+                  }
+                }}
+                defaultValue=""
+                aria-label="Artikel auswählen"
+              >
+                <option value="" disabled>+ Artikel auswählen...</option>
+                {products.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} (Bestand: {p.stockQty} {p.unit} / Min: {p.minStockQty}) – EK: {euro(p.purchasePriceCents)}
+                  </option>
+                ))}
+              </select>
+
+              {/* Bestellpositionen */}
+              {orderItems.length > 0 ? (
+                <div className="retail-lines">
+                  {orderItems.map((item, idx) => (
+                    <div key={item.productId} className="retail-line">
+                      <span className="list-main">
+                        <strong>{item.name}</strong>
+                        <small className="muted">{item.ean}</small>
+                      </span>
+                      <input
+                        type="number"
+                        min="1"
+                        aria-label="Menge"
+                        title="Menge"
+                        value={item.qtyOrdered}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10) || 1;
+                          setOrderItems(orderItems.map((it, i) => (i === idx ? { ...it, qtyOrdered: val } : it)));
+                        }}
+                      />
+                      <input
+                        type="number"
+                        step="0.01"
+                        aria-label="EK Netto"
+                        title="EK Netto"
+                        value={(item.purchasePriceCents / 100).toFixed(2)}
+                        onChange={(e) => {
+                          const valCents = Math.round(parseFloat(e.target.value) * 100) || 0;
+                          setOrderItems(orderItems.map((it, i) => (i === idx ? { ...it, purchasePriceCents: valCents } : it)));
+                        }}
+                      />
+                      <span className="amount">{euro(item.qtyOrdered * item.purchasePriceCents)}</span>
+                      <button
+                        type="button"
+                        className="icon-button danger"
+                        aria-label={r("actions.delete")}
+                        onClick={() => setOrderItems(orderItems.filter((_, i) => i !== idx))}
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  ))}
                 </div>
+              ) : (
+                <p className="small muted">Noch keine Positionen hinzugefügt.</p>
+              )}
 
-                <div className="row gap" style={{ flexWrap: "wrap" }}>
-                  <select
-                    className="input"
-                    style={{ flex: 1, minWidth: "240px" }}
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        handleAddItemToOrder(e.target.value);
-                        e.target.value = "";
-                      }
-                    }}
-                    defaultValue=""
-                  >
-                    <option value="" disabled>+ Artikel auswählen...</option>
-                    {products.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} (Bestand: {p.stockQty} {p.unit} / Min: {p.minStockQty}) – EK: {euro(p.purchasePriceCents)}
-                      </option>
-                    ))}
-                  </select>
+              {orderItems.length > 0 && (
+                <div className="retail-total">
+                  <span>Gesamtwert Netto:</span>
+                  <strong>{euro(orderItems.reduce((s, i) => s + i.qtyOrdered * i.purchasePriceCents, 0))}</strong>
                 </div>
+              )}
+            </div>
 
-                {/* Bestellpositionen-Tabelle */}
-                {orderItems.length > 0 ? (
-                  <div className="office-table-wrap" style={{ marginTop: "8px" }}>
-                    <table className="office-table" style={{ fontSize: "0.85rem" }}>
-                      <thead>
-                        <tr>
-                          <th>Artikel</th>
-                          <th className="num">Menge</th>
-                          <th className="num">EK Netto</th>
-                          <th className="num">Gesamt</th>
-                          <th className="num"></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {orderItems.map((item, idx) => (
-                          <tr key={item.productId}>
-                            <td>
-                              <strong>{item.name}</strong>
-                              <div className="small muted">{item.ean}</div>
-                            </td>
-                            <td className="num">
-                              <input
-                                type="number"
-                                min="1"
-                                className="input"
-                                style={{ width: "70px", textAlign: "center", padding: "4px" }}
-                                value={item.qtyOrdered}
-                                onChange={(e) => {
-                                  const val = parseInt(e.target.value, 10) || 1;
-                                  setOrderItems(orderItems.map((it, i) => (i === idx ? { ...it, qtyOrdered: val } : it)));
-                                }}
-                              />
-                            </td>
-                            <td className="num">
-                              <input
-                                type="number"
-                                step="0.01"
-                                className="input"
-                                style={{ width: "85px", textAlign: "right", padding: "4px" }}
-                                value={(item.purchasePriceCents / 100).toFixed(2)}
-                                onChange={(e) => {
-                                  const valCents = Math.round(parseFloat(e.target.value) * 100) || 0;
-                                  setOrderItems(orderItems.map((it, i) => (i === idx ? { ...it, purchasePriceCents: valCents } : it)));
-                                }}
-                              />
-                            </td>
-                            <td className="num" style={{ fontWeight: 700 }}>
-                              {euro(item.qtyOrdered * item.purchasePriceCents)}
-                            </td>
-                            <td className="num">
-                              <button
-                                type="button"
-                                className="icon-button danger"
-                                style={{ width: "26px", height: "26px" }}
-                                onClick={() => setOrderItems(orderItems.filter((_, i) => i !== idx))}
-                              >
-                                ×
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <p className="small muted" style={{ textAlign: "center", margin: "10px 0" }}>
-                    Noch keine Positionen hinzugefügt.
-                  </p>
-                )}
+            <Field label="Notizen / Hinweise für Lieferant">
+              <textarea
+                rows={2}
+                placeholder="z.B. Anlieferung bitte bis 12 Uhr, Hubwagen erforderlich"
+                value={orderNotes}
+                onChange={(e) => setOrderNotes(e.target.value)}
+              />
+            </Field>
 
-                {orderItems.length > 0 && (
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--line)", paddingTop: "8px", fontWeight: 800 }}>
-                    <span>Gesamtwert Netto:</span>
-                    <span style={{ fontSize: "1.15rem", color: "var(--accent)" }}>
-                      {euro(orderItems.reduce((s, i) => s + i.qtyOrdered * i.purchasePriceCents, 0))}
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              <Field label="Notizen / Hinweise für Lieferant">
-                <textarea
-                  rows={2}
-                  className="input"
-                  placeholder="z.B. Anlieferung bitte bis 12 Uhr, Hubwagen erforderlich"
-                  value={orderNotes}
-                  onChange={(e) => setOrderNotes(e.target.value)}
-                />
-              </Field>
-
-              <div className="row gap" style={{ justifyContent: "flex-end", marginTop: "12px" }}>
-                <button type="button" className="button" onClick={() => setModalOpen(false)}>
-                  {r("actions.cancel")}
-                </button>
-                <button type="submit" className="button primary">
-                  Bestellung aufgeben
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+            <div className="actions">
+              <button type="button" className="button" onClick={() => setModalOpen(false)}>
+                {r("actions.cancel")}
+              </button>
+              <button type="submit" className="button primary">
+                Bestellung aufgeben
+              </button>
+            </div>
+          </form>
+        </Dialog>
       )}
 
-      {/* Modal: Wareneingang erfassen */}
+      {/* Dialog: Wareneingang erfassen */}
       {receivingOrder && (
-        <div className="retail-modal-overlay" onClick={() => setReceivingOrder(null)}>
-          <div className="retail-modal" style={{ maxWidth: "680px" }} onClick={(e) => e.stopPropagation()}>
-            <div className="retail-modal-head">
-              <div>
-                <h3 style={{ margin: 0, display: "flex", alignItems: "center", gap: "8px" }}>
-                  <Truck size={20} style={{ color: "var(--accent)" }} />
-                  Wareneingang erfassen (Bestellung #{receivingOrder.number})
-                </h3>
-                <small className="muted">Lieferant: {receivingOrder.supplierName}</small>
-              </div>
-              <button className="icon-button" onClick={() => setReceivingOrder(null)}>
-                <X size={20} />
+        <Dialog title={`Wareneingang erfassen (Bestellung #${receivingOrder.number})`} onClose={() => setReceivingOrder(null)} wide>
+          <form onSubmit={handleConfirmReceive} className="retail-dialog stack">
+            <p className="muted">Lieferant: {receivingOrder.supplierName}</p>
+            <div className="section-head">
+              <p className="small muted">
+                Gleichen Sie die Lieferscheinmengen ab. Bestände werden automatisch im Lager zugebucht.
+              </p>
+              <button
+                type="button"
+                className="button small-button"
+                onClick={() => {
+                  const full: Record<string, number> = {};
+                  for (const i of receivingOrder.items) full[i.productId] = i.qtyOrdered;
+                  setReceivedQtyMap(full);
+                }}
+              >
+                <CheckCircle2 size={14} /> Alles vollständig
               </button>
             </div>
 
-            <form onSubmit={handleConfirmReceive} className="stack">
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <p className="small muted" style={{ margin: 0 }}>
-                  Gleichen Sie die Lieferscheinmengen ab. Bestände werden automatisch im Lager zugebucht.
-                </p>
-                <button
-                  type="button"
-                  className="button small"
-                  onClick={() => {
-                    const full: Record<string, number> = {};
-                    for (const i of receivingOrder.items) full[i.productId] = i.qtyOrdered;
-                    setReceivedQtyMap(full);
-                  }}
-                >
-                  <CheckCircle2 size={14} /> Alles vollständig
-                </button>
-              </div>
+            <div className="retail-lines">
+              {receivingOrder.items.map((item) => (
+                <div key={item.productId} className="retail-line receive">
+                  <span className="list-main">
+                    <strong>{item.name}</strong>
+                    <small className="muted">{item.ean}</small>
+                  </span>
+                  <small className="muted">Bestellt {item.qtyOrdered} · Bereits da {item.qtyReceived}</small>
+                  <input
+                    type="number"
+                    min={item.qtyReceived}
+                    max={item.qtyOrdered * 2}
+                    aria-label="Neu geliefert (Ist)"
+                    title="Neu geliefert (Ist)"
+                    value={receivedQtyMap[item.productId] ?? item.qtyReceived}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10) || 0;
+                      setReceivedQtyMap({
+                        ...receivedQtyMap,
+                        [item.productId]: val,
+                      });
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
 
-              <div className="office-table-wrap">
-                <table className="office-table" style={{ fontSize: "0.88rem" }}>
-                  <thead>
-                    <tr>
-                      <th>Artikel</th>
-                      <th className="num">Bestellt</th>
-                      <th className="num">Bereits da</th>
-                      <th className="num">Neu geliefert (Ist)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {receivingOrder.items.map((item) => (
-                      <tr key={item.productId}>
-                        <td>
-                          <strong>{item.name}</strong>
-                          <div className="small muted">{item.ean}</div>
-                        </td>
-                        <td className="num">{item.qtyOrdered}</td>
-                        <td className="num">{item.qtyReceived}</td>
-                        <td className="num">
-                          <input
-                            type="number"
-                            min={item.qtyReceived}
-                            max={item.qtyOrdered * 2}
-                            className="input"
-                            style={{ width: "80px", textAlign: "center", fontWeight: 700 }}
-                            value={receivedQtyMap[item.productId] ?? item.qtyReceived}
-                            onChange={(e) => {
-                              const val = parseInt(e.target.value, 10) || 0;
-                              setReceivedQtyMap({
-                                ...receivedQtyMap,
-                                [item.productId]: val,
-                              });
-                            }}
-                          />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+            <p className="notice success">
+              <Check size={16} /> Bestände der erfassten Artikel werden sofort im Lager erhöht und im Journal protokolliert.
+            </p>
 
-              <div className="notice success" style={{ fontSize: "0.85rem" }}>
-                <Check size={16} /> Bestände der erfassten Artikel werden sofort im Lager erhöht und im Journal protokolliert.
-              </div>
-
-              <div className="row gap" style={{ justifyContent: "flex-end", marginTop: "8px" }}>
-                <button type="button" className="button" onClick={() => setReceivingOrder(null)}>
-                  {r("actions.cancel")}
-                </button>
-                <button type="submit" className="button primary">
-                  Wareneingang einbuchen
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+            <div className="actions">
+              <button type="button" className="button" onClick={() => setReceivingOrder(null)}>
+                {r("actions.cancel")}
+              </button>
+              <button type="submit" className="button primary">
+                Wareneingang einbuchen
+              </button>
+            </div>
+          </form>
+        </Dialog>
       )}
     </div>
   );

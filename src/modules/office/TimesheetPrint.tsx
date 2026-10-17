@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Printer, X } from "lucide-react";
 import { api } from "../../api";
 import type { CompanyProfile } from "../../../shared/company";
@@ -31,13 +32,13 @@ export function TimesheetPrint({
   const billableMinutes = billableEntries.reduce((s, e) => s + e.minutes, 0);
   const billableFeeCents = billableEntries.reduce((s, e) => s + Math.round((e.minutes * e.hourlyRateCents) / 60), 0);
 
-  return (
+  return createPortal(
     <div className="print-layer">
       <div className="print-toolbar">
         <button className="button primary" onClick={() => window.print()}>
           <Printer size={18} /> {o("common.print")}
         </button>
-        <button className="button push-end" onClick={onClose}>
+        <button className="button" onClick={onClose}>
           <X size={18} /> {o("common.close")}
         </button>
       </div>
@@ -54,7 +55,7 @@ export function TimesheetPrint({
             </p>
           </div>
           <div className="print-meta">
-            <h1 style={{ fontSize: "1.8rem", margin: "0 0 6px" }}>{o("print.timesheetTitle")}</h1>
+            <h1>{o("print.timesheetTitle")}</h1>
             <p>Datum: <strong>{day(new Date().toISOString())}</strong></p>
             {project && (
               <>
@@ -66,33 +67,31 @@ export function TimesheetPrint({
         </header>
 
         {/* Zusammenfassung */}
-        <section style={{ margin: "20px 0", padding: "12px 16px", background: "var(--panel-2)", borderRadius: "var(--radius)" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px", textAlign: "center" }}>
-            <div>
-              <small className="muted" style={{ display: "block" }}>Gesamtdauer</small>
-              <strong style={{ fontSize: "1.2rem", fontFamily: "var(--display)" }}>{(totalMinutes / 60).toFixed(2)} Std</strong>
-            </div>
-            <div>
-              <small className="muted" style={{ display: "block" }}>Abrechenbar</small>
-              <strong style={{ fontSize: "1.2rem", fontFamily: "var(--display)", color: "var(--accent)" }}>{(billableMinutes / 60).toFixed(2)} Std</strong>
-            </div>
-            <div>
-              <small className="muted" style={{ display: "block" }}>Honorar (Netto)</small>
-              <strong style={{ fontSize: "1.2rem", fontFamily: "var(--display)" }}>{euro(billableFeeCents)}</strong>
-            </div>
+        <section className="print-grid">
+          <div>
+            <h2>Gesamtdauer</h2>
+            <strong className="office-print-title">{(totalMinutes / 60).toFixed(2)} Std</strong>
+          </div>
+          <div>
+            <h2>Abrechenbar</h2>
+            <strong className="office-print-title">{(billableMinutes / 60).toFixed(2)} Std</strong>
+          </div>
+          <div>
+            <h2>Honorar (Netto)</h2>
+            <strong className="office-print-title">{euro(billableFeeCents)}</strong>
           </div>
         </section>
 
         {/* Tabelle der Zeiteinträge */}
-        <table className="print-items">
+        <table className="print-table">
           <thead>
             <tr>
-              <th style={{ width: "85px" }}>Datum</th>
+              <th>Datum</th>
               <th>Mitarbeiter</th>
               <th>Tätigkeit / Aufgabe</th>
-              <th className="num" style={{ width: "75px" }}>Dauer</th>
-              <th className="num" style={{ width: "90px" }}>Stundensatz</th>
-              <th className="num" style={{ width: "95px" }}>Honorar</th>
+              <th className="num">Dauer</th>
+              <th className="num">Stundensatz</th>
+              <th className="num">Honorar</th>
             </tr>
           </thead>
           <tbody>
@@ -101,10 +100,10 @@ export function TimesheetPrint({
               return (
                 <tr key={e.id}>
                   <td><strong>{day(e.day)}</strong></td>
-                  <td>{e.userName || "Mitarbeiter"}{e.roleName ? <small className="muted"> ({e.roleName})</small> : null}</td>
+                  <td>{e.userName || "Mitarbeiter"}{e.roleName ? <small> ({e.roleName})</small> : null}</td>
                   <td>
-                    <div>{e.description || "Projektleistung"}</div>
-                    {e.taskTitle && <small className="muted">Aufgabe: {e.taskTitle}</small>}
+                    {e.description || "Projektleistung"}
+                    {e.taskTitle && <><br /><small>Aufgabe: {e.taskTitle}</small></>}
                   </td>
                   <td className="num">{(e.minutes / 60).toFixed(2)}h</td>
                   <td className="num">{euro(e.hourlyRateCents)}</td>
@@ -116,24 +115,17 @@ export function TimesheetPrint({
         </table>
 
         {/* Unterschriftenzeile */}
-        <div style={{ marginTop: "48px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "40px", paddingTop: "20px" }}>
-          <div>
-            <div style={{ borderTop: "1px solid var(--text)", paddingTop: "6px", fontSize: "0.85rem", color: "var(--muted)" }}>
-              Datum, Unterschrift Auftragnehmer
-            </div>
-          </div>
-          <div>
-            <div style={{ borderTop: "1px solid var(--text)", paddingTop: "6px", fontSize: "0.85rem", color: "var(--muted)" }}>
-              Leistungsabnahme Kunde (Datum, Unterschrift)
-            </div>
-          </div>
-        </div>
+        <section className="print-sign">
+          <div><span />Datum, Unterschrift Auftragnehmer</div>
+          <div><span />Leistungsabnahme Kunde (Datum, Unterschrift)</div>
+        </section>
 
-        <footer className="print-foot" style={{ marginTop: "40px" }}>
+        <footer className="print-foot">
           <span>Leistungsnachweis für Rechnung / Projektverwaltung</span>
           {company?.name && <span>{company.name}</span>}
         </footer>
       </article>
-    </div>
+    </div>,
+    document.body,
   );
 }

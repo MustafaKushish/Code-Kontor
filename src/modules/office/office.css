@@ -1,453 +1,99 @@
-/* ==========================================================================
-   Code Kontor – Modul „Büro & Dienstleister“ (buero)
-   Farbton: Warmes Bernstein / Gold (Hue 45)
-   Vollständig an alle Geräte angepasst (Smartphones, Tablets, Touch, Desktop)
-   ========================================================================== */
+/* System „Büro & Dienstleister“ – baut auf dem Designsystem in src/styles.css auf.
+   Dialoge landen per Portal im body, darum gelten die Helfer auch unter .office-dialog. */
 
-.office {
-  --hue: 45;
-  --accent: hsl(var(--hue) 90% 42%);
-  --accent-soft: hsl(var(--hue) 80% 92%);
-}
+.office { --hue: 45; }
+.office .row.gap, .office-dialog .row.gap { gap: 10px; }
+.office .row.wrap, .office-dialog .row.wrap { flex-wrap: wrap; }
+.office .row.end, .office-dialog .row.end { justify-content: flex-end; }
+.office .small, .office-dialog .small { font-size: 0.85rem; }
+.office .push-end, .office-dialog .push-end { margin-inline-start: auto; }
+.office .small-button, .office-dialog .small-button { min-height: 34px; padding: 4px 12px; font-size: 0.88rem; }
+.office .chip { display: inline-flex; align-items: center; gap: 6px; }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .office {
-    --accent: hsl(var(--hue) 90% 55%);
-    --accent-soft: hsl(var(--hue) 40% 16%);
-  }
-}
-:root[data-theme="dark"] .office {
-  --accent: hsl(var(--hue) 90% 55%);
-  --accent-soft: hsl(var(--hue) 40% 16%);
-}
+.office-head .office-actions { margin-inline-start: auto; }
 
-/* ---------- Tabs: flüssiges horizontales Swipen auf Touchscreens ---------- */
-.office-tabs {
-  display: flex !important;
-  flex-wrap: nowrap !important;
-  overflow-x: auto !important;
-  -webkit-overflow-scrolling: touch !important;
-  scrollbar-width: none !important;
-  width: 100% !important;
-  max-width: 100% !important;
-  gap: 6px !important;
-  padding: 4px !important;
-}
+/* Kennzahlen */
+.office-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
+.office-stats .stat-icon { background: hsl(var(--hue) 85% 55% / 0.16); color: hsl(var(--hue) 80% 40%); }
+.office-stats .stat-tile strong { font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 
-.office-tabs::-webkit-scrollbar {
-  display: none;
-}
+/* Filter neben den Chips */
+.office-filters { align-items: center; }
+.office-filters .search { flex: 1 1 240px; }
+.office-filters select { width: auto; min-width: 200px; max-width: 280px; }
 
-.office-tabs button {
-  flex: 0 0 auto !important;
-  white-space: nowrap !important;
-  padding: 9px 16px !important;
-  font-size: 0.9rem !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 8px !important;
-}
+/* Listen */
+.office-date { font-family: var(--display); font-weight: 700; font-variant-numeric: tabular-nums; min-width: 86px; color: hsl(var(--hue) 80% 38%); }
+.office-row-meta { display: grid; justify-items: end; gap: 2px; text-align: end; flex: none; font-variant-numeric: tabular-nums; }
+.office-item { display: grid; }
+.office-item + .office-item { border-top: 1px solid var(--line); }
+.office-item .list-row { border-top: none; }
+.office-item-actions { padding: 0 14px 12px; justify-content: flex-end; }
 
-.office-tabs button svg {
-  display: inline-block !important;
-  flex: none;
-}
+/* Karten-Raster: Projekte und Kunden */
+.office-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 16px; }
+.office-card { gap: 14px; }
+.office-card .section-head { align-items: flex-start; }
+.office-card .section-head > div { display: grid; gap: 4px; min-width: 0; }
+.office-icon-line { display: inline-flex; align-items: center; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
+.office-facts { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 14px; font-size: 0.85rem; }
+.office-facts.foot { border-top: 1px solid var(--line); padding-top: 10px; color: var(--muted); }
+.office-tasks { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 8px 8px 14px; border-radius: 14px; background: var(--panel-2); font-size: 0.88rem; }
+.office-tasks svg { color: hsl(var(--hue) 80% 40%); }
+.office-progress { height: 8px; border-radius: 999px; background: var(--panel-2); overflow: hidden; }
+.office-progress span { display: block; height: 100%; border-radius: inherit; background: hsl(var(--hue) 85% 48%); transition: width 0.3s; }
+.office-progress.over span { background: var(--error); }
 
-/* ---------- Kennzahlen / KPI-Karten ---------- */
-.office-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 14px;
-}
+/* Stoppuhr */
+.office-timer { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
+.office-timer-clock { font-family: var(--display); font-size: clamp(2rem, 5vw, 2.4rem); font-weight: 800; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.office-timer-clock.running { color: hsl(var(--hue) 85% 42%); }
+.office-timer-inputs { display: flex; flex: 1 1 320px; gap: 8px; min-width: 0; }
 
-.office-stat-card {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 18px 20px;
-  display: grid;
-  gap: 6px;
-  box-shadow: var(--shadow-sm);
-  min-width: 0;
-}
+/* Einstellungen */
+.office-settings { max-width: 760px; }
+.office-section { display: grid; gap: 12px; border-top: 1px solid var(--line); padding-top: 16px; }
+.office .office-check { align-items: flex-start; }
+.office .office-check input { flex: none; margin-top: 2px; }
 
-.office-stat-card .label {
-  font-size: 0.85rem;
-  color: var(--muted);
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+/* Dialoge */
+.office-sublist { display: grid; border: 1px solid var(--line); border-radius: 16px; padding: 4px; max-height: 360px; overflow: auto; }
+.office-sublist .list-row.done .list-main strong { text-decoration: line-through; color: var(--muted); }
+.office-sublist .icon-button.done { color: var(--success); }
+.office-panel { display: grid; gap: 10px; padding: 14px; border-radius: 16px; background: var(--panel-2); }
+.office-add { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto; gap: 10px; align-items: end; }
+.office-add.four { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; }
+.office-add.four > :first-child { grid-column: 1 / -1; }
+.office-dialog .grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.office-dialog .grid.four { grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr)); }
+.office-line { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) auto; gap: 8px; align-items: end; padding: 12px; border-radius: 16px; background: var(--panel-2); }
+.office-line > .wide { grid-column: 1 / -1; }
+.office-totals { justify-self: end; width: min(100%, 280px); }
+.office-totals td, .office-totals th { padding: 6px 0; }
 
-.office-stat-card .value {
-  font-family: var(--display);
-  font-size: 1.6rem;
-  font-weight: 750;
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
-}
+/* Druckansichten (print-Klassen aus styles.css) */
+.office-pre { white-space: pre-line; }
+.office-print-title { font-size: 13pt; }
+.office-xml { width: min(210mm, 100%); margin: 0 auto 16px; }
+@media print { .office-xml { display: none; } }
+.office-xml textarea { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.8rem; background: var(--panel-2); }
 
 @media (max-width: 640px) {
-  .office-stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-  }
-  .office-stat-card {
-    padding: 14px 14px;
-    gap: 4px;
-  }
-  .office-stat-card .value {
-    font-size: 1.3rem;
-  }
-  .office-stat-card .label {
-    font-size: 0.78rem;
-  }
-}
-
-@media (max-width: 440px) {
-  .office-stats {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* ---------- Projekt- und Kunden-Karten ---------- */
-.office-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
-  gap: 18px;
-}
-
-.office-card {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 20px;
-  display: grid;
-  gap: 14px;
-  box-shadow: var(--shadow-sm);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-  min-width: 0;
-}
-
-.office-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow);
-}
-
-.office-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.office-progress-bar {
-  height: 8px;
-  background: var(--line);
-  border-radius: 999px;
-  overflow: hidden;
-  margin-top: 4px;
-}
-
-.office-progress-fill {
-  height: 100%;
-  background: var(--accent);
-  border-radius: 999px;
-  transition: width 0.3s ease;
-}
-
-.office-progress-fill.overbudget {
-  background: var(--error);
-}
-
-@media (max-width: 640px) {
-  .office-grid {
-    grid-template-columns: 1fr;
-    gap: 14px;
-  }
-  .office-card {
-    padding: 16px;
-    gap: 12px;
-  }
-}
-
-/* ---------- Tabellen: Horizontales Wischen ohne Seiten-Overflow ---------- */
-.office-table-wrap {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  box-shadow: var(--shadow-sm);
-  max-width: 100%;
-}
-
-.office-table {
-  width: 100%;
-  min-width: 760px;
-  border-collapse: collapse;
-  text-align: left;
-  font-size: 0.92rem;
-}
-
-.office-table th {
-  background: var(--panel-2);
-  padding: 12px 16px;
-  font-weight: 600;
-  color: var(--muted);
-  border-bottom: 1px solid var(--line);
-  white-space: nowrap;
-}
-
-.office-table td {
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--line);
-  vertical-align: middle;
-}
-
-.office-table tr:last-child td {
-  border-bottom: none;
-}
-
-.office-table tr:hover td {
-  background: color-mix(in srgb, var(--panel-2) 40%, transparent);
-}
-
-@media (max-width: 640px) {
-  .office-table {
-    min-width: 680px;
-    font-size: 0.88rem;
-  }
-  .office-table th, .office-table td {
-    padding: 10px 12px;
-  }
-}
-
-/* ---------- Dialoge / Modalfenster ---------- */
-.office-modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(10, 11, 16, 0.65);
-  backdrop-filter: blur(5px);
-  display: grid;
-  place-items: center;
-  z-index: 1000;
-  padding: 20px 16px;
-  overflow-y: auto;
-}
-
-.office-modal {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  width: 100%;
-  max-width: 640px;
-  max-height: min(92vh, 92dvh);
-  overflow-y: auto;
-  box-shadow: var(--shadow-lift);
-  display: grid;
-  gap: 18px;
-  padding: 24px;
-}
-
-.office-modal-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-@media (max-width: 640px) {
-  .office-modal-overlay {
-    padding: 10px;
-    align-items: flex-end;
-  }
-  .office-modal {
-    padding: 20px 16px calc(24px + env(safe-area-inset-bottom));
-    border-radius: 24px 24px 14px 14px;
-    max-height: min(92vh, 92dvh);
-    gap: 14px;
-  }
-}
-
-/* ---------- Positionszeilen in Rechnungen / Angeboten ---------- */
-.office-line-items {
-  display: grid;
-  gap: 10px;
-}
-
-.office-line-item-row {
-  display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1fr auto;
-  gap: 8px;
-  align-items: center;
-}
-
-@media (max-width: 640px) {
-  .office-line-item-row {
-    grid-template-columns: 1fr;
-    gap: 8px;
-    background: var(--panel-2);
-    padding: 12px;
-    border-radius: 14px;
-    border: 1px solid var(--line);
-  }
-  .office-line-item-row .office-line-item-sub {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr auto;
-    gap: 6px;
-    align-items: center;
-  }
-}
-
-/* ---------- Aufgaben-Formular Raster ---------- */
-.task-form-grid {
-  display: grid;
-  grid-template-columns: 2fr 1fr 1fr auto;
-  gap: 8px;
-  align-items: flex-end;
-}
-
-@media (max-width: 640px) {
-  .task-form-grid {
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-  }
-  .task-form-grid > :first-child {
-    grid-column: 1 / -1;
-  }
-  .task-form-grid .button {
-    grid-column: 1 / -1;
-    width: 100%;
-    justify-content: center;
-  }
-}
-
-/* ---------- Stoppuhr / Live Timer Widget ---------- */
-.stopwatch-inner {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-}
-
-.stopwatch-clock-row {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.stopwatch-clock {
-  font-size: clamp(2rem, 5vw, 2.4rem);
-  font-family: var(--display);
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  font-variant-numeric: tabular-nums;
-}
-
-.stopwatch-inputs {
-  display: flex;
-  flex: 1 1 260px;
-  max-width: 440px;
-  gap: 8px;
-}
-
-@media (max-width: 640px) {
-  .stopwatch-inner {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 12px;
-  }
-  .stopwatch-clock-row {
-    justify-content: space-between;
-  }
-  .stopwatch-inputs {
-    flex-direction: column;
-    max-width: 100%;
-  }
-  .stopwatch-actions {
-    display: flex;
-    width: 100%;
-    gap: 8px;
-  }
-  .stopwatch-actions .button {
-    flex: 1;
-    justify-content: center;
-  }
-}
-
-/* ---------- Aktionen & Knöpfe ---------- */
-.office-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-@media (max-width: 640px) {
-  .office-head {
-    flex-direction: column;
-    align-items: flex-start !important;
-    gap: 14px;
-  }
-  .office-actions {
-    width: 100%;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-  .office-actions .button {
-    flex: 1 1 auto;
-    justify-content: center;
-    min-height: 44px;
-  }
-}
-
-/* ---------- Druckvorschau & Belege (A4 / Leistungsnachweis) ---------- */
-.print-items {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 16px 0;
-  font-size: 0.9rem;
-}
-
-.print-items th {
-  border-bottom: 2px solid var(--text, #111);
-  padding: 8px 10px;
-  text-align: left;
-}
-
-.print-items td {
-  border-bottom: 1px solid var(--line, #ddd);
-  padding: 10px;
-  vertical-align: top;
-}
-
-@media (max-width: 640px) {
-  .print-layer {
-    padding: 8px;
-  }
-  .print-sheet {
-    padding: 16px 12px;
-    font-size: 9pt;
-  }
-  .print-head {
-    flex-direction: column;
-    gap: 12px;
-  }
-  .print-meta {
-    text-align: start;
-  }
-  .print-totals {
-    min-width: 0;
-    width: 100%;
-  }
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.7; transform: scale(0.97); }
+  .office-head .office-actions { width: 100%; margin: 0; }
+  .office-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .office-stats .tile { padding: 12px; }
+  .office-stats .stat-icon { display: none; }
+  .office-stats .stat-tile strong { margin-top: 0; font-size: 1.35rem; }
+  .office-filters select { max-width: none; flex: 1 1 100%; }
+  .office-row { flex-wrap: wrap; }
+  .office-row .list-main { flex-basis: calc(100% - 110px); }
+  .office-row .office-row-meta { justify-items: start; text-align: start; padding-inline-start: 98px; }
+  .office-item-actions { padding-inline: 14px; justify-content: flex-start; }
+  .office-timer-inputs { flex-direction: column; }
+  .office-timer .row .button { flex: 1; }
+  .office-add { grid-template-columns: 1fr; }
+  .office-add.four { grid-template-columns: 1fr 1fr; }
+  .office-add.four > .button { grid-column: 1 / -1; }
+  .office-dialog .grid.three, .office-dialog .grid.four { grid-template-columns: 1fr; }
+  .office-line { grid-template-columns: 1fr 1fr; }
 }

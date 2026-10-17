@@ -24,6 +24,7 @@ import type {
   RestaurantTable,
   TableArea,
 } from "../../../shared/restaurant";
+import { Dialog } from "../../pos/ui";
 import { RestaurantPrint } from "./RestaurantPrint";
 
 interface TablesTabProps {
@@ -80,7 +81,7 @@ export function TablesTab({ tables, menu, orders, onRefresh }: TablesTabProps) {
     try {
       await api("/restaurant/tables", {
         method: "POST",
-        body: JSON.stringify(editingTable),
+        body: editingTable,
       });
       setIsEditTableModalOpen(false);
       setEditingTable({ area: "innen", seats: 4, status: "frei" });
@@ -114,19 +115,19 @@ export function TablesTab({ tables, menu, orders, onRefresh }: TablesTabProps) {
         const updatedItems = [...activeOrder.items, newItem];
         await api(`/restaurant/orders/${activeOrder.id}`, {
           method: "PUT",
-          body: JSON.stringify({ items: updatedItems }),
+          body: { items: updatedItems },
         });
       } else {
         // Create new order for this table
         await api("/restaurant/orders", {
           method: "POST",
-          body: JSON.stringify({
+          body: {
             type: "tisch",
             tableId: selectedTable.id,
             tableName: selectedTable.name,
             guestCount: selectedTable.seats || 2,
             items: [newItem],
-          }),
+          },
         });
       }
       setItemNote("");
@@ -147,12 +148,12 @@ export function TablesTab({ tables, menu, orders, onRefresh }: TablesTabProps) {
         // Cancel/reset table order
         await api(`/restaurant/orders/${activeOrder.id}/status`, {
           method: "POST",
-          body: JSON.stringify({ status: "storniert" }),
+          body: { status: "storniert" },
         });
       } else {
         await api(`/restaurant/orders/${activeOrder.id}`, {
           method: "PUT",
-          body: JSON.stringify({ items: updatedItems }),
+          body: { items: updatedItems },
         });
       }
       onRefresh();
@@ -169,7 +170,7 @@ export function TablesTab({ tables, menu, orders, onRefresh }: TablesTabProps) {
     try {
       await api(`/restaurant/orders/${activeOrder.id}/checkout`, {
         method: "POST",
-        body: JSON.stringify({ paymentMethod: method }),
+        body: { paymentMethod: method },
       });
       setSelectedTable(null);
       onRefresh();
@@ -192,45 +193,39 @@ export function TablesTab({ tables, menu, orders, onRefresh }: TablesTabProps) {
   });
 
   return (
-    <div className="space-y-6">
-      {/* Filter and Action Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-        <div className="flex items-center gap-1.5 overflow-x-auto max-w-full pb-1 sm:pb-0">
+    <div className="stack">
+      <div className="restaurant-bar">
+        <div className="chips" role="tablist">
           {areas.map((a) => (
             <button
               key={a.id}
+              role="tab"
+              aria-selected={selectedArea === a.id}
               onClick={() => setSelectedArea(a.id)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
-                selectedArea === a.id
-                  ? "bg-amber-600 text-white shadow-sm"
-                  : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
-              }`}
+              className={selectedArea === a.id ? "chip active" : "chip"}
             >
               {a.label}
             </button>
           ))}
         </div>
 
-        <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
-          <button
-            onClick={() => {
-              setEditingTable({
-                area: selectedArea === "alle" ? "innen" : selectedArea,
-                seats: 4,
-                status: "frei",
-              });
-              setIsEditTableModalOpen(true);
-            }}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Neuer Tisch
-          </button>
-        </div>
+        <button
+          onClick={() => {
+            setEditingTable({
+              area: selectedArea === "alle" ? "innen" : selectedArea,
+              seats: 4,
+              status: "frei",
+            });
+            setIsEditTableModalOpen(true);
+          }}
+          className="button primary"
+        >
+          <Plus size={18} />
+          Neuer Tisch
+        </button>
       </div>
 
-      {/* Tables Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+      <div className="restaurant-tables">
         {filteredTables.map((table) => {
           const isSelected = selectedTable?.id === table.id;
           const isOccupied = table.status === "belegt";
@@ -240,385 +235,283 @@ export function TablesTab({ tables, menu, orders, onRefresh }: TablesTabProps) {
             <button
               key={table.id}
               onClick={() => setSelectedTable(table)}
-              className={`relative text-left p-4 rounded-2xl border transition-all flex flex-col justify-between min-h-[140px] shadow-sm hover:shadow-md ${
-                isSelected
-                  ? "ring-2 ring-amber-500 border-amber-500 bg-amber-50/50 dark:bg-amber-950/20"
-                  : isBillRequested
-                  ? "border-blue-300 dark:border-blue-800 bg-blue-50/40 dark:bg-blue-950/20"
-                  : isOccupied
-                  ? "border-amber-300 dark:border-amber-800 bg-amber-50/30 dark:bg-amber-950/10"
-                  : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300"
-              }`}
+              className={`tile restaurant-table ${isSelected ? "selected" : isBillRequested ? "bill" : isOccupied ? "occupied" : ""}`}
             >
-              <div className="flex items-start justify-between w-full">
-                <div>
-                  <span className="text-xs font-mono font-bold tracking-tight text-slate-500 dark:text-slate-400 uppercase">
-                    {table.tableNumber}
-                  </span>
-                  <h4 className="font-semibold text-slate-900 dark:text-white text-sm line-clamp-1">
-                    {table.name}
-                  </h4>
-                </div>
-                <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400">
-                  <Users className="w-3.5 h-3.5" />
-                  <span>{table.seats}</span>
-                </div>
-              </div>
+              <span className="restaurant-table-top">
+                <span className="list-main">
+                  <small className="restaurant-code">{table.tableNumber}</small>
+                  <strong>{table.name}</strong>
+                </span>
+                <span className="restaurant-seats">
+                  <Users size={14} aria-hidden />
+                  {table.seats}
+                </span>
+              </span>
 
-              <div className="mt-4 pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-end justify-between">
-                <div>
-                  <span className="text-[10px] text-slate-400 block uppercase font-mono">
-                    {table.area}
-                  </span>
-                  <span
-                    className={`text-[11px] font-medium ${
-                      isBillRequested
-                        ? "text-blue-600 dark:text-blue-400"
-                        : isOccupied
-                        ? "text-amber-600 dark:text-amber-400"
-                        : "text-emerald-600 dark:text-emerald-400"
-                    }`}
-                  >
+              <span className="restaurant-table-foot">
+                <span className="stack-sm">
+                  <small className="muted restaurant-area">{table.area}</small>
+                  <span className={`pill ${isBillRequested ? "restaurant-pill-info" : isOccupied ? "warn" : "pos"}`}>
                     {isBillRequested ? "Rechnung" : isOccupied ? "Belegt" : "Frei"}
                   </span>
-                </div>
+                </span>
                 {table.totalGross && table.totalGross > 0 ? (
-                  <span className="font-mono font-bold text-sm text-slate-900 dark:text-white">
-                    {fmtEuro(table.totalGross)}
-                  </span>
+                  <strong className="restaurant-amount">{fmtEuro(table.totalGross)}</strong>
                 ) : null}
-              </div>
+              </span>
             </button>
           );
         })}
       </div>
 
-      {/* Selected Table Drawer / Modal View */}
       {selectedTable && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center sm:justify-end bg-black/40 backdrop-blur-xs p-0 sm:p-4">
-          <div className="bg-white dark:bg-slate-900 border-l sm:border border-slate-200 dark:border-slate-800 w-full sm:max-w-lg h-full sm:h-[95vh] sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden">
-            {/* Header */}
-            <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold">
-                  <UtensilsCrossed className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs font-bold text-amber-600 dark:text-amber-400 uppercase">
-                      {selectedTable.tableNumber}
-                    </span>
-                    <span className="text-xs text-slate-400">· {selectedTable.area}</span>
-                  </div>
-                  <h3 className="font-semibold text-slate-900 dark:text-white text-base">
-                    {selectedTable.name}
-                  </h3>
-                </div>
-              </div>
-              <button
-                onClick={() => setSelectedTable(null)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 dark:hover:bg-slate-800 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+        <Dialog title={selectedTable.name} onClose={() => setSelectedTable(null)} wide>
+          <div className="restaurant-dialog stack">
+            <p className="muted restaurant-dialog-sub">
+              <UtensilsCrossed size={15} aria-hidden />
+              <span className="restaurant-code">{selectedTable.tableNumber}</span> · {selectedTable.area}
+            </p>
 
-            {/* Content: Active Order items */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {activeOrder && activeOrder.items.length > 0 ? (
-                <div>
-                  <div className="flex items-center justify-between text-xs text-slate-500 pb-2 border-b border-slate-100 dark:border-slate-800">
-                    <span>Bon #{activeOrder.orderNumber}</span>
-                    <span>{activeOrder.items.length} Positionen</span>
-                  </div>
-
-                  <div className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {activeOrder.items.map((item) => (
-                      <div key={item.id} className="py-2.5 flex items-start justify-between gap-3 text-xs">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-slate-900 dark:text-white">
-                              {item.quantity}x
-                            </span>
-                            <span className="font-medium text-slate-800 dark:text-slate-200">
-                              {item.name}
-                            </span>
-                            <span
-                              className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
-                                item.destination === "bar"
-                                  ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
-                                  : "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
-                              }`}
-                            >
-                              {item.course}
-                            </span>
-                          </div>
-                          {item.note && (
-                            <p className="text-[11px] text-amber-600 dark:text-amber-400 italic mt-0.5">
-                              Hinweis: {item.note}
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-medium text-slate-900 dark:text-white">
-                            {fmtEuro(item.unitPriceGross * item.quantity)}
-                          </span>
-                          <button
-                            onClick={() => handleRemoveItem(item.id)}
-                            className="text-slate-300 hover:text-red-500 p-1"
-                            title="Position entfernen"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Summary */}
-                  <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800 space-y-1.5 text-xs">
-                    <div className="flex justify-between text-slate-500">
-                      <span>Zwischensumme Netto</span>
-                      <span className="font-mono">{fmtEuro(activeOrder.totalNet)}</span>
-                    </div>
-                    {activeOrder.totalTax7 > 0 && (
-                      <div className="flex justify-between text-slate-500">
-                        <span>MwSt. 7% (Speisen)</span>
-                        <span className="font-mono">{fmtEuro(activeOrder.totalTax7)}</span>
-                      </div>
-                    )}
-                    {activeOrder.totalTax19 > 0 && (
-                      <div className="flex justify-between text-slate-500">
-                        <span>MwSt. 19% (Getränke / Verzehr)</span>
-                        <span className="font-mono">{fmtEuro(activeOrder.totalTax19)}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between font-bold text-sm text-slate-900 dark:text-white pt-2 border-t border-slate-100 dark:border-slate-800">
-                      <span>Gesamtsumme Brutto</span>
-                      <span className="font-mono text-base text-amber-600 dark:text-amber-400">
-                        {fmtEuro(activeOrder.totalGross)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center py-12 text-slate-400">
-                  <UtensilsCrossed className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                  <p className="text-sm">Tisch ist derzeit unbesetzt</p>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Füge Speisen oder Getränke hinzu, um eine Bestellung zu starten.
-                  </p>
-                </div>
-              )}
-
-              {/* Quick Add Menu Selection */}
-              <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-800">
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="text-xs font-semibold uppercase text-slate-600 dark:text-slate-400 tracking-wider">
-                    Positionen zubuchen
-                  </h4>
-                  <div className="flex items-center gap-1">
-                    <select
-                      value={itemCourse}
-                      onChange={(e) => setItemCourse(e.target.value as any)}
-                      className="text-xs bg-slate-100 dark:bg-slate-800 rounded px-2 py-1 border border-slate-200 dark:border-slate-700"
-                    >
-                      <option value="Sofort">Sofort</option>
-                      <option value="1. Gang">1. Gang</option>
-                      <option value="2. Gang">2. Gang</option>
-                      <option value="Dessert">Dessert</option>
-                      <option value="Getränke">Getränke</option>
-                    </select>
-                  </div>
+            {activeOrder && activeOrder.items.length > 0 ? (
+              <div className="stack-sm">
+                <div className="restaurant-split muted small">
+                  <span>Bon #{activeOrder.orderNumber}</span>
+                  <span>{activeOrder.items.length} Positionen</span>
                 </div>
 
-                <div className="space-y-2 mb-3">
-                  <div className="relative">
-                    <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
-                    <input
-                      type="text"
-                      placeholder="Speise oder Getränk suchen..."
-                      value={menuSearch}
-                      onChange={(e) => setMenuSearch(e.target.value)}
-                      className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-lg"
-                    />
-                  </div>
-                  <input
-                    type="text"
-                    placeholder="Sonderwunsch (z.B. ohne Zwiebeln, medium)..."
-                    value={itemNote}
-                    onChange={(e) => setItemNote(e.target.value)}
-                    className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-lg italic"
-                  />
-                </div>
-
-                <div className="max-h-56 overflow-y-auto space-y-1 pr-1">
-                  {filteredMenu.slice(0, 15).map((item) => (
-                    <button
-                      key={item.id}
-                      onClick={() => handleAddItemToTable(item)}
-                      disabled={isBusy}
-                      className="w-full text-left p-2 rounded-lg bg-slate-50 hover:bg-amber-50 dark:bg-slate-800/60 dark:hover:bg-amber-950/20 border border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between text-xs transition-colors group"
-                    >
-                      <div>
-                        <span className="font-medium text-slate-800 dark:text-slate-200 group-hover:text-amber-600 dark:group-hover:text-amber-400">
-                          {item.name}
+                <div className="restaurant-lines">
+                  {activeOrder.items.map((item) => (
+                    <div key={item.id} className="restaurant-line">
+                      <span className="list-main">
+                        <span className="restaurant-line-title">
+                          <span><strong>{item.quantity}x</strong> {item.name}</span>
+                          <span className={`pill ${item.destination === "bar" ? "restaurant-pill-info" : "warn"}`}>{item.course}</span>
                         </span>
-                        <span className="text-[10px] text-slate-400 ml-2">
-                          ({item.destination === "bar" ? "Bar" : "Küche"})
-                        </span>
-                      </div>
-                      <span className="font-mono font-semibold text-slate-700 dark:text-slate-300">
-                        {fmtEuro(item.priceGross)}
+                        {item.note && <small className="restaurant-note">Hinweis: {item.note}</small>}
                       </span>
-                    </button>
+                      <strong className="restaurant-amount">{fmtEuro(item.unitPriceGross * item.quantity)}</strong>
+                      <button
+                        onClick={() => handleRemoveItem(item.id)}
+                        className="icon-button danger"
+                        title="Position entfernen"
+                        aria-label="Position entfernen"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
                   ))}
                 </div>
+
+                <div className="repair-totals">
+                  <p className="muted">
+                    <span>Zwischensumme Netto</span>
+                    <span>{fmtEuro(activeOrder.totalNet)}</span>
+                  </p>
+                  {activeOrder.totalTax7 > 0 && (
+                    <p className="muted">
+                      <span>MwSt. 7% (Speisen)</span>
+                      <span>{fmtEuro(activeOrder.totalTax7)}</span>
+                    </p>
+                  )}
+                  {activeOrder.totalTax19 > 0 && (
+                    <p className="muted">
+                      <span>MwSt. 19% (Getränke / Verzehr)</span>
+                      <span>{fmtEuro(activeOrder.totalTax19)}</span>
+                    </p>
+                  )}
+                  <p className="grand">
+                    <span>Gesamtsumme Brutto</span>
+                    <strong>{fmtEuro(activeOrder.totalGross)}</strong>
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="restaurant-empty">
+                <UtensilsCrossed size={28} aria-hidden />
+                <strong>Tisch ist derzeit unbesetzt</strong>
+                <p className="muted small">
+                  Füge Speisen oder Getränke hinzu, um eine Bestellung zu starten.
+                </p>
+              </div>
+            )}
+
+            <div className="stack-sm restaurant-add">
+              <div className="section-head">
+                <h3>Positionen zubuchen</h3>
+                <select
+                  value={itemCourse}
+                  onChange={(e) => setItemCourse(e.target.value as any)}
+                  className="restaurant-course"
+                  aria-label="Gang"
+                >
+                  <option value="Sofort">Sofort</option>
+                  <option value="1. Gang">1. Gang</option>
+                  <option value="2. Gang">2. Gang</option>
+                  <option value="Dessert">Dessert</option>
+                  <option value="Getränke">Getränke</option>
+                </select>
+              </div>
+
+              <label className="search restaurant-search">
+                <Search size={18} />
+                <input
+                  type="text"
+                  placeholder="Speise oder Getränk suchen..."
+                  aria-label="Speise oder Getränk suchen"
+                  value={menuSearch}
+                  onChange={(e) => setMenuSearch(e.target.value)}
+                />
+              </label>
+              <input
+                type="text"
+                placeholder="Sonderwunsch (z.B. ohne Zwiebeln, medium)..."
+                aria-label="Sonderwunsch"
+                value={itemNote}
+                onChange={(e) => setItemNote(e.target.value)}
+              />
+
+              <div className="restaurant-picker">
+                {filteredMenu.slice(0, 15).map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => handleAddItemToTable(item)}
+                    disabled={isBusy}
+                    className="list-row"
+                  >
+                    <span className="list-main">
+                      <strong>{item.name}</strong>
+                      <small className="muted">{item.destination === "bar" ? "Bar" : "Küche"}</small>
+                    </span>
+                    <strong className="restaurant-amount">{fmtEuro(item.priceGross)}</strong>
+                    <Plus size={16} aria-hidden className="muted" />
+                  </button>
+                ))}
               </div>
             </div>
 
-            {/* Footer Actions */}
             {activeOrder && activeOrder.items.length > 0 && (
-              <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 space-y-2">
-                <div className="grid grid-cols-3 gap-2">
+              <div className="stack-sm restaurant-dialog-foot">
+                <div className="restaurant-actions three">
                   <button
                     onClick={() => setActivePrintOrder({ order: activeOrder, type: "kitchen" })}
-                    className="flex items-center justify-center gap-1.5 py-2 px-2 text-xs font-medium rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                    className="button"
                   >
-                    <Printer className="w-3.5 h-3.5" />
+                    <Printer size={17} />
                     Küchenbon
                   </button>
                   <button
                     onClick={() => setActivePrintOrder({ order: activeOrder, type: "bar" })}
-                    className="flex items-center justify-center gap-1.5 py-2 px-2 text-xs font-medium rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                    className="button"
                   >
-                    <Printer className="w-3.5 h-3.5" />
+                    <Printer size={17} />
                     Schankbon
                   </button>
                   <button
                     onClick={() => setActivePrintOrder({ order: activeOrder, type: "guest" })}
-                    className="flex items-center justify-center gap-1.5 py-2 px-2 text-xs font-medium rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                    className="button"
                   >
-                    <Receipt className="w-3.5 h-3.5" />
+                    <Receipt size={17} />
                     Zwischenbon
                   </button>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 pt-1">
+                <div className="restaurant-actions">
                   <button
                     onClick={() => handleTableCheckout("bar")}
                     disabled={isBusy}
-                    className="flex items-center justify-center gap-2 py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-sm transition-colors"
+                    className="button primary"
                   >
-                    <Banknote className="w-4 h-4" />
+                    <Banknote size={18} />
                     Bar kassieren
                   </button>
                   <button
                     onClick={() => handleTableCheckout("karte")}
                     disabled={isBusy}
-                    className="flex items-center justify-center gap-2 py-2.5 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-sm transition-colors"
+                    className="button primary"
                   >
-                    <CreditCard className="w-4 h-4" />
+                    <CreditCard size={18} />
                     Karte zahlen
                   </button>
                 </div>
               </div>
             )}
           </div>
-        </div>
+        </Dialog>
       )}
 
-      {/* Modal: New / Edit Table */}
       {isEditTableModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl">
-            <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-100 dark:border-slate-800">
-              <h3 className="font-semibold text-slate-900 dark:text-white">Tisch anlegen / bearbeiten</h3>
-              <button
-                onClick={() => setIsEditTableModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600"
-              >
-                <X className="w-5 h-5" />
-              </button>
+        <Dialog title="Tisch anlegen / bearbeiten" onClose={() => setIsEditTableModalOpen(false)}>
+          <form onSubmit={handleSaveTable} className="restaurant-dialog stack">
+            <Field label="Tischnummer / Kürzel" required hint="z.B. T-01, T-12 oder B-3">
+              <input
+                type="text"
+                required
+                placeholder="T-01"
+                value={editingTable.tableNumber || ""}
+                onChange={(e) =>
+                  setEditingTable({ ...editingTable, tableNumber: e.target.value })
+                }
+              />
+            </Field>
+
+            <Field label="Tischbezeichnung" required hint="z.B. Fensterplatz 1, Ecktisch 4">
+              <input
+                type="text"
+                required
+                placeholder="Fensterplatz 1"
+                value={editingTable.name || ""}
+                onChange={(e) => setEditingTable({ ...editingTable, name: e.target.value })}
+              />
+            </Field>
+
+            <div className="grid form-grid">
+              <Field label="Bereich / Zone">
+                <select
+                  value={editingTable.area || "innen"}
+                  onChange={(e) =>
+                    setEditingTable({ ...editingTable, area: e.target.value as TableArea })
+                  }
+                >
+                  <option value="innen">Innenbereich</option>
+                  <option value="terrasse">Terrasse</option>
+                  <option value="bar">Bar & Theke</option>
+                  <option value="lounge">Lounge</option>
+                </select>
+              </Field>
+
+              <Field label="Sitzplätze">
+                <input
+                  type="number"
+                  min="1"
+                  max="50"
+                  value={editingTable.seats || 4}
+                  onChange={(e) =>
+                    setEditingTable({ ...editingTable, seats: parseInt(e.target.value) || 2 })
+                  }
+                />
+              </Field>
             </div>
 
-            <form onSubmit={handleSaveTable} className="space-y-4">
-              <Field label="Tischnummer / Kürzel" required hint="z.B. T-01, T-12 oder B-3">
-                <input
-                  type="text"
-                  required
-                  placeholder="T-01"
-                  value={editingTable.tableNumber || ""}
-                  onChange={(e) =>
-                    setEditingTable({ ...editingTable, tableNumber: e.target.value })
-                  }
-                  className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg"
-                />
-              </Field>
-
-              <Field label="Tischbezeichnung" required hint="z.B. Fensterplatz 1, Ecktisch 4">
-                <input
-                  type="text"
-                  required
-                  placeholder="Fensterplatz 1"
-                  value={editingTable.name || ""}
-                  onChange={(e) => setEditingTable({ ...editingTable, name: e.target.value })}
-                  className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg"
-                />
-              </Field>
-
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="Bereich / Zone">
-                  <select
-                    value={editingTable.area || "innen"}
-                    onChange={(e) =>
-                      setEditingTable({ ...editingTable, area: e.target.value as TableArea })
-                    }
-                    className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg"
-                  >
-                    <option value="innen">Innenbereich</option>
-                    <option value="terrasse">Terrasse</option>
-                    <option value="bar">Bar & Theke</option>
-                    <option value="lounge">Lounge</option>
-                  </select>
-                </Field>
-
-                <Field label="Sitzplätze">
-                  <input
-                    type="number"
-                    min="1"
-                    max="50"
-                    value={editingTable.seats || 4}
-                    onChange={(e) =>
-                      setEditingTable({ ...editingTable, seats: parseInt(e.target.value) || 2 })
-                    }
-                    className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg"
-                  />
-                </Field>
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setIsEditTableModalOpen(false)}
-                  className="px-4 py-2 text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
-                >
-                  Abbrechen
-                </button>
-                <button
-                  type="submit"
-                  disabled={isBusy}
-                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-semibold shadow-sm"
-                >
-                  Tisch speichern
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+            <div className="row gap restaurant-form-actions">
+              <button
+                type="button"
+                onClick={() => setIsEditTableModalOpen(false)}
+                className="button"
+              >
+                Abbrechen
+              </button>
+              <button
+                type="submit"
+                disabled={isBusy}
+                className="button primary"
+              >
+                Tisch speichern
+              </button>
+            </div>
+          </form>
+        </Dialog>
       )}
 
-      {/* Print Overlay */}
       {activePrintOrder && (
         <RestaurantPrint
           order={activePrintOrder.order}

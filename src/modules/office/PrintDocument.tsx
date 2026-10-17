@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Printer, X, Download, FileCode, Check } from "lucide-react";
 import qrcode from "qrcode-generator";
 import { api } from "../../api";
@@ -162,7 +163,7 @@ export function PrintDocument({
     URL.revokeObjectURL(url);
   };
 
-  return (
+  return createPortal(
     <div className="print-layer">
       <div className="print-toolbar">
         <button className="button primary" onClick={() => window.print()}>
@@ -173,10 +174,41 @@ export function PrintDocument({
             <FileCode size={18} /> {o("print.eInvoiceXml")}
           </button>
         )}
-        <button className="button push-end" onClick={onClose}>
+        <button className="button" onClick={onClose}>
           <X size={18} /> {o("common.cancel")}
         </button>
       </div>
+
+      {/* XRechnung-XML: als Karte über dem Blatt, damit kein zweites Overlay über der Druckansicht liegt */}
+      {xmlModalOpen && (
+        <section className="card stack office-xml">
+          <div className="section-head">
+            <h2>{o("print.eInvoiceXml")}</h2>
+            <button className="icon-button" onClick={() => setXmlModalOpen(false)} aria-label={o("common.close")}>
+              <X size={20} />
+            </button>
+          </div>
+          <p className="small muted">
+            Diese Rechnung entspricht dem Standard EN 16931 / XRechnung (UBL 2.1). Die XML-Datei kann direkt an Behörden oder Geschäftskunden übermittelt werden.
+          </p>
+          <textarea readOnly rows={12} value={generateEInvoiceXml()} aria-label={o("print.eInvoiceXml")} />
+          <div className="row wrap gap end">
+            <button
+              className="button"
+              onClick={() => {
+                navigator.clipboard.writeText(generateEInvoiceXml());
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+              }}
+            >
+              {copied ? <Check size={18} /> : <FileCode size={18} />} {copied ? o("print.copied") : o("print.copyXml")}
+            </button>
+            <button className="button primary" onClick={handleDownloadXml}>
+              <Download size={18} /> {o("print.downloadXml")}
+            </button>
+          </div>
+        </section>
+      )}
 
       <article className="print-sheet">
         <header className="print-head">
@@ -191,9 +223,7 @@ export function PrintDocument({
             <p>{[company?.phone, company?.email].filter(Boolean).join(" · ")}</p>
           </div>
           <div className="print-meta">
-            <h1 style={{ fontSize: "1.8rem", margin: "0 0 6px" }}>
-              {isInvoice ? o("print.invoiceTitle") : o("print.quoteTitle")}
-            </h1>
+            <h1>{isInvoice ? o("print.invoiceTitle") : o("print.quoteTitle")}</h1>
             <p>
               <strong>{doc.number}</strong>
             </p>
@@ -215,37 +245,33 @@ export function PrintDocument({
         </header>
 
         {/* Empfänger */}
-        <section style={{ margin: "24px 0 32px" }}>
-          <small className="muted" style={{ display: "block", marginBottom: "4px" }}>Empfänger:</small>
-          <div style={{ fontSize: "1.05rem", lineHeight: "1.4" }}>
-            <strong>{doc.clientName}</strong>
-            {invoice?.clientAddress && <div style={{ whiteSpace: "pre-line" }}>{invoice.clientAddress}</div>}
-            {invoice?.clientVatId && <div>USt-IdNr.: {invoice.clientVatId}</div>}
-            {isInvoice && invoice?.buyerReference && (
-              <div style={{ fontSize: "0.85rem", color: "var(--muted)", marginTop: "4px" }}>
-                Käuferreferenz / Leitweg-ID: <strong>{invoice.buyerReference}</strong>
-              </div>
-            )}
-          </div>
+        <section>
+          <h2>Empfänger:</h2>
+          <p><strong>{doc.clientName}</strong></p>
+          {invoice?.clientAddress && <p className="office-pre">{invoice.clientAddress}</p>}
+          {invoice?.clientVatId && <p>USt-IdNr.: {invoice.clientVatId}</p>}
+          {isInvoice && invoice?.buyerReference && (
+            <p><small>Käuferreferenz / Leitweg-ID: <strong>{invoice.buyerReference}</strong></small></p>
+          )}
         </section>
 
         {/* Betreff */}
-        <div style={{ marginBottom: "20px" }}>
-          <h2 style={{ fontSize: "1.2rem", margin: "0 0 4px" }}>{doc.title}</h2>
-          {doc.notes && <p className="muted" style={{ margin: 0 }}>{doc.notes}</p>}
-        </div>
+        <section>
+          <p className="office-print-title"><strong>{doc.title}</strong></p>
+          {doc.notes && <p className="print-terms">{doc.notes}</p>}
+        </section>
 
         {/* Positionstabelle */}
-        <table className="print-items">
+        <table className="print-table">
           <thead>
             <tr>
-              <th style={{ width: "35px" }}>#</th>
+              <th>#</th>
               <th>Position & Beschreibung</th>
-              <th className="num" style={{ width: "70px" }}>Menge</th>
-              <th className="num" style={{ width: "60px" }}>Einheit</th>
-              <th className="num" style={{ width: "95px" }}>Einzelpreis</th>
-              <th className="num" style={{ width: "65px" }}>MwSt.</th>
-              <th className="num" style={{ width: "105px" }}>Gesamt</th>
+              <th className="num">Menge</th>
+              <th className="num">Einheit</th>
+              <th className="num">Einzelpreis</th>
+              <th className="num">MwSt.</th>
+              <th className="num">Gesamt</th>
             </tr>
           </thead>
           <tbody>
@@ -254,7 +280,7 @@ export function PrintDocument({
                 <td>{idx + 1}</td>
                 <td>
                   <strong>{it.title}</strong>
-                  {it.description && <div style={{ fontSize: "0.85rem", color: "var(--muted)", marginTop: "2px" }}>{it.description}</div>}
+                  {it.description && <><br /><small>{it.description}</small></>}
                 </td>
                 <td className="num">{it.qty}</td>
                 <td className="num">{it.unit || "Std"}</td>
@@ -267,9 +293,9 @@ export function PrintDocument({
         </table>
 
         {/* Summen */}
-        <div className="print-totals" style={{ marginLeft: "auto", maxWidth: "340px", marginTop: "16px" }}>
+        <div className="print-totals">
           {doc.discountPercent ? (
-            <p style={{ color: "var(--accent)" }}>
+            <p>
               <span>Rabatt ({doc.discountPercent}%):</span>
               <span>enthalten</span>
             </p>
@@ -282,7 +308,7 @@ export function PrintDocument({
             <span>Umsatzsteuer:</span>
             <span>{euro(doc.vatCents)}</span>
           </p>
-          <p className="grand" style={{ fontSize: "1.25rem", borderTop: "2px solid var(--text)", paddingTop: "8px" }}>
+          <p className="grand">
             <span><strong>Gesamtbetrag:</strong></span>
             <strong>{euro(doc.totalCents)}</strong>
           </p>
@@ -290,30 +316,30 @@ export function PrintDocument({
 
         {/* GiroCode / QR & Zahlungsanweisungen */}
         {isInvoice && (
-          <section style={{ marginTop: "32px", borderTop: "1px solid var(--line)", paddingTop: "18px", display: "flex", gap: "24px", alignItems: "center" }}>
+          <section className="print-qr">
             {qrDataUrl && (
-              <div style={{ textAlign: "center" }}>
-                <img src={qrDataUrl} alt="GiroCode" width={110} height={110} style={{ borderRadius: "4px" }} />
-                <div style={{ fontSize: "0.72rem", color: "var(--muted)", marginTop: "4px" }}>GiroCode / EPC-QR</div>
+              <div className="stack-sm">
+                <img src={qrDataUrl} alt="GiroCode" width={110} height={110} />
+                <span className="small">GiroCode / EPC-QR</span>
               </div>
             )}
-            <div>
-              <p style={{ margin: "0 0 6px", fontWeight: 600 }}>
+            <div className="stack-sm">
+              <strong>
                 {invoice?.paidAt
                   ? o("print.paidWith", { date: day(invoice.paidAt), method: invoice.paidMethod || "Überweisung" })
                   : o("print.payNotice", { days: 14 })}
-              </p>
+              </strong>
               {invoice?.skontoDays && invoice?.skontoPercent ? (
-                <p style={{ margin: "4px 0", fontSize: "0.88rem", color: "var(--accent)", fontWeight: 500 }}>
+                <p>
                   Skontovereinbarung: Bei Zahlung innerhalb von {invoice.skontoDays} Tagen gewähren wir {invoice.skontoPercent}% Skonto (Zahlbetrag: {euro(Math.round(invoice.totalCents * (1 - invoice.skontoPercent / 100)))}).
                 </p>
               ) : null}
               {company?.iban && (
-                <div style={{ fontSize: "0.88rem", color: "var(--muted)" }}>
-                  <div>Bank: <strong>{company.bankName || "Geschäftskonto"}</strong></div>
-                  <div>IBAN: <strong>{company.iban}</strong> · BIC: <strong>{company.bic || "—"}</strong></div>
-                  <div>Verwendungszweck: <strong>{doc.number}</strong></div>
-                </div>
+                <p className="small">
+                  Bank: <strong>{company.bankName || "Geschäftskonto"}</strong><br />
+                  IBAN: <strong>{company.iban}</strong> · BIC: <strong>{company.bic || "—"}</strong><br />
+                  Verwendungszweck: <strong>{doc.number}</strong>
+                </p>
               )}
             </div>
           </section>
@@ -326,45 +352,8 @@ export function PrintDocument({
           {company?.bic && <span>BIC: {company.bic}</span>}
         </footer>
       </article>
-
-      {/* XML Modal für XRechnung */}
-      {xmlModalOpen && (
-        <div className="office-modal-overlay" onClick={() => setXmlModalOpen(false)}>
-          <div className="office-modal" style={{ maxWidth: "720px" }} onClick={(e) => e.stopPropagation()}>
-            <div className="office-modal-head">
-              <h3>{o("print.eInvoiceXml")}</h3>
-              <button className="icon-button" onClick={() => setXmlModalOpen(false)}>
-                <X size={20} />
-              </button>
-            </div>
-            <p className="small muted">
-              Diese Rechnung entspricht dem Standard EN 16931 / XRechnung (UBL 2.1). Die XML-Datei kann direkt an Behörden oder Geschäftskunden übermittelt werden.
-            </p>
-            <textarea
-              readOnly
-              rows={12}
-              style={{ fontFamily: "monospace", fontSize: "0.8rem", width: "100%", background: "var(--panel-2)", border: "1px solid var(--line)", borderRadius: "var(--radius)", padding: "10px" }}
-              value={generateEInvoiceXml()}
-            />
-            <div className="row gap" style={{ justifyContent: "flex-end" }}>
-              <button
-                className="button"
-                onClick={() => {
-                  navigator.clipboard.writeText(generateEInvoiceXml());
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 2000);
-                }}
-              >
-                {copied ? <Check size={18} /> : <FileCode size={18} />} {copied ? o("print.copied") : o("print.copyXml")}
-              </button>
-              <button className="button primary" onClick={handleDownloadXml}>
-                <Download size={18} /> {o("print.downloadXml")}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+    </div>,
+    document.body,
   );
 }
 

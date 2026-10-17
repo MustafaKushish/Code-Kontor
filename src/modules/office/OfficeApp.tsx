@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
-import { FolderKanban, Clock, FileText, Receipt, Users, Settings2, Plus, ArrowRight, WalletCards } from "lucide-react";
+import { useState } from "react";
+import { FolderKanban, Clock, FileText, Receipt, Users, Settings2, Plus, WalletCards } from "lucide-react";
 import type { Me } from "../../api";
-import { AppIcon, Link } from "../../components";
+import { AppIcon } from "../../components";
 import { navigate } from "../../router";
 import { findApp } from "../../../shared/apps";
 import { useOfficeI18n } from "./i18n";
@@ -64,7 +64,7 @@ export default function OfficeApp({ me, path }: { me: Me; path: string }) {
           <h1 className="display">{appText(app.id).name}</h1>
           <p className="muted">{appText(app.id).tagline}</p>
         </div>
-        <div className="row gap office-actions push-end">
+        <div className="row gap office-actions">
           <button
             className="button"
             onClick={() => {
@@ -72,7 +72,7 @@ export default function OfficeApp({ me, path }: { me: Me; path: string }) {
               navigate(`${BASE}/zeiten`);
             }}
           >
-            <Clock size={17} /> {o("time.logTime")}
+            <Clock size={18} /> {o("time.logTime")}
           </button>
           <button
             className="button primary"
@@ -85,7 +85,7 @@ export default function OfficeApp({ me, path }: { me: Me; path: string }) {
         </div>
       </header>
 
-      <div className="page-tabs office-tabs" role="tablist">
+      <div className="page-tabs" role="tablist">
         {tabs.map(({ id: tabId, to, label, icon: Icon }) => (
           <button
             key={tabId}

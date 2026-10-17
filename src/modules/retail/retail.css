@@ -1,294 +1,68 @@
-/* ==========================================================================
-   Code Kontor – Modul „Einzelhandel“ (einzelhandel)
-   Farbton: Frisches Smaragdgrün / Jade (Hue 160)
-   Vollständig an alle Geräte angepasst (Smartphones, Tablets, Touch, Desktop)
-   ========================================================================== */
+/* System „Einzelhandel“ – baut auf dem Designsystem in src/styles.css auf. */
 
-.retail {
-  --hue: 160;
-  --accent: hsl(var(--hue) 85% 38%);
-  --accent-soft: hsl(var(--hue) 85% 94%);
-}
+.retail, .retail-dialog { --hue: 160; }
+.retail .row.gap, .retail-dialog .row.gap { gap: 10px; }
+.retail .row.wrap, .retail-dialog .row.wrap { flex-wrap: wrap; }
+.retail .small, .retail-dialog .small { font-size: 0.85rem; }
+.retail .push-end { margin-inline-start: auto; }
+.retail .small-button, .retail-dialog .small-button { min-height: 34px; padding: 4px 12px; font-size: 0.88rem; }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .retail {
-    --accent: hsl(var(--hue) 80% 55%);
-    --accent-soft: hsl(var(--hue) 45% 16%);
-  }
-}
-:root[data-theme="dark"] .retail {
-  --accent: hsl(var(--hue) 80% 55%);
-  --accent-soft: hsl(var(--hue) 45% 16%);
-}
+/* Kennzahlen */
+.retail-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.retail-stats .stat-icon { background: hsl(var(--hue) 70% 45% / 0.14); color: hsl(var(--hue) 70% 36%); }
+.retail-stats .stat-icon.warn { background: var(--warn-soft); color: inherit; }
+.retail-stats .stat-tile small + small { font-size: 0.8rem; }
 
-/* ---------- Horizontale Wisch-Tabs ---------- */
-.retail-tabs {
-  display: flex !important;
-  flex-wrap: nowrap !important;
-  overflow-x: auto !important;
-  -webkit-overflow-scrolling: touch !important;
-  scrollbar-width: none !important;
-  width: 100% !important;
-  max-width: 100% !important;
-  gap: 6px !important;
-  padding: 4px !important;
-}
+/* Werkzeugleiste */
+.retail-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; min-width: 0; }
+.retail-toolbar .search { flex: 1; min-width: 240px; }
+.retail-toolbar .chips { flex: 1 1 0; min-width: 0; }
 
-.retail-tabs::-webkit-scrollbar {
-  display: none;
-}
+/* Listen */
+.retail-number { display: grid; gap: 2px; min-width: 130px; flex: none; }
+.retail-number code, .retail-dialog code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.82rem; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; }
+.retail-number small { font-size: 0.75rem; }
+.retail-row-meta { display: grid; justify-items: end; gap: 4px; text-align: end; flex: none; }
+.retail-row-meta small { display: inline-flex; align-items: center; gap: 4px; }
+.retail-row-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.retail-row .list-main small { white-space: normal; }
+.retail-price { font-family: var(--display); font-weight: 700; font-variant-numeric: tabular-nums; }
+.retail-stock { border: none; font: inherit; font-size: 0.76rem; cursor: pointer; }
+.retail .pill svg { vertical-align: -2px; }
+.retail .success-text, .retail-dialog .success-text { font-weight: 700; }
+.retail .error-text, .retail-dialog .error-text { color: var(--error); font-weight: 700; }
 
-.retail-tabs button {
-  flex: 0 0 auto !important;
-  white-space: nowrap !important;
-  padding: 9px 16px !important;
-  font-size: 0.9rem !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 8px !important;
-}
-
-/* ---------- Kennzahlen / KPI-Karten ---------- */
-.retail-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 14px;
-}
-
-.retail-stat-card {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 16px 18px;
-  display: grid;
-  gap: 5px;
-  box-shadow: var(--shadow-sm);
-  min-width: 0;
-}
-
-.retail-stat-card .label {
-  font-size: 0.84rem;
-  color: var(--muted);
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.retail-stat-card .value {
-  font-family: var(--display);
-  font-size: 1.6rem;
-  font-weight: 750;
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
-}
+/* Dialoge (per Portal im body) */
+.retail-calc { padding: 14px 16px; border-radius: 16px; background: var(--panel-2); display: grid; gap: 12px; }
+.retail-calc .form-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.retail-total { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
+.retail-total strong { font-size: 1.1rem; font-variant-numeric: tabular-nums; }
+.retail-ean { display: flex; gap: 8px; }
+.retail-ean .button { flex: none; }
+.retail-delta { display: flex; gap: 8px; }
+.retail-delta input { text-align: center; font-size: 1.2rem; font-weight: 700; }
+.retail-delta .button { flex: none; min-width: 64px; }
+.retail-lines { display: grid; }
+.retail-line { display: grid; grid-template-columns: minmax(0, 1fr) 84px 104px auto auto; gap: 10px; align-items: center; padding: 10px 0; }
+.retail-line + .retail-line { border-top: 1px solid var(--line); }
+.retail-line input { padding: 8px 10px; text-align: center; }
+.retail-line.receive { grid-template-columns: minmax(0, 1fr) auto 96px; }
+.retail-line .amount { font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 700; }
 
 @media (max-width: 640px) {
-  .retail-stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-  }
-  .retail-stat-card {
-    padding: 12px 14px;
-  }
-  .retail-stat-card .value {
-    font-size: 1.3rem;
-  }
-}
-
-@media (max-width: 440px) {
-  .retail-stats {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* ---------- Barcode Scanner Leiste ---------- */
-.retail-scanner-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: var(--panel);
-  border: 2px solid color-mix(in srgb, var(--accent) 35%, var(--line));
-  border-radius: var(--radius);
-  padding: 8px 14px;
-  box-shadow: 0 2px 8px -2px color-mix(in srgb, var(--accent) 15%, transparent);
-  transition: border-color 0.15s, box-shadow 0.15s;
-}
-
-.retail-scanner-bar:focus-within {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
-}
-
-.retail-scanner-bar input {
-  flex: 1;
-  border: none;
-  background: transparent;
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--ink);
-  outline: none;
-  padding: 4px;
-}
-
-/* ---------- Raster & Produktkarten ---------- */
-.retail-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 310px), 1fr));
-  gap: 16px;
-}
-
-.retail-card {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 18px;
-  display: grid;
-  gap: 12px;
-  box-shadow: var(--shadow-sm);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-  min-width: 0;
-}
-
-.retail-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow);
-}
-
-.retail-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 10px;
-}
-
-.retail-ean-badge {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.78rem;
-  font-weight: 600;
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-  padding: 3px 6px;
-  border-radius: 6px;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-/* ---------- Stock Indicator Pills ---------- */
-.stock-pill {
-  font-size: 0.82rem;
-  font-weight: 700;
-  padding: 3px 8px;
-  border-radius: 20px;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.stock-pill.ok {
-  background: color-mix(in srgb, var(--success) 14%, var(--panel));
-  color: var(--success);
-  border: 1px solid color-mix(in srgb, var(--success) 30%, transparent);
-}
-
-.stock-pill.low {
-  background: color-mix(in srgb, var(--danger) 14%, var(--panel));
-  color: var(--danger);
-  border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
-}
-
-/* ---------- Preisschilder & Etikettendruck ---------- */
-.labels-sheet {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 12px;
-  padding: 16px;
-}
-
-.retail-price-tag {
-  border: 1px dashed var(--line);
-  border-radius: 10px;
-  padding: 12px 14px;
-  background: var(--panel);
-  display: grid;
-  gap: 6px;
-  text-align: center;
-}
-
-.retail-price-tag .tag-brand {
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  color: var(--muted);
-  letter-spacing: 0.05em;
-  font-weight: 700;
-}
-
-.retail-price-tag .tag-name {
-  font-size: 0.9rem;
-  font-weight: 700;
-  line-height: 1.2;
-}
-
-.retail-price-tag .tag-price {
-  font-family: var(--display);
-  font-size: 1.4rem;
-  font-weight: 850;
-  color: var(--accent);
-}
-
-.retail-price-tag .tag-barcode {
-  font-family: "Libre Barcode 39", "Courier New", monospace;
-  font-size: 1.8rem;
-  letter-spacing: 2px;
-  margin-top: 4px;
-  line-height: 1;
-}
-
-/* ---------- Modale Dialoge ---------- */
-.retail-modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(10, 11, 16, 0.65);
-  backdrop-filter: blur(5px);
-  display: grid;
-  place-items: center;
-  z-index: 1000;
-  padding: 20px 16px;
-  overflow-y: auto;
-}
-
-.retail-modal {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  width: 100%;
-  max-width: 620px;
-  max-height: min(92vh, 92dvh);
-  overflow-y: auto;
-  box-shadow: var(--shadow-lift);
-  display: grid;
-  gap: 18px;
-  padding: 24px;
-}
-
-.retail-modal-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-@media (max-width: 640px) {
-  .retail-modal-overlay {
-    padding: 10px;
-    align-items: flex-end;
-  }
-  .retail-modal {
-    padding: 20px 16px calc(24px + env(safe-area-inset-bottom));
-    border-radius: 24px 24px 14px 14px;
-    max-height: min(92vh, 92dvh);
-    gap: 14px;
-  }
+  .retail-stats { gap: 8px; }
+  .retail-stats .tile { padding: 12px; }
+  .retail-stats .stat-icon { display: none; }
+  .retail-stats .tile strong { margin-top: 0; font-size: 1.3rem; }
+  .retail-stats .stat-tile small + small { display: none; }
+  .retail .page-head .push-end { width: 100%; margin: 0; }
+  .retail-toolbar > .button, .retail-toolbar > .row { width: 100%; }
+  .retail-toolbar > .row .button { flex: 1 1 auto; }
+  .retail-row { flex-wrap: wrap; }
+  .retail-row .retail-number { min-width: 0; width: 100%; grid-auto-flow: column; justify-content: start; gap: 10px; align-items: center; }
+  .retail-row .retail-row-meta { width: 100%; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
+  .retail-calc .form-grid { grid-template-columns: 1fr; }
+  .retail-line { grid-template-columns: 1fr 1fr auto auto; }
+  .retail-line > :first-child { grid-column: 1 / -1; }
+  .retail-line.receive { grid-template-columns: 1fr 96px; }
 }

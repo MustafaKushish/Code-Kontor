@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Calendar, Clock, Scissors, Users, Settings2, Plus, Sparkles, ShoppingCart, Palette, ListOrdered, CheckCircle2, Printer, CreditCard, Banknote, ArrowRight } from "lucide-react";
+import { Calendar, Scissors, Users, Settings2, Plus, Sparkles, ShoppingCart, ListOrdered, CheckCircle2, Printer, CreditCard, Banknote } from "lucide-react";
 import { api, type Me } from "../../api";
 import { AppIcon, Link } from "../../components";
 import { navigate } from "../../router";
@@ -14,6 +14,7 @@ import { ServicesTab } from "./ServicesTab";
 import { StaffTab } from "./StaffTab";
 import { SettingsTab } from "./SettingsTab";
 import { SalonReceiptPrint } from "./SalonReceiptPrint";
+import { Dialog } from "../../pos/ui";
 import "./salon.css";
 
 export const BASE = "/app/friseur";
@@ -89,33 +90,21 @@ export default function SalonApp({ me, path }: { me: Me; path: string }) {
           <h1 className="display">{appText(app.id).name}</h1>
           <p className="muted">{appText(app.id).tagline}</p>
         </div>
-        <div className="row gap salon-actions push-end">
+        <div className="row gap push-end">
           {hasPos && (
             <Link to="/kasse" className="button" title="Zur Kasse wechseln">
-              <ShoppingCart size={17} /> Kasse
+              <ShoppingCart size={18} /> Kasse
             </Link>
           )}
-          <button
-            className="button primary"
-            onClick={() => {
-              navigate(BASE);
-            }}
-          >
+          <button className="button primary" onClick={() => navigate(BASE)}>
             <Plus size={18} /> {s("actions.newAppointment")}
           </button>
         </div>
       </header>
 
-      {/* Horizontale Wisch-Tabs */}
-      <div className="page-tabs salon-tabs" role="tablist">
+      <div className="page-tabs" role="tablist">
         {tabs.map(({ id: tabId, to, label, icon: Icon }) => (
-          <button
-            key={tabId}
-            role="tab"
-            aria-selected={tab === tabId}
-            className={tab === tabId ? "active" : ""}
-            onClick={() => navigate(to)}
-          >
+          <button key={tabId} role="tab" aria-selected={tab === tabId} className={tab === tabId ? "active" : ""} onClick={() => navigate(to)}>
             <Icon size={17} aria-hidden /> {label}
           </button>
         ))}
@@ -148,98 +137,66 @@ export default function SalonApp({ me, path }: { me: Me; path: string }) {
 
       {/* Checkout / Kassen-Dialog */}
       {checkoutApp && (
-        <div className="salon-modal-overlay" onClick={() => setCheckoutApp(null)}>
-          <div className="salon-modal" style={{ maxWidth: "480px" }} onClick={(e) => e.stopPropagation()}>
-            <div className="salon-modal-head">
-              <h3 style={{ margin: 0, display: "flex", alignItems: "center", gap: "8px" }}>
-                <Sparkles size={18} style={{ color: "var(--accent)" }} />
-                Termin abrechnen
-              </h3>
-              <button className="icon-button" onClick={() => setCheckoutApp(null)}>
-                ×
-              </button>
-            </div>
-
-            <div className="card" style={{ padding: "16px", display: "grid", gap: "10px", background: "var(--panel-2)" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                <div>
-                  <strong style={{ fontSize: "1.05rem", display: "block" }}>{checkoutApp.clientName}</strong>
-                  <span className="small muted">Stylist: {checkoutApp.staffName}</span>
-                </div>
-                <span className="pill success">Behandlung fertig</span>
-              </div>
-
-              <div style={{ borderTop: "1px solid var(--line)", paddingTop: "10px" }}>
-                <span className="small muted" style={{ fontWeight: 600 }}>Erbrachte Leistungen:</span>
-                <ul style={{ margin: "6px 0", paddingLeft: "20px", display: "grid", gap: "4px" }}>
-                  {checkoutApp.serviceNames.map((sn, i) => (
-                    <li key={i} style={{ fontSize: "0.9rem" }}>{sn}</li>
-                  ))}
-                </ul>
-              </div>
-
-              <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid var(--line)", paddingTop: "10px", fontSize: "1.25rem", fontWeight: 800 }}>
-                <span>Gesamtbetrag:</span>
-                <span style={{ color: "var(--accent)" }}>{euro(checkoutApp.totalCents)}</span>
-              </div>
+        <Dialog title="Termin abrechnen" onClose={() => setCheckoutApp(null)}>
+          <div className="salon-dialog stack">
+            <div className="section-head">
+              <span className="list-main">
+                <strong>{checkoutApp.clientName}</strong>
+                <small className="muted">Stylist: {checkoutApp.staffName}</small>
+              </span>
+              <span className="pill success">Behandlung fertig</span>
             </div>
 
             <div className="stack-sm">
-              <p className="small muted" style={{ margin: 0, fontWeight: 600 }}>
-                Zahlart wählen:
-              </p>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-                <button
-                  className="button primary"
-                  disabled={checkoutBusy}
-                  style={{ minHeight: "46px", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}
-                  onClick={() => executeCheckout("bar")}
-                >
+              <small className="muted">Erbrachte Leistungen:</small>
+              <ul>
+                {checkoutApp.serviceNames.map((sn, i) => (
+                  <li key={i}>{sn}</li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="salon-total">
+              <span>Gesamtbetrag:</span>
+              <strong>{euro(checkoutApp.totalCents)}</strong>
+            </div>
+
+            <div className="stack-sm">
+              <small className="muted">Zahlart wählen:</small>
+              <div className="grid">
+                <button className="button primary" disabled={checkoutBusy} onClick={() => executeCheckout("bar")}>
                   <Banknote size={18} /> Bar bezahlt
                 </button>
-                <button
-                  className="button"
-                  disabled={checkoutBusy}
-                  style={{ minHeight: "46px", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}
-                  onClick={() => executeCheckout("karte")}
-                >
+                <button className="button" disabled={checkoutBusy} onClick={() => executeCheckout("karte")}>
                   <CreditCard size={18} /> Kartenzahlung
                 </button>
               </div>
-
-              {hasPos && (
-                <div style={{ borderTop: "1px solid var(--line)", paddingTop: "12px", marginTop: "4px" }}>
-                  <Link
-                    to="/kasse"
-                    className="button"
-                    style={{ width: "100%", justifyContent: "center", gap: "8px" }}
-                    onClick={() => {
-                      executeCheckout("bar");
-                    }}
-                  >
-                    <ShoppingCart size={16} /> Mit Plattform-Kasse abrechnen & Bon drucken
-                  </Link>
-                </div>
-              )}
             </div>
+
+            {hasPos && (
+              <Link
+                to="/kasse"
+                className="button block"
+                onClick={() => {
+                  executeCheckout("bar");
+                }}
+              >
+                <ShoppingCart size={17} /> Mit Plattform-Kasse abrechnen & Bon drucken
+              </Link>
+            )}
           </div>
-        </div>
+        </Dialog>
       )}
 
-      {/* Erfolgs-Modal nach Abrechnung mit Bon-Druck */}
+      {/* Erfolgs-Dialog nach Abrechnung mit Bon-Druck */}
       {checkoutSuccess && (
-        <div className="salon-modal-overlay" onClick={() => setCheckoutSuccess(null)}>
-          <div className="salon-modal" style={{ maxWidth: "440px", textAlign: "center" }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ width: "52px", height: "52px", borderRadius: "50%", background: "color-mix(in srgb, var(--success) 15%, var(--panel))", color: "var(--success)", display: "grid", placeItems: "center", margin: "0 auto" }}>
-              <CheckCircle2 size={30} />
-            </div>
-
-            <h3 style={{ margin: "4px 0" }}>Abrechnung erfolgreich!</h3>
-            <p className="muted" style={{ margin: 0, fontSize: "0.92rem" }}>
+        <Dialog title="Abrechnung erfolgreich!" onClose={() => setCheckoutSuccess(null)}>
+          <div className="salon-dialog stack salon-done">
+            <span className="salon-done-icon"><CheckCircle2 size={30} /></span>
+            <p className="muted">
               Die Zahlung über <strong>{euro(checkoutSuccess.appointment.totalCents)}</strong> ({checkoutSuccess.payMethod === "bar" ? "Bar" : "Karte"}) wurde erfasst und der Termin als abgeschlossen markiert.
             </p>
-
-            <div className="row gap" style={{ justifyContent: "center", marginTop: "12px", flexWrap: "wrap" }}>
+            <div className="row wrap gap">
               <button
                 className="button primary"
                 onClick={() => {
@@ -247,17 +204,14 @@ export default function SalonApp({ me, path }: { me: Me; path: string }) {
                   setCheckoutSuccess(null);
                 }}
               >
-                <Printer size={16} /> Beleg drucken
+                <Printer size={17} /> Beleg drucken
               </button>
-              <button
-                className="button"
-                onClick={() => setCheckoutSuccess(null)}
-              >
+              <button className="button" onClick={() => setCheckoutSuccess(null)}>
                 Fertig
               </button>
             </div>
           </div>
-        </div>
+        </Dialog>
       )}
 
       {/* Druckansicht für Beleg / Quittung */}

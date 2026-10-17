@@ -1,353 +1,131 @@
-/* ==========================================================================
-   Code Kontor – Modul „Friseur & Kosmetik“ (friseur)
-   Farbton: Edles Roségold / Beere / Magenta (Hue 330)
-   Vollständig an alle Geräte angepasst (Smartphones, Tablets, Touch, Desktop)
-   ========================================================================== */
+/* System „Friseur & Kosmetik“ – baut auf dem Designsystem in src/styles.css auf. */
 
-.salon {
-  --hue: 330;
-  --accent: hsl(var(--hue) 85% 50%);
-  --accent-soft: hsl(var(--hue) 85% 94%);
-}
+.salon, .salon-dialog, .salon-public { --hue: 330; }
+.salon-public h2 { font-size: 1.2rem; }
+.salon .row.gap, .salon-dialog .row.gap, .salon-public .row.gap { gap: 10px; }
+.salon .row.wrap, .salon-dialog .row.wrap, .salon-public .row.wrap { flex-wrap: wrap; }
+.salon .small, .salon-dialog .small, .salon-public .small { font-size: 0.85rem; }
+.salon .push-end { margin-inline-start: auto; }
+.salon .small-button, .salon-dialog .small-button { min-height: 34px; padding: 4px 12px; font-size: 0.88rem; }
+.salon .button.danger.small-button, .salon-dialog .button.danger.small-button { min-height: 34px; }
+.salon .chips.wrap, .salon-dialog .chips.wrap { flex-wrap: wrap; overflow: visible; }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .salon {
-    --accent: hsl(var(--hue) 90% 65%);
-    --accent-soft: hsl(var(--hue) 45% 18%);
-  }
-}
-:root[data-theme="dark"] .salon {
-  --accent: hsl(var(--hue) 90% 65%);
-  --accent-soft: hsl(var(--hue) 45% 18%);
-}
+/* Kennzahlen */
+.salon-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.salon-stats .stat-icon { background: hsl(var(--hue) 80% 60% / 0.14); color: hsl(var(--hue) 65% 52%); }
 
-/* ---------- Tabs: flüssiges horizontales Swipen auf Touchscreens ---------- */
-.salon-tabs {
-  display: flex !important;
-  flex-wrap: nowrap !important;
-  overflow-x: auto !important;
-  -webkit-overflow-scrolling: touch !important;
-  scrollbar-width: none !important;
-  width: 100% !important;
-  max-width: 100% !important;
-  gap: 6px !important;
-  padding: 4px !important;
-}
+/* Werkzeugleiste: Suche + Aktion nebeneinander */
+.salon-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; min-width: 0; }
+.salon-toolbar .search { flex: 1; min-width: 220px; }
+.salon-toolbar .chips { flex: 1 1 0; min-width: 0; }
+.salon-day { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.salon-day input { width: auto; min-width: 160px; font-weight: 700; }
 
-.salon-tabs::-webkit-scrollbar {
-  display: none;
-}
+/* Listen */
+.salon-time { font-family: var(--display); font-weight: 700; font-variant-numeric: tabular-nums; min-width: 64px; color: hsl(var(--hue) 55% 50%); display: grid; line-height: 1.2; }
+.salon-time small { font-family: inherit; font-weight: 500; color: var(--muted); font-size: 0.78rem; }
+.salon-row-meta { display: grid; justify-items: end; gap: 4px; text-align: end; flex: none; }
+.salon-row-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.salon-avatar { width: 38px; height: 38px; border-radius: 50%; flex: none; display: grid; place-items: center; font-weight: 700; font-size: 0.85rem; background: hsl(var(--hue) 80% 60% / 0.14); color: hsl(var(--hue) 55% 48%); }
+.salon-dot { width: 12px; height: 12px; border-radius: 50%; flex: none; display: inline-block; background: hsl(var(--hue) 70% 55%); }
+.salon .list-row small svg, .salon-dialog small svg { vertical-align: -2px; }
 
-.salon-tabs button {
-  flex: 0 0 auto !important;
-  white-space: nowrap !important;
-  padding: 9px 16px !important;
-  font-size: 0.9rem !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 8px !important;
-}
+/* Raster von Karten (Leistungen, Team, Kunden) */
+.salon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 16px; }
+.salon-grid .card { gap: 12px; }
+.salon-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 12px; margin-top: auto; }
+.salon-price { font-family: var(--display); font-size: 1.25rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.salon-meta { display: grid; gap: 6px; color: var(--muted); font-size: 0.9rem; }
+.salon-meta span { display: inline-flex; align-items: center; gap: 8px; }
+.salon-meta strong { color: var(--ink); }
 
-.salon-tabs button svg {
-  display: inline-block !important;
-  flex: none;
+/* Kalenderraster */
+.salon-cal-wrap { padding: 0; overflow-x: auto; }
+.salon-cal { display: grid; min-width: 720px; }
+.salon-cal-head { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; background: var(--panel-2); border-bottom: 1px solid var(--line); }
+.salon-cal-head > div { padding: 12px 14px; display: flex; align-items: center; gap: 8px; border-inline-end: 1px solid var(--line); min-width: 0; }
+.salon-cal-head > div:first-child { justify-content: center; color: var(--muted); }
+.salon-cal-head small { display: block; font-size: 0.75rem; }
+.salon-cal-times { border-inline-end: 1px solid var(--line); color: var(--muted); font-size: 0.78rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.salon-cal-times div, .salon-cal-cell { height: 52px; border-bottom: 1px dashed var(--line); }
+.salon-cal-times div { padding: 4px 8px; }
+.salon-cal-col { position: relative; border-inline-end: 1px solid var(--line); }
+.salon-cal-cell { display: block; width: 100%; border-inline: none; border-top: none; background: none; padding: 0; cursor: pointer; }
+.salon-cal-cell:hover { background: hsl(var(--hue) 80% 60% / 0.07); }
+.salon-appt {
+  position: absolute; inset-inline: 4px; z-index: 2; display: grid; align-content: start; gap: 2px; overflow: hidden;
+  padding: 7px 10px; border-radius: 12px; border: 1px solid var(--line); border-inline-start-width: 4px;
+  background: var(--panel); color: var(--ink); font: inherit; font-size: 0.82rem; text-align: start; cursor: pointer;
+  box-shadow: var(--shadow-sm); transition: transform 0.15s, box-shadow 0.15s;
 }
+.salon-appt:hover { transform: translateY(-1px); box-shadow: var(--shadow-lift); z-index: 4; }
+.salon-appt.in_progress { background: color-mix(in srgb, hsl(var(--hue) 80% 60%) 14%, var(--panel)); }
+.salon-appt.completed { background: color-mix(in srgb, var(--success) 12%, var(--panel)); }
+.salon-appt-line { display: flex; justify-content: space-between; align-items: center; gap: 6px; min-width: 0; }
+.salon-appt-line strong, .salon-appt > small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.salon-appt .pill { padding: 1px 8px; }
 
-/* ---------- Kennzahlen / KPI-Karten ---------- */
-.salon-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 14px;
-}
+/* Dialoge (per Portal im body) */
+.salon-picker { display: grid; gap: 2px; max-height: 220px; overflow: auto; border: 1px solid var(--line); border-radius: 16px; padding: 4px; }
+.salon-picker .list-row { cursor: pointer; padding: 8px 10px; }
+.salon-picker .list-row + .list-row { border-top: none; }
+.salon-picker .list-row.active { background: hsl(var(--hue) 80% 60% / 0.12); }
+.salon-picker input { width: 18px; height: 18px; flex: none; accent-color: var(--brand); }
+.salon-total { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 1.15rem; padding: 12px 16px; border-radius: 16px; background: var(--panel-2); }
+.salon-dialog ul { margin: 0; padding-inline-start: 20px; display: grid; gap: 4px; }
+.salon-done { justify-items: center; text-align: center; }
+.salon-done-icon { width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; background: var(--success-soft); color: var(--success); }
+.salon-formula { padding: 14px 16px; border-radius: 16px; background: var(--panel-2); display: grid; gap: 8px; }
+.salon-formula code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-weight: 600; padding: 8px 12px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); overflow-wrap: anywhere; }
+.salon-formula-list { max-height: 320px; overflow: auto; }
+.salon-color { display: flex; gap: 10px; }
+.salon-color input[type="color"] { width: 52px; height: auto; align-self: stretch; flex: none; padding: 4px; cursor: pointer; }
 
-.salon-stat-card {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 18px 20px;
-  display: grid;
-  gap: 6px;
-  box-shadow: var(--shadow-sm);
-  min-width: 0;
-}
-
-.salon-stat-card .label {
-  font-size: 0.85rem;
-  color: var(--muted);
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.salon-stat-card .value {
-  font-family: var(--display);
-  font-size: 1.6rem;
-  font-weight: 750;
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
-}
+.salon-settings { max-width: 800px; }
 
 @media (max-width: 640px) {
-  .salon-stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-  }
-  .salon-stat-card {
-    padding: 14px 14px;
-    gap: 4px;
-  }
-  .salon-stat-card .value {
-    font-size: 1.3rem;
-  }
-  .salon-stat-card .label {
-    font-size: 0.78rem;
-  }
+  .salon-stats { gap: 8px; }
+  .salon-stats .tile { padding: 12px; }
+  .salon-stats .stat-icon { display: none; }
+  .salon-stats .tile strong { margin-top: 0; font-size: 1.3rem; }
+  .salon .page-head .push-end { width: 100%; margin: 0; }
+  .salon-toolbar > .button { width: 100%; }
+  .salon-row { flex-wrap: wrap; }
+  .salon-row .list-main { flex-basis: calc(100% - 80px); }
+  .salon-row .salon-row-meta { width: 100%; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
+  .salon-row .pill { white-space: nowrap; }
+  .salon-stats .stat-tile small + small { display: none; }
+  .salon-day { width: 100%; flex-wrap: nowrap; }
+  .salon-day input { min-width: 0; flex: 1; }
 }
 
-@media (max-width: 440px) {
-  .salon-stats {
-    grid-template-columns: 1fr;
-  }
+/* ---------- Öffentliche Online-Buchung ---------- */
+.salon-public { max-width: 640px; margin: 0 auto; padding: calc(16px + env(safe-area-inset-top)) 16px 48px; display: grid; gap: 16px; }
+.salon-public-brand { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-size: 1.15rem; }
+.salon-public-brand svg { color: hsl(var(--hue) 60% 52%); }
+.salon-public h1 { font-size: clamp(1.6rem, 6vw, 2.2rem); }
+.salon-choices { display: grid; gap: 8px; }
+.salon-choice {
+  display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; border-radius: 16px;
+  border: 1px solid var(--line-strong); background: var(--panel); color: var(--ink); font: inherit; text-align: start; cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
 }
-
-/* ---------- Karten & Grids ---------- */
-.salon-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 310px), 1fr));
-  gap: 16px;
+.salon-choice:hover { border-color: var(--ink); }
+.salon-choice.active { border-color: hsl(var(--hue) 65% 58%); background: hsl(var(--hue) 80% 60% / 0.1); box-shadow: 0 0 0 3px hsl(var(--hue) 70% 60% / 0.18); }
+.salon-choice small svg { vertical-align: -2px; }
+.salon-summary { padding: 14px 16px; border-radius: 16px; background: var(--panel-2); }
+.salon-summary .salon-total { padding: 10px 0 0; border-top: 1px solid var(--line); border-radius: 0; background: none; }
+.salon-done .salon-summary { justify-self: stretch; text-align: start; }
+.salon-steps { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.salon-slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; max-height: 260px; overflow: auto; padding: 2px; }
+.salon-slots .chip { display: grid; justify-items: center; gap: 2px; padding: 8px 6px; border-radius: 14px; font-variant-numeric: tabular-nums; min-width: 0; }
+.salon-slots .chip small { font-size: 0.7rem; font-weight: 500; opacity: 0.85; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.salon-nav { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 14px; }
+.salon-public .notice { display: flex; align-items: center; gap: 8px; }
+@media (max-width: 560px) {
+  .salon-nav .button { flex: 1 1 auto; }
+  .salon-public .button { white-space: normal; text-align: center; }
 }
-
-.salon-card {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 20px;
-  display: grid;
-  gap: 14px;
-  box-shadow: var(--shadow-sm);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-  min-width: 0;
-}
-
-.salon-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow);
-}
-
-.salon-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-@media (max-width: 640px) {
-  .salon-grid {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-  .salon-card {
-    padding: 16px;
-    gap: 12px;
-  }
-}
-
-/* ---------- Interaktiver Terminkalender (Timeline & Day View) ---------- */
-.salon-calendar-wrap {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  box-shadow: var(--shadow-sm);
-}
-
-.salon-calendar {
-  display: grid;
-  min-width: 720px;
-  position: relative;
-}
-
-.salon-calendar-header {
-  display: grid;
-  background: var(--panel-2);
-  border-bottom: 2px solid var(--line);
-  position: sticky;
-  top: 0;
-  z-index: 5;
-}
-
-.salon-calendar-col-header {
-  padding: 12px 14px;
-  font-weight: 700;
-  font-size: 0.92rem;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  border-inline-end: 1px solid var(--line);
-}
-
-.salon-calendar-body {
-  display: grid;
-  position: relative;
-}
-
-.salon-time-col {
-  width: 64px;
-  border-inline-end: 1px solid var(--line);
-  color: var(--muted);
-  font-size: 0.78rem;
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-}
-
-.salon-time-slot {
-  height: 52px;
-  padding: 4px 6px;
-  border-bottom: 1px dashed var(--line);
-  box-sizing: border-box;
-}
-
-.salon-staff-col {
-  position: relative;
-  border-inline-end: 1px solid var(--line);
-}
-
-.salon-slot-cell {
-  height: 52px;
-  border-bottom: 1px dashed var(--line);
-  box-sizing: border-box;
-  cursor: pointer;
-  transition: background 0.12s;
-}
-
-.salon-slot-cell:hover {
-  background: color-mix(in srgb, var(--accent) 6%, transparent);
-}
-
-.salon-appointment-block {
-  position: absolute;
-  inset-inline: 4px;
-  border-radius: 12px;
-  padding: 8px 10px;
-  overflow: hidden;
-  font-size: 0.82rem;
-  cursor: pointer;
-  box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.12);
-  display: grid;
-  align-content: start;
-  gap: 2px;
-  z-index: 2;
-  transition: transform 0.15s, box-shadow 0.15s;
-}
-
-.salon-appointment-block:hover {
-  transform: translateY(-1px) scale(1.01);
-  box-shadow: 0 8px 18px -3px rgba(0, 0, 0, 0.2);
-  z-index: 4;
-}
-
-/* ---------- Farbrezepturen (Color Cards) ---------- */
-.formula-card {
-  background: var(--panel-2);
-  border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--line));
-  border-radius: 16px;
-  padding: 14px 16px;
-  display: grid;
-  gap: 8px;
-}
-
-.formula-brand {
-  font-size: 0.82rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--accent);
-}
-
-.formula-text {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.95rem;
-  font-weight: 600;
-  background: var(--panel);
-  padding: 8px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--line);
-  word-break: break-all;
-}
-
-/* ---------- Modale Dialoge ---------- */
-.salon-modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(10, 11, 16, 0.65);
-  backdrop-filter: blur(5px);
-  display: grid;
-  place-items: center;
-  z-index: 1000;
-  padding: 20px 16px;
-  overflow-y: auto;
-}
-
-.salon-modal {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  width: 100%;
-  max-width: 620px;
-  max-height: min(92vh, 92dvh);
-  overflow-y: auto;
-  box-shadow: var(--shadow-lift);
-  display: grid;
-  gap: 18px;
-  padding: 24px;
-}
-
-.salon-modal-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-@media (max-width: 640px) {
-  .salon-modal-overlay {
-    padding: 10px;
-    align-items: flex-end;
-  }
-  .salon-modal {
-    padding: 20px 16px calc(24px + env(safe-area-inset-bottom));
-    border-radius: 24px 24px 14px 14px;
-    max-height: min(92vh, 92dvh);
-    gap: 14px;
-  }
-}
-
-/* ---------- Aktionen & Knöpfe ---------- */
-.salon-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-@media (max-width: 640px) {
-  .salon-head {
-    flex-direction: column;
-    align-items: flex-start !important;
-    gap: 14px;
-  }
-  .salon-actions {
-    width: 100%;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-  .salon-actions .button {
-    flex: 1 1 auto;
-    justify-content: center;
-    min-height: 44px;
-  }
-}
+.salon-stats .stat-tile small + small { font-size: 0.8rem; }
+.salon-row .list-main small { white-space: normal; }
+.salon-steps small { white-space: nowrap; }

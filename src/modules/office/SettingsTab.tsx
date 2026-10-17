@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Save, Check, Settings2, Plus, Trash2, Users, AlertTriangle } from "lucide-react";
+import { Save, Check, Settings2, Plus, Trash2, Users, AlertTriangle, Hash } from "lucide-react";
 import { api } from "../../api";
 import { Field } from "../../components";
 import type { OfficeSettings, RoleRate } from "../../../shared/office";
@@ -67,29 +67,25 @@ export function SettingsTab() {
   if (loading || !settings) return <p className="muted">Laden...</p>;
 
   return (
-    <div className="stack" style={{ maxWidth: "760px" }}>
+    <div className="stack office-settings">
       {saved && (
-        <div className="notice success" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-          <Check size={18} /> {o("settings.saved")}
-        </div>
+        <p className="notice success"><Check size={18} /> {o("settings.saved")}</p>
       )}
-      {errorMsg && <div className="notice warning">{errorMsg}</div>}
+      {errorMsg && <p className="error" role="alert">{errorMsg}</p>}
 
       <form onSubmit={handleSubmit} className="card stack">
-        <h3 style={{ display: "flex", alignItems: "center", gap: "8px", margin: "0 0 8px" }}>
-          <Settings2 size={20} style={{ color: "var(--accent)" }} />
-          {o("settings.title")}
-        </h3>
+        <div className="section-head">
+          <h2 className="card-title"><Settings2 size={20} /> {o("settings.title")}</h2>
+        </div>
 
         {/* Allgemeine Standards */}
-        <div className="row-grid">
+        <div className="grid form-grid">
           <Field label={o("settings.defaultHourlyRate")} required>
             <input
               type="number"
               step="0.01"
               min="0"
               required
-              className="input"
               value={(settings.defaultHourlyRateCents / 100) || ""}
               onChange={(e) =>
                 setSettings({
@@ -105,7 +101,6 @@ export function SettingsTab() {
               min="0"
               max="180"
               required
-              className="input"
               value={settings.defaultPaymentTermsDays}
               onChange={(e) =>
                 setSettings({
@@ -115,16 +110,11 @@ export function SettingsTab() {
               }
             />
           </Field>
-        </div>
-
-        {/* Standard Skonto */}
-        <div className="row-grid">
           <Field label="Standard Skonto-Frist (Tage)">
             <input
               type="number"
               min="0"
               max="60"
-              className="input"
               value={settings.defaultSkontoDays || ""}
               placeholder="z.B. 7"
               onChange={(e) =>
@@ -141,7 +131,6 @@ export function SettingsTab() {
               min="0"
               max="10"
               step="0.5"
-              className="input"
               value={settings.defaultSkontoPercent || ""}
               placeholder="z.B. 2"
               onChange={(e) =>
@@ -155,81 +144,64 @@ export function SettingsTab() {
         </div>
 
         {/* Rollen- & Tätigkeitsbasierte Stundensätze */}
-        <div style={{ borderTop: "1px solid var(--line)", paddingTop: "14px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-            <h4 style={{ margin: 0, display: "flex", alignItems: "center", gap: "8px" }}>
-              <Users size={18} style={{ color: "var(--accent)" }} /> Rollen- & tätigkeitsbasierte Stundensätze
-            </h4>
-          </div>
-          <p className="small muted" style={{ margin: "0 0 12px" }}>
+        <div className="office-section">
+          <h3 className="card-subtitle"><Users size={18} /> Rollen- & tätigkeitsbasierte Stundensätze</h3>
+          <p className="small muted">
             Definieren Sie Stundensätze nach Qualifikation oder Aufgabenrolle (z.B. Junior, Senior, Beratung, Entwicklung, Kreation).
           </p>
 
-          <div className="stack-sm" style={{ marginBottom: "12px" }}>
-            {(settings.roleRates || []).map((r) => (
-              <div key={r.id} className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", background: "var(--panel-2)" }}>
-                <div>
-                  <strong>{r.name}</strong>
-                  <div className="small muted">Stundensatz: <strong>{euro(r.hourlyRateCents)} / Std (netto)</strong></div>
+          {(settings.roleRates || []).length > 0 && (
+            <div className="office-sublist">
+              {(settings.roleRates || []).map((r) => (
+                <div key={r.id} className="list-row">
+                  <span className="list-main">
+                    <strong>{r.name}</strong>
+                    <small className="muted">Stundensatz: {euro(r.hourlyRateCents)} / Std (netto)</small>
+                  </span>
+                  <button
+                    type="button"
+                    className="icon-button danger"
+                    onClick={() => handleRemoveRoleRate(r.id)}
+                    title="Rolle entfernen"
+                    aria-label="Rolle entfernen"
+                  >
+                    <Trash2 size={16} />
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  className="icon-button danger"
-                  onClick={() => handleRemoveRoleRate(r.id)}
-                  title="Rolle entfernen"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
 
-          <div className="row-grid" style={{ gridTemplateColumns: "2fr 1fr auto", alignItems: "flex-end" }}>
+          <div className="office-add">
             <Field label="Neue Rolle / Tätigkeit">
               <input
                 type="text"
-                className="input"
                 placeholder="z.B. Senior Consultant, Grafikdesign..."
                 value={newRoleName}
                 onChange={(e) => setNewRoleName(e.target.value)}
               />
             </Field>
             <Field label="Satz (€/Std)">
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                className="input"
-                value={newRoleRateEur}
-                onChange={(e) => setNewRoleRateEur(e.target.value)}
-              />
+              <input type="number" step="0.01" min="0" value={newRoleRateEur} onChange={(e) => setNewRoleRateEur(e.target.value)} />
             </Field>
-            <button
-              type="button"
-              className="button"
-              onClick={handleAddRoleRate}
-              disabled={!newRoleName.trim()}
-            >
-              <Plus size={16} /> Rolle hinzufügen
+            <button type="button" className="button" onClick={handleAddRoleRate} disabled={!newRoleName.trim()}>
+              <Plus size={17} /> Rolle hinzufügen
             </button>
           </div>
         </div>
 
         {/* Mahnwesen & Gebühren */}
-        <div style={{ borderTop: "1px solid var(--line)", paddingTop: "14px" }}>
-          <h4 style={{ margin: "0 0 6px", display: "flex", alignItems: "center", gap: "8px" }}>
-            <AlertTriangle size={18} style={{ color: "var(--warning)" }} /> Mahnwesen & Gebühren
-          </h4>
-          <p className="small muted" style={{ margin: "0 0 10px" }}>
+        <div className="office-section">
+          <h3 className="card-subtitle"><AlertTriangle size={18} /> Mahnwesen & Gebühren</h3>
+          <p className="small muted">
             Feste Gebührensätze für Mahnungen überfälliger Rechnungen (Stufe 1 Zahlungserinnerung ist kostenlos).
           </p>
-          <div className="row-grid">
+          <div className="grid form-grid">
             <Field label="Mahngebühr 1. Mahnung (Stufe 2, €)">
               <input
                 type="number"
                 step="0.01"
                 min="0"
-                className="input"
                 value={(settings.dunningFeeLevel2Cents / 100) || ""}
                 onChange={(e) =>
                   setSettings({
@@ -244,7 +216,6 @@ export function SettingsTab() {
                 type="number"
                 step="0.01"
                 min="0"
-                className="input"
                 value={(settings.dunningFeeLevel3Cents / 100) || ""}
                 onChange={(e) =>
                   setSettings({
@@ -258,14 +229,13 @@ export function SettingsTab() {
         </div>
 
         {/* Nummernkreise & E-Rechnung */}
-        <div style={{ borderTop: "1px solid var(--line)", paddingTop: "14px" }}>
-          <h4 style={{ margin: "0 0 10px" }}>Nummernkreise & Rechnungsstandards</h4>
-          <div className="row-grid">
+        <div className="office-section">
+          <h3 className="card-subtitle"><Hash size={18} /> Nummernkreise & Rechnungsstandards</h3>
+          <div className="grid form-grid">
             <Field label={o("settings.quotePrefix")} required>
               <input
                 type="text"
                 required
-                className="input"
                 value={settings.quotePrefix}
                 onChange={(e) => setSettings({ ...settings, quotePrefix: e.target.value.trim().toUpperCase() })}
               />
@@ -274,42 +244,36 @@ export function SettingsTab() {
               <input
                 type="text"
                 required
-                className="input"
                 value={settings.invoicePrefix}
                 onChange={(e) => setSettings({ ...settings, invoicePrefix: e.target.value.trim().toUpperCase() })}
               />
             </Field>
-          </div>
-
-          <Field label={o("settings.buyerReferenceDefault")}>
-            <input
-              type="text"
-              className="input"
-              placeholder="z.B. Leitweg-ID für öffentliche Auftraggeber"
-              value={settings.buyerReferenceDefault}
-              onChange={(e) => setSettings({ ...settings, buyerReferenceDefault: e.target.value })}
-            />
-          </Field>
-
-          <div style={{ marginTop: "12px" }}>
-            <label className="checkbox-label" style={{ display: "flex", alignItems: "flex-start", gap: "10px", cursor: "pointer" }}>
+            <Field label={o("settings.buyerReferenceDefault")} wide>
               <input
-                type="checkbox"
-                style={{ marginTop: "4px" }}
-                checked={settings.eInvoiceEnabled}
-                onChange={(e) => setSettings({ ...settings, eInvoiceEnabled: e.target.checked })}
+                type="text"
+                placeholder="z.B. Leitweg-ID für öffentliche Auftraggeber"
+                value={settings.buyerReferenceDefault}
+                onChange={(e) => setSettings({ ...settings, buyerReferenceDefault: e.target.value })}
               />
-              <div>
-                <strong>{o("settings.eInvoiceEnabled")}</strong>
-                <div className="small muted">
-                  Generiert automatisch den EN16931-konformen XRechnung-Standard (UBL 2.1) für Rechnungen an Behörden und B2B-Kunden in Deutschland und der EU.
-                </div>
-              </div>
-            </label>
+            </Field>
           </div>
+
+          <label className="check office-check">
+            <input
+              type="checkbox"
+              checked={settings.eInvoiceEnabled}
+              onChange={(e) => setSettings({ ...settings, eInvoiceEnabled: e.target.checked })}
+            />
+            <span className="stack-sm">
+              <strong>{o("settings.eInvoiceEnabled")}</strong>
+              <small className="muted">
+                Generiert automatisch den EN16931-konformen XRechnung-Standard (UBL 2.1) für Rechnungen an Behörden und B2B-Kunden in Deutschland und der EU.
+              </small>
+            </span>
+          </label>
         </div>
 
-        <div className="row" style={{ justifyContent: "flex-end", marginTop: "12px" }}>
+        <div className="row end">
           <button type="submit" className="button primary">
             <Save size={18} /> {o("common.save")}
           </button>

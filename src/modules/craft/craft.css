@@ -1,0 +1,190 @@
+/* System „Handwerk & Baustelle“ – baut auf dem Designsystem in src/styles.css auf. */
+
+.craft { --hue: 35; }
+.craft .push-end, .craft-sign-actions .push-end { margin-inline-start: auto; }
+.craft .row.gap, .craft-dialog-actions, .craft-sign-actions { gap: 10px; }
+.craft .row.wrap { flex-wrap: wrap; }
+.craft .small { font-size: 0.85rem; }
+.craft-mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing: 0.01em; }
+.craft-pre { white-space: pre-wrap; }
+.craft-pill-icon { display: inline-flex; align-items: center; gap: 6px; }
+.craft .button svg, .craft-pill-icon svg { flex: none; }
+
+/* Laden */
+.craft-loading { min-height: 50vh; display: grid; place-content: center; justify-items: center; gap: 12px; }
+.craft-loading svg { color: hsl(var(--hue) 75% 52%); animation: craft-pulse 1.4s ease-in-out infinite; }
+@keyframes craft-pulse { 50% { transform: translateY(-6px); } }
+.craft-spin { animation: craft-rotate 0.9s linear infinite; }
+@keyframes craft-rotate { to { transform: rotate(360deg); } }
+
+/* Kopf, Kennzahlen, Tabs */
+.craft .craft-head-actions { display: flex; align-items: center; flex-wrap: nowrap; }
+.craft-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
+.craft-stats .stat-icon { background: hsl(var(--hue) 85% 55% / 0.15); color: hsl(var(--hue) 75% 42%); }
+.craft-stats .tile strong { font-variant-numeric: tabular-nums; }
+.craft-stat-wide strong { font-size: clamp(1.3rem, 1.9vw, 1.7rem); }
+.craft-count {
+  min-width: 20px; padding: 1px 7px; border-radius: 999px; font-size: 0.74rem; font-variant-numeric: tabular-nums; text-align: center;
+  background: hsl(var(--hue) 85% 55% / 0.16); color: hsl(var(--hue) 70% 38%);
+}
+
+/* Werkzeugleiste */
+.craft-toolbar-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.craft-toolbar-row .search { flex: 1 1 260px; max-width: none; }
+.craft-toolbar-row select { width: auto; min-width: 180px; max-width: 320px; flex: 0 1 auto; }
+
+/* Leere Zustände */
+.craft-empty { justify-items: center; text-align: center; gap: 6px; padding-block: 44px; }
+.craft-empty svg { color: var(--faint); margin-bottom: 4px; }
+.craft-empty p { max-width: 420px; }
+
+/* Kartenraster (Baustellen, Rapporte) */
+.craft-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; align-items: stretch; }
+.craft-card { padding: 20px; gap: 12px; display: flex; flex-direction: column; }
+.craft-card.is-draft { border-color: hsl(var(--hue) 80% 55% / 0.55); }
+.craft-card.is-done { opacity: 0.85; }
+.craft-card-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.craft-number { font-family: var(--display); font-weight: 700; font-variant-numeric: tabular-nums; color: hsl(var(--hue) 70% 42%); letter-spacing: 0.01em; }
+.craft-card-title { display: grid; gap: 2px; min-width: 0; }
+.craft-card-title h3 { font-size: 1.05rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.craft-split { display: flex; justify-content: space-between; gap: 8px; }
+.craft-facts { display: grid; gap: 6px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 0.9rem; align-content: start; }
+.craft-facts > * { display: flex; align-items: flex-start; gap: 8px; color: var(--ink-soft, var(--ink)); min-width: 0; }
+.craft-facts > .muted { color: var(--muted); font-size: 0.85rem; }
+.craft-facts svg { flex: none; margin-top: 3px; color: var(--muted); }
+.craft-facts a:hover { color: var(--brand); }
+.craft-card-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; padding-top: 10px; border-top: 1px solid var(--line); margin-top: auto; }
+.craft-amount { font-variant-numeric: tabular-nums; }
+.craft-status { white-space: nowrap; font-weight: 600; }
+.craft .pill.tone-info { background: hsl(210 85% 55% / 0.13); color: hsl(210 70% 45%); border-color: transparent; }
+.craft .pill.warn { color: var(--ink); }
+.craft-tag { text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.68rem; padding: 2px 8px; }
+
+/* Rapporte */
+.craft-quote {
+  padding: 0 12px; border-block: 10px solid var(--panel-2); border-radius: 12px; background: var(--panel-2); color: var(--ink-soft, var(--ink)); font-size: 0.9rem; line-height: 1.45;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.craft-sums { display: grid; gap: 3px; font-size: 0.88rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.craft-sums p { display: flex; justify-content: space-between; gap: 12px; }
+.craft-sums .grand { color: var(--ink); font-size: 1rem; padding-top: 4px; border-top: 1px solid var(--line); margin-top: 2px; }
+.craft-sums .grand strong:last-child { color: hsl(var(--hue) 70% 42%); }
+.craft-signed { display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: 14px; background: var(--success-soft); }
+.craft-signed img { width: 96px; height: 40px; object-fit: contain; background: #fff; border-radius: 8px; padding: 2px; flex: none; }
+.craft-signed span { display: grid; color: var(--success); }
+.craft-pay { flex-wrap: wrap; }
+.craft-pay .button { gap: 6px; }
+
+/* Aufmaß */
+.craft-room { padding: 6px; }
+.craft-room-head { padding: 10px 12px 8px; flex-wrap: wrap; }
+.craft-room-head h3 { display: flex; align-items: center; gap: 10px; font-size: 1.02rem; }
+.craft-icon {
+  width: 30px; height: 30px; border-radius: 10px; display: grid; place-items: center; flex: none;
+  background: hsl(var(--hue) 85% 55% / 0.15); color: hsl(var(--hue) 75% 42%);
+}
+.craft-room .list-row:first-of-type { border-top: 1px solid var(--line); }
+.craft-measure-row .list-main strong { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.craft-result {
+  font-family: var(--display); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap;
+  padding: 4px 12px; border-radius: 10px; background: var(--panel-2);
+}
+
+/* Bautagebuch */
+.craft-diary { padding: 20px; gap: 12px; }
+.craft-diary-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.craft-diary-head strong { display: inline-flex; align-items: center; gap: 6px; }
+.craft-diary-head strong svg { color: var(--muted); }
+.craft-diary-head .list-main small { white-space: normal; }
+.craft-trades { gap: 6px; }
+.craft-issue {
+  display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border-radius: 14px;
+  background: color-mix(in srgb, var(--error) 10%, transparent); border: 1px solid color-mix(in srgb, var(--error) 28%, transparent);
+}
+.craft-issue > svg { color: var(--error); flex: none; margin-top: 2px; }
+.craft-issue strong { color: var(--error); }
+
+/* Dialoge (per Portal im body, daher ohne .craft-Präfix) */
+.craft-dialog-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; padding-top: 4px; }
+.craft-total {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 16px; border-radius: 14px;
+  background: hsl(35 90% 55% / 0.14); border: 1px solid hsl(35 85% 50% / 0.3);
+}
+.craft-total span { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; }
+.craft-total strong { font-family: var(--display); font-size: 1.25rem; font-variant-numeric: tabular-nums; }
+.craft-form-three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.craft-items { display: grid; gap: 8px; max-height: 260px; overflow: auto; padding: 8px; border: 1px solid var(--line); border-radius: 16px; }
+.craft-item-row { display: grid; grid-template-columns: 74px minmax(0, 1fr) 76px 36px 90px 40px; gap: 8px; align-items: center; }
+.craft-item-row input { padding: 8px 10px; border-radius: 10px; min-width: 0; }
+.craft-item-row .craft-tag { justify-self: start; }
+.craft-item-row .icon-button { min-width: 36px; min-height: 36px; }
+
+/* Unterschrift */
+.craft-sign-pad { position: relative; height: 220px; border-radius: 14px; overflow: hidden; border: 1.5px dashed var(--line-strong); background: #fff; user-select: none; touch-action: none; }
+.craft-sign-pad canvas { display: block; width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
+.craft-sign-hint { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; color: #8a8f98; font-style: italic; font-size: 0.9rem; }
+.craft-sign-line { position: absolute; inset-inline: 24px; bottom: 32px; border-bottom: 1px solid #c9ccd2; pointer-events: none; }
+.craft-sign-actions { display: flex; align-items: center; flex-wrap: wrap; }
+.craft-sign-actions .button.primary { flex: 1 1 100%; }
+
+/* Druckansicht Rapportzettel (feste Farben nur auf dem weißen Blatt) */
+.craft-print-toolbar { align-items: center; flex-wrap: wrap; }
+.craft-print-toolbar .pill { background: var(--panel); color: var(--ink); }
+.craft-print-brand { display: flex; align-items: center; gap: 8px; color: #b45309; }
+.craft-print-head { border-bottom-color: #d97706; }
+.craft-print-muted, .craft-print-signs small { color: #666; font-size: 9pt; }
+.craft-print-number { font-size: 13pt; font-variant-numeric: tabular-nums; }
+.craft-print-box { padding: 10px 12px; border: 1px solid #ddd; border-radius: 8px; background: #fafafa; }
+.craft-print-two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 24px; align-items: start; }
+.craft-print-text { padding: 10px 12px; border: 1px solid #ddd; border-radius: 8px; }
+.craft-print-tag { font-size: 7.5pt; font-weight: 700; text-transform: uppercase; padding: 1px 6px; border-radius: 4px; background: #eee; }
+.craft-print-tag.wage { background: #fdecc8; color: #7c4a03; }
+.craft-print-35a { display: flex; align-items: center; gap: 6px; color: #7c4a03; }
+.craft-print-small { font-size: 9pt; color: #444; margin-top: 4px; }
+.craft-print-totals { justify-self: stretch; min-width: 0; }
+.craft-print-signs { margin-top: 14px; padding-top: 14px; border-top: 1px solid #ddd; }
+.craft-print-signbox { height: 70px; border-bottom: 1px solid #999; display: flex; align-items: flex-end; padding-bottom: 4px; margin-bottom: 4px; }
+.craft-print-signbox.center { justify-content: center; align-items: center; padding: 0; }
+.craft-print-signbox img { max-height: 100%; max-width: 100%; object-fit: contain; }
+.craft-print-signbox em { color: #999; font-size: 9pt; }
+.craft-print-signmeta { display: flex; justify-content: space-between; gap: 8px; }
+
+/* Dunkelmodus: Akzent-Texte etwas heller */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .craft-number, :root:not([data-theme="light"]) .craft-sums .grand strong:last-child { color: hsl(var(--hue) 85% 62%); }
+  :root:not([data-theme="light"]) .craft-stats .stat-icon, :root:not([data-theme="light"]) .craft-icon { color: hsl(var(--hue) 85% 62%); }
+  :root:not([data-theme="light"]) .craft-count { color: hsl(var(--hue) 85% 70%); }
+  :root:not([data-theme="light"]) .craft .pill.tone-info { color: hsl(210 85% 72%); }
+}
+:root[data-theme="dark"] .craft-number, :root[data-theme="dark"] .craft-sums .grand strong:last-child,
+:root[data-theme="dark"] .craft-stats .stat-icon, :root[data-theme="dark"] .craft-icon { color: hsl(var(--hue) 85% 62%); }
+:root[data-theme="dark"] .craft-count { color: hsl(var(--hue) 85% 70%); }
+:root[data-theme="dark"] .craft .pill.tone-info { color: hsl(210 85% 72%); }
+
+@media (max-width: 1100px) {
+  .craft-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .craft-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .craft-stats .tile { padding: 12px; }
+  .craft-stats .stat-icon { display: none; }
+  .craft-stats .tile strong { margin-top: 0; }
+  .craft-stat-wide { grid-column: 1 / -1; }
+  .craft .craft-head-actions { width: 100%; justify-content: space-between; }
+  .craft-toolbar-row select { flex: 1 1 auto; max-width: none; min-width: 0; }
+  .craft-toolbar-row .button { flex: 1 1 auto; }
+  .craft-grid { grid-template-columns: minmax(0, 1fr); }
+  .craft-measure-row { flex-wrap: wrap; }
+  .craft-measure-row .list-main { flex-basis: 100%; }
+  .craft-measure-row .craft-result { margin-inline-end: auto; }
+  .craft-form-three { grid-template-columns: minmax(0, 1fr); }
+  .craft-item-row { grid-template-columns: 1fr 1fr auto; }
+  .craft-item-row .craft-item-name { grid-column: 1 / -1; grid-row: 2; }
+  .craft-item-row .craft-tag { grid-column: 1 / 3; }
+  .craft-item-row > small { display: none; }
+  .craft-item-row input[type="number"]:last-of-type { grid-column: 2 / -1; }
+  .craft-item-row .icon-button { grid-column: 3; grid-row: 1; }
+  .craft-dialog-actions .button, .craft-sign-actions .button { flex: 1 1 auto; }
+  .craft-sign-pad { height: 180px; }
+  .craft-print-two { grid-template-columns: 1fr; }
+}

@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { Plus, Receipt, Printer, CheckCircle, Download, Trash2, Pencil, X, AlertTriangle, FileCode, Check, Repeat, Play } from "lucide-react";
+import { Plus, Receipt, Printer, CheckCircle, Download, Trash2, Pencil, AlertTriangle, Check, Repeat, Play, Hourglass } from "lucide-react";
 import { api } from "../../api";
 import { Field } from "../../components";
+import { Dialog } from "../../pos/ui";
 import type { InvoiceStatus, LineItem, OfficeClient, OfficeInvoice, OfficeProject, OfficeRecurring } from "../../../shared/office";
 import { useOfficeI18n } from "./i18n";
 import { PrintDocument } from "./PrintDocument";
@@ -351,25 +352,21 @@ export function InvoicesTab({
 
   return (
     <div className="stack">
-      {/* Stats */}
       <div className="office-stats">
-        <div className="office-stat-card">
-          <span className="label">Offener Gesamtbetrag</span>
-          <span className="value" style={{ color: "var(--brand)" }}>{euro(openCents)}</span>
-          <span className="small muted">{openInvoices.length} unbezahlte Rechnungen</span>
+        <div className="tile stat-tile">
+          <span className="stat-icon"><Hourglass size={18} /></span>
+          <strong>{euro(openCents)}</strong><small>Offener Gesamtbetrag · {openInvoices.length} unbezahlte Rechnungen</small>
         </div>
-        <div className="office-stat-card">
-          <span className="label">Erhaltene Zahlungen</span>
-          <span className="value" style={{ color: "var(--success)" }}>{euro(paidCents)}</span>
-          <span className="small muted">{paidInvoices.length} Rechnungen beglichen</span>
+        <div className="tile stat-tile">
+          <span className="stat-icon"><CheckCircle size={18} /></span>
+          <strong>{euro(paidCents)}</strong><small>Erhaltene Zahlungen · {paidInvoices.length} Rechnungen beglichen</small>
         </div>
-        <div className="office-stat-card">
-          <span className="label">Rechnungen Gesamt</span>
-          <span className="value">{invoices.length}</span>
+        <div className="tile stat-tile">
+          <span className="stat-icon"><Receipt size={18} /></span>
+          <strong>{invoices.length}</strong><small>Rechnungen Gesamt</small>
         </div>
       </div>
 
-      {/* Toolbar */}
       <div className="toolbar">
         <div className="chips" role="tablist">
           {["all", "draft", "sent", "paid", "overdue", "canceled"].map((st) => (
@@ -385,126 +382,87 @@ export function InvoicesTab({
           ))}
         </div>
 
-        {clients.length > 0 && (
-          <select
-            className="input"
-            style={{ maxWidth: "220px" }}
-            value={clientFilter}
-            onChange={(e) => setClientFilter(e.target.value)}
-          >
-            <option value="all">Alle Kunden</option>
-            {clients.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-        )}
-
-        <div className="row gap push-end">
-          <button className="button" onClick={handleOpenRecurring} title="Wiederkehrende Rechnungen & Daueraufträge verwalten">
-            <Repeat size={17} /> Daueraufträge
-          </button>
-          <button className="button" onClick={handleDatevExport} title="DATEV Buchungsstapel für den Steuerberater">
-            <Download size={17} /> {o("invoices.exportDatev")}
-          </button>
-          {isManager && (
-            <button className="button primary" onClick={openNew}>
-              <Plus size={18} /> {o("invoices.newInvoice")}
-            </button>
+        <div className="row wrap gap office-filters">
+          {clients.length > 0 && (
+            <select value={clientFilter} onChange={(e) => setClientFilter(e.target.value)} aria-label="Kunde">
+              <option value="all">Alle Kunden</option>
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
           )}
+          <div className="row wrap gap push-end">
+            <button className="button" onClick={handleOpenRecurring} title="Wiederkehrende Rechnungen & Daueraufträge verwalten">
+              <Repeat size={18} /> Daueraufträge
+            </button>
+            <button className="button" onClick={handleDatevExport} title="DATEV Buchungsstapel für den Steuerberater">
+              <Download size={18} /> {o("invoices.exportDatev")}
+            </button>
+            {isManager && (
+              <button className="button primary" onClick={openNew}>
+                <Plus size={18} /> {o("invoices.newInvoice")}
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Table */}
       {loading ? (
         <p className="muted">Laden...</p>
-      ) : filteredInvoices.length === 0 ? (
-        <div className="card" style={{ textAlign: "center", padding: "40px" }}>
-          <Receipt size={36} style={{ color: "var(--muted)", margin: "0 auto 12px" }} />
-          <h3>{o("invoices.noInvoices")}</h3>
-        </div>
       ) : (
-        <div className="office-table-wrap">
-          <table className="office-table">
-            <thead>
-              <tr>
-                <th>Rechnungs-Nr.</th>
-                <th>Kunde & Projekt</th>
-                <th>Rechnungsdatum</th>
-                <th>Fälligkeit</th>
-                <th className="num">Netto</th>
-                <th className="num">Gesamtbetrag</th>
-                <th>Status</th>
-                <th className="num">Aktionen</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredInvoices.map((inv) => (
-                <tr key={inv.id}>
-                  <td><strong>{inv.number}</strong></td>
-                  <td>
-                    <div><strong>{inv.clientName}</strong></div>
-                    {inv.projectName && <small className="muted">{inv.projectName}</small>}
-                  </td>
-                  <td>{day(inv.issuedAt)}</td>
-                  <td>{day(inv.dueDate)}</td>
-                  <td className="num">{euro(inv.netCents)}</td>
-                  <td className="num" style={{ fontWeight: 700 }}>{euro(inv.totalCents)}</td>
-                  <td>
-                    <span className={`pill ${inv.status === "paid" ? "success" : inv.status === "overdue" ? "danger" : inv.status === "sent" ? "warning" : ""}`}>
-                      {o(`invoices.status.${inv.status}`)}
-                    </span>
-                  </td>
-                  <td className="num">
-                    <div className="row gap" style={{ justifyContent: "flex-end", flexWrap: "wrap", minWidth: "200px" }}>
-                      <button
-                        className="button small"
-                        onClick={() => setPrintDoc(inv)}
-                        title="Drucken / E-Rechnung / GiroCode"
-                      >
-                        <Printer size={15} /> Druck / XML
-                      </button>
-                      {inv.status !== "paid" && inv.status !== "canceled" && (
-                        <>
-                          <button
-                            className="button small success"
-                            onClick={() => setPayModalInvoice(inv)}
-                            title="Als bezahlt markieren"
-                          >
-                            <CheckCircle size={15} /> Bezahlt
-                          </button>
-                          <button
-                            className={`button small ${inv.status === "overdue" ? "danger" : "warning"}`}
-                            onClick={() => setDunningInvoice(inv)}
-                            title="Zahlungserinnerung oder Mahnung verfassen und drucken"
-                          >
-                            <AlertTriangle size={15} /> {inv.dunningLevel > 0 ? `Mahnung (${inv.dunningLevel})` : "Mahnung"}
-                          </button>
-                        </>
-                      )}
-                      {isManager && (
-                        <>
-                          <button className="icon-button" onClick={() => openEdit(inv)} title={o("common.edit")}>
-                            <Pencil size={15} />
-                          </button>
-                          <button
-                            className="icon-button danger"
-                            onClick={() => handleDelete(inv.id)}
-                            title={o("common.delete")}
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <section className="card list-card">
+          {filteredInvoices.length === 0 && <p className="empty muted">{o("invoices.noInvoices")}</p>}
+          {filteredInvoices.map((inv) => (
+            <div key={inv.id} className="office-item">
+              <div className="list-row office-row">
+                <span className="office-date">{inv.number}</span>
+                <span className="list-main">
+                  <strong>{inv.clientName}</strong>
+                  <small className="muted">{[inv.projectName, `${day(inv.issuedAt)} · fällig ${day(inv.dueDate)}`].filter(Boolean).join(" · ")}</small>
+                </span>
+                <span className="office-row-meta">
+                  <strong>{euro(inv.totalCents)}</strong>
+                  <small className="muted">Netto {euro(inv.netCents)}</small>
+                  <span className={`pill ${inv.status === "paid" ? "success" : inv.status === "overdue" ? "neg" : inv.status === "sent" ? "warn" : ""}`}>
+                    {o(`invoices.status.${inv.status}`)}
+                  </span>
+                </span>
+              </div>
+              <div className="row wrap gap office-item-actions">
+                <button className="button small-button" onClick={() => setPrintDoc(inv)} title="Drucken / E-Rechnung / GiroCode">
+                  <Printer size={15} /> Druck / XML
+                </button>
+                {inv.status !== "paid" && inv.status !== "canceled" && (
+                  <>
+                    <button className="button small-button success-button" onClick={() => setPayModalInvoice(inv)} title="Als bezahlt markieren">
+                      <CheckCircle size={15} /> Bezahlt
+                    </button>
+                    <button
+                      className={`button small-button ${inv.status === "overdue" ? "danger" : ""}`}
+                      onClick={() => setDunningInvoice(inv)}
+                      title="Zahlungserinnerung oder Mahnung verfassen und drucken"
+                    >
+                      <AlertTriangle size={15} /> {inv.dunningLevel > 0 ? `Mahnung (${inv.dunningLevel})` : "Mahnung"}
+                    </button>
+                  </>
+                )}
+                {isManager && (
+                  <>
+                    <button className="icon-button" onClick={() => openEdit(inv)} title={o("common.edit")} aria-label={o("common.edit")}>
+                      <Pencil size={16} />
+                    </button>
+                    <button className="icon-button danger" onClick={() => handleDelete(inv.id)} title={o("common.delete")} aria-label={o("common.delete")}>
+                      <Trash2 size={16} />
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+        </section>
       )}
 
-      {/* Print & E-Invoice Modal */}
+      {/* Druck & E-Rechnung */}
       {printDoc && (
         <PrintDocument
           doc={printDoc}
@@ -513,363 +471,247 @@ export function InvoicesTab({
         />
       )}
 
-      {/* Mark Paid Modal */}
+      {/* Dialog: Als bezahlt markieren */}
       {payModalInvoice && (
-        <div className="office-modal-overlay" onClick={() => setPayModalInvoice(null)}>
-          <div className="office-modal" style={{ maxWidth: "440px" }} onClick={(e) => e.stopPropagation()}>
-            <div className="office-modal-head">
-              <h3>{o("invoices.markPaid")}</h3>
-              <button className="icon-button" onClick={() => setPayModalInvoice(null)}>
-                <X size={20} />
-              </button>
-            </div>
+        <Dialog title={o("invoices.markPaid")} onClose={() => setPayModalInvoice(null)}>
+          <form onSubmit={handleMarkPaid} className="stack office-dialog">
             <p>
               Rechnung <strong>{payModalInvoice.number}</strong> über <strong>{euro(payModalInvoice.totalCents)}</strong> als bezahlt buchen.
             </p>
-            <form onSubmit={handleMarkPaid} className="stack">
-              <Field label="Zahlungsart">
-                <select
-                  className="input"
-                  value={payMethod}
-                  onChange={(e) => setPayMethod(e.target.value)}
-                >
-                  <option value="Überweisung">Banküberweisung</option>
-                  <option value="Lastschrift">SEPA-Lastschrift</option>
-                  <option value="Bar">Barzahlung</option>
-                  <option value="Karte">Kartenzahlung (EC/Kredit)</option>
-                  <option value="PayPal">PayPal</option>
+            <Field label="Zahlungsart">
+              <select value={payMethod} onChange={(e) => setPayMethod(e.target.value)}>
+                <option value="Überweisung">Banküberweisung</option>
+                <option value="Lastschrift">SEPA-Lastschrift</option>
+                <option value="Bar">Barzahlung</option>
+                <option value="Karte">Kartenzahlung (EC/Kredit)</option>
+                <option value="PayPal">PayPal</option>
+              </select>
+            </Field>
+            <div className="row wrap gap end">
+              <button type="button" className="button" onClick={() => setPayModalInvoice(null)}>{o("common.cancel")}</button>
+              <button type="submit" className="button primary"><Check size={18} /> Bestätigen</button>
+            </div>
+          </form>
+        </Dialog>
+      )}
+
+      {/* Dialog: Rechnung erstellen / bearbeiten */}
+      {modalOpen && (
+        <Dialog title={editingInvoice ? "Rechnung bearbeiten" : o("invoices.newInvoice")} onClose={() => setModalOpen(false)} wide>
+          <form onSubmit={handleSave} className="stack office-dialog">
+            {errorMsg && <p className="error" role="alert">{errorMsg}</p>}
+            <div className="grid form-grid">
+              <Field label="Kunde" required>
+                <select required value={form.clientId} onChange={(e) => setForm({ ...form, clientId: e.target.value })}>
+                  {clients.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
                 </select>
               </Field>
-              <div className="row gap" style={{ justifyContent: "flex-end", marginTop: "12px" }}>
-                <button type="button" className="button" onClick={() => setPayModalInvoice(null)}>{o("common.cancel")}</button>
-                <button type="submit" className="button primary success"><Check size={18} /> Bestätigen</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Create / Edit Invoice Modal */}
-      {modalOpen && (
-        <div className="office-modal-overlay" onClick={() => setModalOpen(false)}>
-          <div className="office-modal" style={{ maxWidth: "860px" }} onClick={(e) => e.stopPropagation()}>
-            <div className="office-modal-head">
-              <h3>{editingInvoice ? "Rechnung bearbeiten" : o("invoices.newInvoice")}</h3>
-              <button className="icon-button" onClick={() => setModalOpen(false)}>
-                <X size={20} />
-              </button>
+              <Field label="Projekt (optional)">
+                <select value={form.projectId} onChange={(e) => setForm({ ...form, projectId: e.target.value })}>
+                  <option value="">Keinem Projekt zugeordnet</option>
+                  {projects
+                    .filter((p) => !form.clientId || p.clientId === form.clientId)
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                </select>
+              </Field>
+              <Field label="Betreff / Titel" required wide>
+                <input type="text" required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+              </Field>
             </div>
 
-            {errorMsg && <div className="notice warning">{errorMsg}</div>}
+            <div className="grid three">
+              <Field label={o("invoices.issuedAt")} required>
+                <input type="date" required value={form.issuedAt} onChange={(e) => setForm({ ...form, issuedAt: e.target.value })} />
+              </Field>
+              <Field label={o("invoices.dueDate")} required>
+                <input type="date" required value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} />
+              </Field>
+              <Field label="Status">
+                <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as InvoiceStatus })}>
+                  <option value="draft">{o("invoices.status.draft")}</option>
+                  <option value="sent">{o("invoices.status.sent")}</option>
+                  <option value="paid">{o("invoices.status.paid")}</option>
+                  <option value="overdue">{o("invoices.status.overdue")}</option>
+                  <option value="canceled">{o("invoices.status.canceled")}</option>
+                </select>
+              </Field>
+            </div>
 
-            <form onSubmit={handleSave} className="stack">
-              <div className="row-grid">
-                <Field label="Kunde" required>
-                  <select
-                    required
-                    className="input"
-                    value={form.clientId}
-                    onChange={(e) => setForm({ ...form, clientId: e.target.value })}
-                  >
-                    {clients.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Projekt (optional)">
-                  <select
-                    className="input"
-                    value={form.projectId}
-                    onChange={(e) => setForm({ ...form, projectId: e.target.value })}
-                  >
-                    <option value="">Keinem Projekt zugeordnet</option>
-                    {projects
-                      .filter((p) => !form.clientId || p.clientId === form.clientId)
-                      .map((p) => (
-                        <option key={p.id} value={p.id}>{p.name}</option>
-                      ))}
-                  </select>
-                </Field>
+            <Field label={o("invoices.buyerReference")}>
+              <input
+                type="text"
+                placeholder="z.B. Leitweg-ID für Behörden (04011000-12345-67) oder Kundenbestellnummer"
+                value={form.buyerReference}
+                onChange={(e) => setForm({ ...form, buyerReference: e.target.value })}
+              />
+            </Field>
+
+            <div className="grid three">
+              <Field label="Rabatt (%)">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.5"
+                  value={form.discountPercent || ""}
+                  placeholder="z.B. 5"
+                  onChange={(e) => setForm({ ...form, discountPercent: parseFloat(e.target.value) || 0 })}
+                />
+              </Field>
+              <Field label="Skonto-Frist (Tage)">
+                <input
+                  type="number"
+                  min="0"
+                  max="60"
+                  value={form.skontoDays || ""}
+                  placeholder="z.B. 7"
+                  onChange={(e) => setForm({ ...form, skontoDays: parseInt(e.target.value, 10) || 0 })}
+                />
+              </Field>
+              <Field label="Skonto (%)">
+                <input
+                  type="number"
+                  min="0"
+                  max="10"
+                  step="0.5"
+                  value={form.skontoPercent || ""}
+                  placeholder="z.B. 2"
+                  onChange={(e) => setForm({ ...form, skontoPercent: parseFloat(e.target.value) || 0 })}
+                />
+              </Field>
+            </div>
+
+            {/* Positionen */}
+            <div className="office-section">
+              <div className="section-head">
+                <h3 className="card-subtitle">Abrechnungspositionen</h3>
+                <button type="button" className="button small-button" onClick={addItem}>
+                  <Plus size={15} /> {o("common.addItem")}
+                </button>
               </div>
 
-              <div className="row-grid" style={{ gridTemplateColumns: "2fr 1fr 1fr 1fr" }}>
-                <Field label="Betreff / Titel" required>
+              {form.items.map((it, idx) => (
+                <div key={it.id || idx} className="office-line">
+                  <Field label="Titel / Leistung" wide>
+                    <input type="text" required value={it.title} onChange={(e) => updateItem(idx, { title: e.target.value })} />
+                  </Field>
+                  <Field label="Menge">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      value={it.qty}
+                      onChange={(e) => updateItem(idx, { qty: parseFloat(e.target.value || "1") })}
+                    />
+                  </Field>
+                  <Field label="Einheit">
+                    <select value={it.unit} onChange={(e) => updateItem(idx, { unit: e.target.value })}>
+                      <option value="Std">Std</option>
+                      <option value="Tag">Tag</option>
+                      <option value="Stk">Stk</option>
+                      <option value="Pauschal">Pauschal</option>
+                    </select>
+                  </Field>
+                  <Field label="Einzelpreis (€)">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={(it.unitCents / 100) || ""}
+                      onChange={(e) => updateItem(idx, { unitCents: Math.round(parseFloat(e.target.value || "0") * 100) })}
+                    />
+                  </Field>
+                  <Field label="MwSt.">
+                    <select value={it.vatRate} onChange={(e) => updateItem(idx, { vatRate: parseInt(e.target.value, 10) || 19 })}>
+                      <option value={19}>19%</option>
+                      <option value={7}>7%</option>
+                      <option value={0}>0%</option>
+                    </select>
+                  </Field>
+                  {form.items.length > 1 ? (
+                    <button type="button" className="icon-button danger" onClick={() => removeItem(idx)} aria-label={o("common.delete")}>
+                      <Trash2 size={16} />
+                    </button>
+                  ) : (
+                    <span className="icon-spacer" />
+                  )}
                   <input
                     type="text"
-                    required
-                    className="input"
-                    value={form.title}
-                    onChange={(e) => setForm({ ...form, title: e.target.value })}
+                    className="wide"
+                    placeholder="Zusätzliche Leistungsbeschreibung (optional)"
+                    aria-label="Zusätzliche Leistungsbeschreibung (optional)"
+                    value={it.description}
+                    onChange={(e) => updateItem(idx, { description: e.target.value })}
                   />
-                </Field>
-                <Field label={o("invoices.issuedAt")} required>
-                  <input
-                    type="date"
-                    required
-                    className="input"
-                    value={form.issuedAt}
-                    onChange={(e) => setForm({ ...form, issuedAt: e.target.value })}
-                  />
-                </Field>
-                <Field label={o("invoices.dueDate")} required>
-                  <input
-                    type="date"
-                    required
-                    className="input"
-                    value={form.dueDate}
-                    onChange={(e) => setForm({ ...form, dueDate: e.target.value })}
-                  />
-                </Field>
-                <Field label="Status">
-                  <select
-                    className="input"
-                    value={form.status}
-                    onChange={(e) => setForm({ ...form, status: e.target.value as InvoiceStatus })}
-                  >
-                    <option value="draft">{o("invoices.status.draft")}</option>
-                    <option value="sent">{o("invoices.status.sent")}</option>
-                    <option value="paid">{o("invoices.status.paid")}</option>
-                    <option value="overdue">{o("invoices.status.overdue")}</option>
-                    <option value="canceled">{o("invoices.status.canceled")}</option>
-                  </select>
-                </Field>
-              </div>
-
-              <Field label={o("invoices.buyerReference")}>
-                <input
-                  type="text"
-                  className="input"
-                  placeholder="z.B. Leitweg-ID für Behörden (04011000-12345-67) oder Kundenbestellnummer"
-                  value={form.buyerReference}
-                  onChange={(e) => setForm({ ...form, buyerReference: e.target.value })}
-                />
-              </Field>
-
-              <div className="row-grid" style={{ gridTemplateColumns: "1fr 1fr 1fr" }}>
-                <Field label="Rabatt (%)">
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.5"
-                    className="input"
-                    value={form.discountPercent || ""}
-                    placeholder="z.B. 5"
-                    onChange={(e) => setForm({ ...form, discountPercent: parseFloat(e.target.value) || 0 })}
-                  />
-                </Field>
-                <Field label="Skonto-Frist (Tage)">
-                  <input
-                    type="number"
-                    min="0"
-                    max="60"
-                    className="input"
-                    value={form.skontoDays || ""}
-                    placeholder="z.B. 7"
-                    onChange={(e) => setForm({ ...form, skontoDays: parseInt(e.target.value, 10) || 0 })}
-                  />
-                </Field>
-                <Field label="Skonto (%)">
-                  <input
-                    type="number"
-                    min="0"
-                    max="10"
-                    step="0.5"
-                    className="input"
-                    value={form.skontoPercent || ""}
-                    placeholder="z.B. 2"
-                    onChange={(e) => setForm({ ...form, skontoPercent: parseFloat(e.target.value) || 0 })}
-                  />
-                </Field>
-              </div>
-
-              {/* Line Items */}
-              <div style={{ borderTop: "1px solid var(--line)", paddingTop: "14px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                  <strong>Abrechnungspositionen</strong>
-                  <button type="button" className="button small" onClick={addItem}>
-                    <Plus size={15} /> {o("common.addItem")}
-                  </button>
                 </div>
+              ))}
 
-                <div className="stack-sm">
-                  {form.items.map((it, idx) => (
-                    <div key={it.id || idx} className="card" style={{ padding: "12px", background: "var(--panel-2)" }}>
-                      <div className="row-grid" style={{ gridTemplateColumns: "3fr 1fr 1fr 1.2fr 1fr auto", gap: "8px", alignItems: "flex-end" }}>
-                        <Field label="Titel / Leistung">
-                          <input
-                            type="text"
-                            required
-                            className="input"
-                            value={it.title}
-                            onChange={(e) => updateItem(idx, { title: e.target.value })}
-                          />
-                        </Field>
-                        <Field label="Menge">
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0.01"
-                            className="input"
-                            value={it.qty}
-                            onChange={(e) => updateItem(idx, { qty: parseFloat(e.target.value || "1") })}
-                          />
-                        </Field>
-                        <Field label="Einheit">
-                          <select
-                            className="input"
-                            value={it.unit}
-                            onChange={(e) => updateItem(idx, { unit: e.target.value })}
-                          >
-                            <option value="Std">Std</option>
-                            <option value="Tag">Tag</option>
-                            <option value="Stk">Stk</option>
-                            <option value="Pauschal">Pauschal</option>
-                          </select>
-                        </Field>
-                        <Field label="Einzelpreis (€)">
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            className="input"
-                            value={(it.unitCents / 100) || ""}
-                            onChange={(e) => updateItem(idx, { unitCents: Math.round(parseFloat(e.target.value || "0") * 100) })}
-                          />
-                        </Field>
-                        <Field label="MwSt.">
-                          <select
-                            className="input"
-                            value={it.vatRate}
-                            onChange={(e) => updateItem(idx, { vatRate: parseInt(e.target.value, 10) || 19 })}
-                          >
-                            <option value={19}>19%</option>
-                            <option value={7}>7%</option>
-                            <option value={0}>0%</option>
-                          </select>
-                        </Field>
-                        {form.items.length > 1 && (
-                          <button
-                            type="button"
-                            className="icon-button danger"
-                            style={{ marginBottom: "6px" }}
-                            onClick={() => removeItem(idx)}
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        )}
-                      </div>
-                      <div style={{ marginTop: "6px" }}>
-                        <input
-                          type="text"
-                          className="input"
-                          placeholder="Zusätzliche Leistungsbeschreibung (optional)"
-                          value={it.description}
-                          onChange={(e) => updateItem(idx, { description: e.target.value })}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
+              <table className="price-table office-totals">
+                <tbody>
+                  <tr><td>Zwischensumme:</td><td>{euro(totals.itemsNet)}</td></tr>
+                  {form.discountPercent > 0 && (
+                    <tr><td>Rabatt ({form.discountPercent}%):</td><td>-{euro(totals.itemsNet - totals.net)}</td></tr>
+                  )}
+                  <tr><td>Nettobetrag:</td><td><strong>{euro(totals.net)}</strong></td></tr>
+                  <tr><td>Umsatzsteuer:</td><td>{euro(totals.vat)}</td></tr>
+                </tbody>
+                <tfoot>
+                  <tr><th>Gesamt:</th><th>{euro(totals.gross)}</th></tr>
+                </tfoot>
+              </table>
+            </div>
 
-                {/* Totals Summary */}
-                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "12px", fontSize: "0.95rem" }}>
-                  <div style={{ width: "260px", display: "grid", gap: "4px" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}>
-                      <span>Zwischensumme:</span>
-                      <span>{euro(totals.itemsNet)}</span>
-                    </div>
-                    {form.discountPercent > 0 && (
-                      <div style={{ display: "flex", justifyContent: "space-between", color: "var(--accent)" }}>
-                        <span>Rabatt ({form.discountPercent}%):</span>
-                        <span>-{euro(totals.itemsNet - totals.net)}</span>
-                      </div>
-                    )}
-                    <div style={{ display: "flex", justifyContent: "space-between" }}>
-                      <span>Nettobetrag:</span>
-                      <strong>{euro(totals.net)}</strong>
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}>
-                      <span>Umsatzsteuer:</span>
-                      <span>{euro(totals.vat)}</span>
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", borderTop: "2px solid var(--text)", paddingTop: "4px", fontSize: "1.1rem" }}>
-                      <span><strong>Gesamt:</strong></span>
-                      <strong>{euro(totals.gross)}</strong>
-                    </div>
-                  </div>
-                </div>
-              </div>
+            <Field label="Hinweise & Zahlungsbedingungen">
+              <textarea rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+            </Field>
 
-              <Field label="Hinweise & Zahlungsbedingungen">
-                <textarea
-                  className="input"
-                  rows={2}
-                  value={form.notes}
-                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                />
-              </Field>
-
-              <div className="row gap" style={{ justifyContent: "flex-end", marginTop: "12px" }}>
-                <button type="button" className="button" onClick={() => setModalOpen(false)}>
-                  {o("common.cancel")}
-                </button>
-                <button type="submit" className="button primary">
-                  {o("common.save")}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+            <div className="row wrap gap end">
+              <button type="button" className="button" onClick={() => setModalOpen(false)}>
+                {o("common.cancel")}
+              </button>
+              <button type="submit" className="button primary">
+                <Check size={17} /> {o("common.save")}
+              </button>
+            </div>
+          </form>
+        </Dialog>
       )}
 
-      {/* Dunning / Mahnwesen Modal */}
+      {/* Mahnwesen */}
       {dunningInvoice && (
         <DunningModal
           invoice={dunningInvoice}
           onClose={() => setDunningInvoice(null)}
-          onCreated={() => {
-            setDunningInvoice(null);
-            loadData();
-          }}
+          // Liste aktualisieren, Dialog bleibt für die Druckansicht offen
+          onCreated={() => loadData()}
         />
       )}
 
-      {/* Recurring Invoices Modal */}
+      {/* Dialog: Wiederkehrende Rechnungen */}
       {recurringModalOpen && (
-        <div className="office-modal-overlay" onClick={() => setRecurringModalOpen(false)}>
-          <div className="office-modal" style={{ maxWidth: "680px" }} onClick={(e) => e.stopPropagation()}>
-            <div className="office-modal-head">
-              <h3 style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <Repeat size={20} style={{ color: "var(--accent)" }} /> Wiederkehrende Rechnungen & Daueraufträge
-              </h3>
-              <button className="icon-button" onClick={() => setRecurringModalOpen(false)}>
-                <X size={20} />
-              </button>
-            </div>
-
-            <p className="small muted">
+        <Dialog title="Wiederkehrende Rechnungen & Daueraufträge" onClose={() => setRecurringModalOpen(false)} wide>
+          <div className="stack office-dialog">
+            <p className="muted">
               Automatische Vorlagen für wiederkehrende Retainer, monatliche Hosting- & Wartungsverträge oder quartalsweise Servicepauschalen.
             </p>
 
-            <form onSubmit={handleCreateRecurring} className="card stack" style={{ background: "var(--panel-2)", padding: "14px", margin: "14px 0" }}>
-              <div className="row-grid" style={{ gridTemplateColumns: "2fr 1fr auto", alignItems: "flex-end" }}>
+            <form onSubmit={handleCreateRecurring} className="office-panel">
+              <div className="office-add">
                 <Field label="Vertragsbezeichnung">
                   <input
                     type="text"
                     required
-                    className="input"
                     placeholder="z.B. Monatliche Betreuung & Wartung"
                     value={newRecurringTitle}
                     onChange={(e) => setNewRecurringTitle(e.target.value)}
                   />
                 </Field>
                 <Field label="Intervall">
-                  <select
-                    className="input"
-                    value={newRecurringMonths}
-                    onChange={(e) => setNewRecurringMonths(parseInt(e.target.value, 10) || 1)}
-                  >
+                  <select value={newRecurringMonths} onChange={(e) => setNewRecurringMonths(parseInt(e.target.value, 10) || 1)}>
                     <option value={1}>Monatlich (1 Monat)</option>
                     <option value={3}>Quartalsweise (3 Monate)</option>
                     <option value={6}>Halbjährlich (6 Monate)</option>
@@ -877,45 +719,35 @@ export function InvoicesTab({
                   </select>
                 </Field>
                 <button type="submit" className="button primary">
-                  <Plus size={16} /> Vorlage anlegen
+                  <Plus size={17} /> Vorlage anlegen
                 </button>
               </div>
             </form>
 
-            <div className="stack-sm">
-              {recurringList.length === 0 ? (
-                <p className="muted" style={{ textAlign: "center", padding: "20px" }}>Noch keine Daueraufträge eingerichtet.</p>
-              ) : (
-                recurringList.map((rec) => (
-                  <div key={rec.id} className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px" }}>
-                    <div>
+            {recurringList.length === 0 ? (
+              <p className="empty muted">Noch keine Daueraufträge eingerichtet.</p>
+            ) : (
+              <div className="office-sublist">
+                {recurringList.map((rec) => (
+                  <div key={rec.id} className="list-row office-row">
+                    <span className="list-main">
                       <strong>{rec.title}</strong>
-                      <div className="small muted">
+                      <small className="muted">
                         Kunde: {rec.clientName} · Intervall: {rec.intervalMonths === 1 ? "monatlich" : `${rec.intervalMonths} Monate`} · Nächster Lauf: {day(rec.nextRunDay)}
-                      </div>
-                    </div>
-                    <div className="row gap">
-                      <button
-                        className="button small primary"
-                        onClick={() => handleTriggerRecurring(rec.id)}
-                        title="Rechnung jetzt sofort generieren"
-                      >
-                        <Play size={14} /> Rechnung erzeugen
-                      </button>
-                      <button
-                        className="icon-button danger"
-                        onClick={() => handleDeleteRecurring(rec.id)}
-                        title={o("common.delete")}
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
+                      </small>
+                    </span>
+                    <button className="button small-button primary" onClick={() => handleTriggerRecurring(rec.id)} title="Rechnung jetzt sofort generieren">
+                      <Play size={14} /> Rechnung erzeugen
+                    </button>
+                    <button className="icon-button danger" onClick={() => handleDeleteRecurring(rec.id)} title={o("common.delete")} aria-label={o("common.delete")}>
+                      <Trash2 size={16} />
+                    </button>
                   </div>
-                ))
-              )}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
-        </div>
+        </Dialog>
       )}
     </div>
   );
