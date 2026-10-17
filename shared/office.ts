@@ -124,6 +124,8 @@ export interface LineItem {
   unitCents: number;
   vatRate: number; // e.g. 19, 7, 0
   totalCents: number;
+  /** Herkunft: Zeiteintrag oder Auslage, die mit dieser Position abgerechnet wird */
+  source?: { kind: "time" | "expense"; id: string };
 }
 
 export interface OfficeQuote {
@@ -187,6 +189,8 @@ export interface OfficeInvoice {
   issuedAt: string;
   paidAt: string | null;
   paidMethod: string | null;
+  /** Storniert am (die Rechnung bleibt mit ihrer Nummer erhalten) */
+  canceledAt?: string | null;
   buyerReference: string; // Leitweg-ID für E-Rechnung
   dunningLevel: number; // 0 = keine, 1, 2, 3
   lastDunningAt?: string | null;

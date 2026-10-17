@@ -6,7 +6,7 @@ import {
   formatMinutes,
   DEFAULT_OFFICE_SETTINGS,
 } from "../shared/office";
-import { OFFICE_MIGRATIONS, OfficeError, OfficeStore } from "../worker/office/store";
+import { OFFICE_MIGRATIONS, OfficeError, OfficeStore, addMonths } from "../worker/office/store";
 
 describe("Büro & Dienstleister: Rechnen", () => {
   it("berechnet Positions- und Gesamtsummen mit MwSt.", () => {
@@ -138,7 +138,11 @@ describe("Büro & Dienstleister: Store Integration", () => {
     expect(quote.number).toMatch(/^ANG-\d{4}-001$/);
 
     // Umwandeln in Rechnung
-    const invoice = store.convertQuoteToInvoice(quote.id);
+    // Entwurf ohne Nummer; die Nummer kommt beim Festschreiben (GoBD)
+    const draft = store.convertQuoteToInvoice(quote.id);
+    expect(draft.status).toBe("draft");
+    expect(draft.number).toMatch(/^ENTWURF-/);
+    const invoice = store.finalizeInvoice(draft.id);
     expect(invoice.number).toMatch(/^RE-\d{4}-001$/);
     expect(invoice.totalCents).toBe(119000);
     expect(invoice.clientAddress).toContain("Berlin");
@@ -265,8 +269,107 @@ describe("Büro & Dienstleister: Store Integration", () => {
 
     // Trigger erzeugt neue Ausgangsrechnung
     const generatedInvoice = store.triggerRecurring(recurring.id);
-    expect(generatedInvoice.number).toMatch(/^RE-\d{4}-\d{3}$/);
+    expect(generatedInvoice.status).toBe("draft");
+    expect(store.finalizeInvoice(generatedInvoice.id).number).toMatch(/^RE-\d{4}-\d{3}$/);
     expect(generatedInvoice.title).toContain("Support & Cloud-Wartung");
     expect(generatedInvoice.totalCents).toBe(101150); // 850 € + 19% = 1011,50 €
+  });
+});
+
+describe("Büro & Dienstleister: Rechnungen nach GoBD", () => {
+  const line = (unitCents: number, vatRate: number, source?: { kind: "time" | "expense"; id: string }) => ({
+    id: crypto.randomUUID(), title: "Leistung", description: "", qty: 1, unit: "Std", unitCents, vatRate, totalCents: unitCents, ...(source ? { source } : {}),
+  });
+  const actor = { id: "u1", name: "Mia" };
+
+  it("vergibt die Nummer erst beim Festschreiben, lückenlos und fortlaufend", () => {
+    const store = createMemoryStore();
+    const client = store.saveClient({ name: "Kunde A" });
+    const a = store.saveInvoice({ clientId: client.id, items: [line(10000, 19)] });
+    const b = store.saveInvoice({ clientId: client.id, items: [line(5000, 19)] });
+    expect(a.number).toMatch(/^ENTWURF-/);
+    // Gelöschter Entwurf hinterlässt keine Lücke
+    store.deleteInvoice(a.id);
+    const year = new Date().getFullYear();
+    expect(store.finalizeInvoice(b.id).number).toBe(`RE-${year}-001`);
+    const c = store.saveInvoice({ clientId: client.id, items: [line(5000, 19)], status: "sent" });
+    expect(c.number).toBe(`RE-${year}-002`);
+    expect(c.status).toBe("sent");
+  });
+
+  it("ausgestellte Rechnungen sind unveränderlich, Storno behält die Nummer", () => {
+    const store = createMemoryStore();
+    const client = store.saveClient({ name: "Kunde B" });
+    const inv = store.saveInvoice({ clientId: client.id, items: [line(10000, 19)], status: "sent" });
+    expect(() => store.saveInvoice({ ...inv, items: [line(1, 19)] })).toThrow(OfficeError);
+    expect(() => store.deleteInvoice(inv.id)).toThrow(OfficeError);
+    expect(() => store.finalizeInvoice(inv.id)).toThrow(OfficeError);
+    const canceled = store.cancelInvoice(inv.id);
+    expect(canceled).toMatchObject({ status: "canceled", number: inv.number });
+    expect(canceled.canceledAt).toBeTruthy();
+    expect(() => store.markInvoicePaid(inv.id)).toThrow(OfficeError);
+    expect(() => store.cancelInvoice(inv.id)).toThrow(OfficeError);
+  });
+
+  it("rechnet Zeiten nur einmal und nur beim eigenen Kunden ab", () => {
+    const store = createMemoryStore();
+    const client = store.saveClient({ name: "Kunde C" });
+    const other = store.saveClient({ name: "Kunde D" });
+    const project = store.saveProject({ clientId: client.id, name: "Projekt", hourlyRateCents: 10000 });
+    const time = store.saveTime({ projectId: project.id, minutes: 60, description: "Arbeit", billable: true }, actor);
+    const src = { kind: "time" as const, id: time.id };
+
+    expect(() => store.saveInvoice({ clientId: other.id, items: [line(10000, 19, src)] })).toThrow(OfficeError);
+    const inv = store.saveInvoice({ clientId: client.id, items: [line(10000, 19, src)], status: "sent" });
+    expect(store.listTimes(project.id)[0].billedInvoiceId).toBe(inv.id);
+    expect(() => store.saveInvoice({ clientId: client.id, items: [line(10000, 19, src)] })).toThrow(OfficeError);
+    // Abgerechnete Zeit ist gesperrt
+    expect(() => store.saveTime({ ...time, minutes: 120 }, actor)).toThrow(OfficeError);
+
+    store.cancelInvoice(inv.id);
+    expect(store.listTimes(project.id)[0].billedInvoiceId).toBeFalsy();
+    // Kunde mit Rechnung bleibt erhalten
+    expect(() => store.deleteClient(client.id)).toThrow(OfficeError);
+  });
+
+  it("mahnt nur offene, fällige Rechnungen und nie rückwärts", () => {
+    const store = createMemoryStore();
+    const client = store.saveClient({ name: "Kunde E" });
+    const future = store.saveInvoice({ clientId: client.id, items: [line(10000, 19)], dueDate: "2999-01-01", status: "sent" });
+    expect(() => store.createDunning(future.id, 1)).toThrow(OfficeError);
+    const draft = store.saveInvoice({ clientId: client.id, items: [line(10000, 19)], dueDate: "2020-01-01" });
+    expect(() => store.createDunning(draft.id, 1)).toThrow(OfficeError);
+    const due = store.saveInvoice({ clientId: client.id, items: [line(10000, 19)], dueDate: "2020-01-01", status: "sent" });
+    store.createDunning(due.id, 2);
+    expect(() => store.createDunning(due.id, 1)).toThrow(OfficeError);
+    store.markInvoicePaid(due.id);
+    expect(() => store.createDunning(due.id, 3)).toThrow(OfficeError);
+  });
+
+  it("DATEV: ohne Entwürfe, je Steuersatz ein Erlöskonto, Storno als Gegenbuchung", () => {
+    const store = createMemoryStore();
+    const client = store.saveClient({ name: "Kunde F" });
+    store.saveInvoice({ clientId: client.id, items: [line(99900, 19)] });
+    const inv = store.saveInvoice({ clientId: client.id, items: [line(10000, 19), line(10000, 7)], status: "sent" });
+    store.cancelInvoice(inv.id);
+    const rows = store.exportDatevCsv().split("\r\n").slice(1);
+    expect(rows).toHaveLength(4);
+    expect(rows.join("\n")).not.toContain("1188,81");
+    expect(rows[0]).toMatch(/^119,00;S;10000;8400;\d{8};/);
+    expect(rows[1]).toMatch(/^107,00;S;10000;8300;/);
+    expect(rows[2]).toMatch(/^119,00;H;10000;8400;/);
+  });
+
+  it("legt fällige Daueraufträge als Entwurf an und hält Monatsenden ein", () => {
+    expect(addMonths("2026-01-31", 1)).toBe("2026-02-28");
+    expect(addMonths("2028-01-31", 1)).toBe("2028-02-29");
+    expect(addMonths("2026-11-30", 3)).toBe("2027-02-28");
+    const store = createMemoryStore();
+    const client = store.saveClient({ name: "Abo" });
+    store.saveRecurring({ clientId: client.id, title: "Wartung", intervalMonths: 1, nextRunDay: "2026-08-15", items: [line(5000, 19)] });
+    expect(store.runDueRecurring("2026-10-17")).toBe(3);
+    expect(store.runDueRecurring("2026-10-17")).toBe(0);
+    expect(store.listInvoices().every((i) => i.status === "draft")).toBe(true);
+    expect(store.listRecurring()[0].nextRunDay).toBe("2026-11-15");
   });
 });

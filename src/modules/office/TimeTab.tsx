@@ -6,7 +6,7 @@ import { Dialog } from "../../pos/ui";
 import type { OfficeClient, OfficeProject, OfficeTimeEntry, LineItem, OfficeTask, RoleRate, OfficeSettings } from "../../../shared/office";
 import { useOfficeI18n } from "./i18n";
 import { TimesheetPrint } from "./TimesheetPrint";
-import { currencySymbol } from "../../money";
+import { currencySymbol, standardVat } from "../../money";
 
 export function TimeTab({
   me,
@@ -217,20 +217,23 @@ export function TimeTab({
   const handleInvoiceUnbilled = () => {
     if (unbilledEntries.length === 0) return;
     // Find client ID of first project or entries
+    // Eine Rechnung je Kunde: nur die Einträge des ersten Kunden (vorher landeten alle beim ersten)
     const firstClient = unbilledEntries[0].clientId;
-    const items: LineItem[] = unbilledEntries.map((entry) => ({
+    const entries = unbilledEntries.filter((t) => t.clientId === firstClient);
+    const items: LineItem[] = entries.map((entry) => ({
       id: crypto.randomUUID(),
       title: `${entry.projectName || "Projektarbeit"}: ${entry.description || "Dienstleistung"}`,
       description: `Leistungsdatum: ${day(entry.day)} (${(entry.minutes / 60).toFixed(2)} Std)`,
       qty: parseFloat((entry.minutes / 60).toFixed(2)),
       unit: "Std",
       unitCents: entry.hourlyRateCents,
-      vatRate: 19,
+      vatRate: standardVat(),
       totalCents: Math.round((entry.minutes * entry.hourlyRateCents) / 60),
+      source: { kind: "time" as const, id: entry.id },
     }));
 
     if (onNavigateToNewInvoiceWithItems) {
-      onNavigateToNewInvoiceWithItems(firstClient, unbilledEntries[0].projectId, items);
+      onNavigateToNewInvoiceWithItems(firstClient, entries.every((t) => t.projectId === entries[0].projectId) ? entries[0].projectId : null, items);
     }
   };
 
