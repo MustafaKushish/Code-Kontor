@@ -33,6 +33,7 @@ const RestaurantApp = lazy(() => import("./modules/restaurant/RestaurantApp"));
 const PickupDisplayPage = lazy(() => import("./modules/restaurant/PickupDisplayPage"));
 const CraftApp = lazy(() => import("./modules/craft/CraftApp"));
 const FitnessApp = lazy(() => import("./modules/fitness/FitnessApp"));
+const AutohausApp = lazy(() => import("./modules/autohaus/AutohausApp"));
 // Die Kasse gehört zur Plattform (eine für alle Systeme), wird aber auch erst bei Bedarf geladen
 const PosApp = lazy(() => import("./pos/PosApp"));
 const PosKiosk = lazy(() => import("./pos/PosApp").then((m) => ({ default: m.Kiosk })));
@@ -133,6 +134,8 @@ export function App() {
     page = <Suspense fallback={null}><CraftApp me={me} path={path} /></Suspense>;
   } else if (section === "app" && id === "fitness" && me.installedApps.includes(id)) {
     page = <Suspense fallback={null}><FitnessApp me={me} path={path} /></Suspense>;
+  } else if (section === "app" && id === "autohaus" && me.installedApps.includes(id)) {
+    page = <Suspense fallback={null}><AutohausApp me={me} path={path} /></Suspense>;
   } else if (section === "app" && id === POS_APP_ID && hasPos) {
     page = <Suspense fallback={null}><PosApp me={me} path="/kasse" /></Suspense>;
   } else if (section === "app" && id && findApp(id) && me.installedApps.includes(id)) {
