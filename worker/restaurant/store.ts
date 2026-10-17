@@ -78,11 +78,10 @@ export class RestaurantStore {
   constructor(
     private sql: SqlStorage,
     private tx: <T>(fn: () => T) => T,
-  ) {
-    this.seedIfEmpty();
-  }
+  ) {}
 
-  private seedIfEmpty() {
+  /** Beispieldaten, nur für das Demo-Konto (nie für echte Firmen). */
+  seedIfEmpty() {
     const tCount = this.sql.exec<{ c: number }>("SELECT COUNT(*) AS c FROM restaurant_tables").one().c;
     if (tCount > 0) return;
 
@@ -373,8 +372,9 @@ export class RestaurantStore {
 
       this.sql.exec(
         `INSERT INTO restaurant_orders (id, order_number, type, pickup_number, customer_name, customer_phone, status, items_json, guest_count, total_net, total_tax7, total_tax19, total_gross, payment_method, payment_status, created_at, kitchen_started_at)
-         VALUES (?, 'BON-102', 'abholung', 42, 'Julia Schneider', '+49 172 9988776', 'in_zubereitung', 1, ?, 1.5, 1.15, ?, 'karte', 'bezahlt', datetime('now', '-12 minutes'), datetime('now', '-8 minutes'))`,
+         VALUES (?, 'BON-102', 'abholung', 42, 'Julia Schneider', '+49 172 9988776', 'in_zubereitung', ?, 1, ?, 1.5, 1.15, ?, 'karte', 'bezahlt', datetime('now', '-12 minutes'), datetime('now', '-8 minutes'))`,
         o2Id,
+        JSON.stringify(o2Items),
         27.55,
         o2Gross,
       );
@@ -396,8 +396,9 @@ export class RestaurantStore {
       ];
       this.sql.exec(
         `INSERT INTO restaurant_orders (id, order_number, type, pickup_number, customer_name, customer_phone, status, items_json, guest_count, total_net, total_tax7, total_tax19, total_gross, payment_method, payment_status, created_at, kitchen_started_at, ready_at)
-         VALUES (?, 'BON-100', 'abholung', 41, 'Dennis Meier', '+49 160 1234567', 'fertig', 1, 17.29, 1.21, 0, 18.5, 'bar', 'bezahlt', datetime('now', '-22 minutes'), datetime('now', '-18 minutes'), datetime('now', '-3 minutes'))`,
+         VALUES (?, 'BON-100', 'abholung', 41, 'Dennis Meier', '+49 160 1234567', 'fertig', ?, 1, 17.29, 1.21, 0, 18.5, 'bar', 'bezahlt', datetime('now', '-22 minutes'), datetime('now', '-18 minutes'), datetime('now', '-3 minutes'))`,
         o3Id,
+        JSON.stringify(o3Items),
       );
     });
   }

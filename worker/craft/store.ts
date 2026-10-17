@@ -94,11 +94,10 @@ export const CRAFT_MIGRATIONS: string[] = [
 ];
 
 export class CraftStore {
-  constructor(private sql: SqlStorage) {
-    this.ensureSeedData();
-  }
+  constructor(private sql: SqlStorage) {}
 
-  private ensureSeedData() {
+  /** Beispieldaten, nur für das Demo-Konto (nie für echte Firmen). */
+  seedIfEmpty() {
     const existing = this.sql.exec<{ count: number }>("SELECT COUNT(*) AS count FROM craft_projects").toArray();
     if (existing[0]?.count > 0) return;
 

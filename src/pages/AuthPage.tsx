@@ -45,6 +45,9 @@ export function AuthLayout({ children }: { children: ReactNode }) {
   );
 }
 
+// Demo-Konto mit festen Zugangsdaten: nur auf dem eigenen Rechner (der Server lehnt es online ohnehin ab)
+const DEMO_AVAILABLE = ["localhost", "127.0.0.1"].includes(location.hostname);
+
 export function AuthPage({ onDone }: { onDone: () => void }) {
   const [mode, setMode] = useState<"login" | "register" | "forgot">("login");
   const [form, setForm] = useState({ companyName: "", name: "", email: "", password: "", country: guessCountry(navigator.languages ?? [navigator.language]) });
@@ -158,29 +161,16 @@ export function AuthPage({ onDone }: { onDone: () => void }) {
   const register = mode === "register";
   return (
     <AuthLayout>
-          <div className="card" style={{ background: "linear-gradient(135deg, var(--panel), var(--panel-2))", border: "1.5px solid var(--brand)", padding: "16px 18px", borderRadius: "18px", display: "grid", gap: "10px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: "700" }}>
-              <Sparkles size={18} style={{ color: "var(--brand)" }} />
-              <span>Direkter Demo-Zugang</span>
+          {DEMO_AVAILABLE && (
+            <div className="notice stack-sm">
+              <strong className="row gap"><Sparkles size={18} aria-hidden /> Demo-Konto (nur lokal)</strong>
+              <button type="button" className="button block" onClick={loginAsDemo} disabled={busy}>
+                {busy ? t("common.wait") : "Demo-Konto öffnen"}
+              </button>
             </div>
-            <p className="muted small" style={{ margin: 0 }}>
-              Klicke hier, um dich sofort ohne Passworteingabe mit einem voll eingerichteten Demo-Konto anzumelden (inkl. Handy- & IT-Service, Kasse und Daten):
-            </p>
-            <button
-              type="button"
-              className="button primary block"
-              onClick={loginAsDemo}
-              disabled={busy}
-            >
-              <Sparkles size={18} /> {busy ? t("common.wait") : "Demo-Konto öffnen (1-Klick Login)"}
-            </button>
-            <div className="small muted" style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "4px", fontSize: "0.8rem", borderTop: "1px solid var(--line)", paddingTop: "8px" }}>
-              <span>E-Mail: <strong>demo@code-kontor.de</strong></span>
-              <span>Passwort: <strong>Password123!</strong></span>
-            </div>
-          </div>
+          )}
 
-          <div className="segmented" role="tablist" style={{ marginTop: "12px" }}>
+          <div className="segmented" role="tablist">
             <button role="tab" aria-selected={!register} className={!register ? "active" : ""} onClick={() => switchTo("login")}>{t("auth.login")}</button>
             <button role="tab" aria-selected={register} className={register ? "active" : ""} onClick={() => switchTo("register")}>{t("auth.register")}</button>
           </div>
@@ -223,11 +213,7 @@ export function AuthPage({ onDone }: { onDone: () => void }) {
               {busy ? t("common.wait") : register ? t("auth.startFree") : t("auth.login")}
             </button>
           </form>
-          {!register && (
-            <div className="stack" style={{ marginTop: "4px" }}>
-              <button type="button" className="text-button" onClick={() => switchTo("forgot")}>{t("auth.forgot")}</button>
-            </div>
-          )}
+          {!register && <button type="button" className="text-button" onClick={() => switchTo("forgot")}>{t("auth.forgot")}</button>}
     </AuthLayout>
   );
 }

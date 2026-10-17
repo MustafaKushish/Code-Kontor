@@ -55,7 +55,7 @@ Lokal liest `wrangler dev` den Schlüssel aus einer Datei `.dev.vars` mit der Ze
 ## Datenspeicherung nur in der EU
 
 Plattform-Datenbank (D1 `code-kontor-platform-eu`) und alle Firmen-Datenbanken (Durable Objects) liegen in der Cloudflare-Jurisdiktion „eu“.
-`wrangler dev` kennt keine Jurisdiktionen, deshalb lokal in `.dev.vars` die Zeile `LOCAL_NO_JURISDICTION="1"` eintragen. Online nie setzen.
+`wrangler dev` kennt keine Jurisdiktionen, deshalb lokal in `.dev.vars` die Zeile `LOCAL_NO_JURISDICTION="1"` eintragen. Online nie setzen. Mit `DEMO_LOGIN="1"` in `.dev.vars` gibt es lokal ein Demo-Konto mit Beispieldaten für alle Systeme (Knopf auf der Anmeldeseite); online ist es abgeschaltet.
 
 Neue Texte kommen zuerst in `src/i18n/de.ts`; TypeScript und `test/i18n.test.ts` melden jede Sprache, in der sie noch fehlen.
 Fehler schickt der Server als Code (`worker/errors.ts`), übersetzt wird im Browser.

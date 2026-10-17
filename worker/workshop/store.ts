@@ -116,11 +116,10 @@ export class WorkshopStore {
   constructor(
     private sql: SqlStorage,
     private tx: <T>(fn: () => T) => T,
-  ) {
-    this.seedIfEmpty();
-  }
+  ) {}
 
-  private seedIfEmpty() {
+  /** Beispieldaten, nur für das Demo-Konto (nie für echte Firmen). */
+  seedIfEmpty() {
     const vCount = this.sql.exec<{ c: number }>("SELECT COUNT(*) AS c FROM workshop_vehicles").one().c;
     if (vCount > 0) return;
 
