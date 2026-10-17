@@ -11,6 +11,7 @@ import type {
   WorkshopOrderStatus,
   WorkshopStats,
 } from "../../shared/workshop";
+import { billedPositions, workshopTotals } from "../../shared/workshop";
 
 export class WorkshopError extends Error {
   constructor(public code: string) {
@@ -730,9 +731,8 @@ export class WorkshopStore {
       const statusToken = crypto.randomUUID().replace(/-/g, "");
 
       const positions = data.positions ?? [];
-      const totalNet = positions.reduce((s, p) => s + p.quantity * p.unitPriceNet, 0);
-      const totalTax = Math.round(totalNet * 0.19 * 100) / 100;
-      const totalGross = Math.round((totalNet + totalTax) * 100) / 100;
+      // Steuer je Positionssatz (z. B. 19 % und 0 % für TÜV-Gebühren)
+      const { totalNet, totalTax, totalGross } = workshopTotals(positions);
 
       this.sql.exec(
         `INSERT INTO workshop_orders (
@@ -778,12 +778,12 @@ export class WorkshopStore {
       const updated = { ...current, ...patch, updatedAt: new Date().toISOString() };
 
       // Berechne Summen neu falls Positionen übergeben wurden
-      if (patch.positions) {
-        const net = patch.positions.reduce((s, p) => s + p.quantity * p.unitPriceNet, 0);
-        const tax = Math.round(net * 0.19 * 100) / 100;
-        updated.totalNet = net;
-        updated.totalTax = tax;
-        updated.totalGross = Math.round((net + tax) * 100) / 100;
+      // (je Steuersatz; bei freigegebenem Kostenvoranschlag nur die freigegebenen, wie in der Kasse)
+      if (patch.positions || patch.estimateStatus) {
+        const totals = workshopTotals(billedPositions(updated));
+        updated.totalNet = totals.totalNet;
+        updated.totalTax = totals.totalTax;
+        updated.totalGross = totals.totalGross;
       }
 
       this.sql.exec(
@@ -841,9 +841,7 @@ export class WorkshopStore {
         positions = positions.map((p) => ({ ...p, approvedByCustomer: true }));
       }
 
-      const net = positions.filter((p) => p.approvedByCustomer).reduce((s, p) => s + p.quantity * p.unitPriceNet, 0);
-      const tax = Math.round(net * 0.19 * 100) / 100;
-      const gross = Math.round((net + tax) * 100) / 100;
+      const { totalNet: net, totalTax: tax, totalGross: gross } = workshopTotals(positions.filter((p) => p.approvedByCustomer));
 
       this.sql.exec(
         `UPDATE workshop_orders SET

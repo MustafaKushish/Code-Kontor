@@ -127,7 +127,9 @@ restaurantRoutes.delete("/menu/:id", managers, async (c) => {
 // ---------- BESTELLUNGEN & KÜCHE (ORDERS & KDS) ----------
 restaurantRoutes.get("/orders", async (c) => {
   const user = c.get("user");
-  const res = await store(c.env, user.tenantId).listOrders();
+  // ?since=<Zeitpunkt>: nur laufende Bestellungen und die seitdem angelegten (für das Abfragen im Hintergrund)
+  const since = c.req.query("since");
+  const res = await store(c.env, user.tenantId).listOrders(since ? { since } : {});
   if (!res.ok) return moduleError(c, res.code);
   return c.json(res.value);
 });

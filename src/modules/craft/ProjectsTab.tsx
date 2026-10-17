@@ -41,7 +41,7 @@ export function ProjectsTab({
   onSelectProjectForReport,
   isManager,
 }: ProjectsTabProps) {
-  const { t, money, symbol, day, tradeLabel, projectStatusLabel } = useCraftI18n();
+  const { t, money, symbol, day, tradeLabel, projectStatusLabel, craftError } = useCraftI18n();
   const [selectedStatus, setSelectedStatus] = useState<string>("alle");
   const [selectedTrade, setSelectedTrade] = useState<string>("alle");
   const [search, setSearch] = useState("");
@@ -52,6 +52,7 @@ export function ProjectsTab({
     startDate: new Date().toISOString().slice(0, 10),
   });
   const [isBusy, setIsBusy] = useState(false);
+  const [error, setError] = useState("");
 
   const fmtEuro = money;
 
@@ -90,11 +91,13 @@ export function ProjectsTab({
       budgetGross: 5000,
       notes: "",
     });
+    setError("");
     setIsModalOpen(true);
   };
 
   const handleOpenEdit = (p: CraftProject) => {
     setEditingProject({ ...p });
+    setError("");
     setIsModalOpen(true);
   };
 
@@ -103,6 +106,7 @@ export function ProjectsTab({
     if (!editingProject.title || !editingProject.customerName || !editingProject.siteAddress) {
       return;
     }
+    setError("");
     setIsBusy(true);
     try {
       await api("/craft/projects", {
@@ -112,7 +116,7 @@ export function ProjectsTab({
       setIsModalOpen(false);
       onRefresh();
     } catch (err) {
-      console.error(err);
+      setError(craftError(err));
     } finally {
       setIsBusy(false);
     }
@@ -122,12 +126,13 @@ export function ProjectsTab({
     if (!confirm(t("projects.confirmDelete"))) {
       return;
     }
+    setError("");
     setIsBusy(true);
     try {
       await api(`/craft/projects/${id}`, { method: "DELETE" });
       onRefresh();
     } catch (err) {
-      console.error(err);
+      setError(craftError(err));
     } finally {
       setIsBusy(false);
     }
@@ -138,6 +143,7 @@ export function ProjectsTab({
 
   return (
     <div className="stack">
+      {error && !isModalOpen && <p className="error" role="alert">{error}</p>}
       <div className="toolbar craft-toolbar">
         <div className="craft-toolbar-row">
           <label className="search">
@@ -287,7 +293,7 @@ export function ProjectsTab({
       {isModalOpen && (
         <Dialog
           title={editingProject.id ? t("projects.editTitle") : t("projects.newTitle")}
-          onClose={() => setIsModalOpen(false)}
+          onClose={() => { setError(""); setIsModalOpen(false); }}
           wide
         >
           <form onSubmit={handleSave} className="stack">
@@ -403,8 +409,10 @@ export function ProjectsTab({
               </Field>
             </div>
 
+            {error && <p className="error" role="alert">{error}</p>}
+
             <div className="row gap craft-dialog-actions">
-              <button type="button" onClick={() => setIsModalOpen(false)} className="button">
+              <button type="button" onClick={() => { setError(""); setIsModalOpen(false); }} className="button">
                 {t("common.cancel")}
               </button>
               <button type="submit" disabled={isBusy} className="button primary">

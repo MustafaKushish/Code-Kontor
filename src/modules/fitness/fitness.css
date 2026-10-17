@@ -27,8 +27,6 @@
 .fitness-scan .search input { padding-inline-end: 48px; font-weight: 600; }
 .fitness-scan .search .icon-button { position: absolute; inset-inline-end: 8px; top: 50%; transform: translateY(-50%); }
 .fitness-scan > .button { min-height: 52px; }
-.fitness-quick { padding-top: 12px; border-top: 1px solid var(--line); }
-.fitness-quick .chip { padding: 5px 12px; font-size: 0.82rem; }
 
 .fitness-feedback { display: flex; align-items: flex-start; gap: 14px; padding: 16px; border-radius: 16px; border: 1px solid transparent; }
 .fitness-feedback.success { background: var(--success-soft); border-color: color-mix(in srgb, var(--success) 30%, transparent); }

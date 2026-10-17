@@ -27,7 +27,8 @@ interface ClassesTabProps {
 }
 
 export function ClassesTab({ onRefreshStats, isManager }: ClassesTabProps) {
-  const { t, weekday, day: fmtDay } = useFitnessI18n();
+  const { t, fitnessError, weekday, day: fmtDay } = useFitnessI18n();
+  const [error, setError] = useState("");
   const [classes, setClasses] = useState<FitnessClass[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDay, setSelectedDay] = useState<string>("alle");
@@ -55,23 +56,25 @@ export function ClassesTab({ onRefreshStats, isManager }: ClassesTabProps) {
 
   const loadClasses = async () => {
     setLoading(true);
+    setError("");
     try {
       const q = selectedDay !== "alle" ? `?weekday=${selectedDay}` : "";
       const list = await api<FitnessClass[]>(`/fitness/classes${q}`);
       setClasses(list);
-    } catch {
-      // Fehler
+    } catch (err) {
+      setError(fitnessError(err));
     } finally {
       setLoading(false);
     }
   };
 
   const loadMembersForBooking = async () => {
+    setError("");
     try {
       const data = await api<FitnessMember[]>("/fitness/members?status=aktiv");
       setAllMembers(data);
-    } catch {
-      // Fehler
+    } catch (err) {
+      setError(fitnessError(err));
     }
   };
 
@@ -88,6 +91,7 @@ export function ClassesTab({ onRefreshStats, isManager }: ClassesTabProps) {
   const handleBookMember = async (memberId: string) => {
     if (!activeClass) return;
     setBookingLoading(true);
+    setError("");
     try {
       const res = await api<{ success: boolean; course: FitnessClass }>(
         `/fitness/classes/${activeClass.id}/book`,
@@ -99,8 +103,8 @@ export function ClassesTab({ onRefreshStats, isManager }: ClassesTabProps) {
       setActiveClass(res.course);
       setClasses((prev) => prev.map((c) => (c.id === res.course.id ? res.course : c)));
       onRefreshStats();
-    } catch {
-      // Fehler
+    } catch (err) {
+      setError(fitnessError(err));
     } finally {
       setBookingLoading(false);
     }
@@ -109,6 +113,7 @@ export function ClassesTab({ onRefreshStats, isManager }: ClassesTabProps) {
   const handleCancelBooking = async (memberId: string) => {
     if (!activeClass) return;
     setBookingLoading(true);
+    setError("");
     try {
       const res = await api<{ success: boolean; course: FitnessClass }>(
         `/fitness/classes/${activeClass.id}/cancel`,
@@ -120,8 +125,8 @@ export function ClassesTab({ onRefreshStats, isManager }: ClassesTabProps) {
       setActiveClass(res.course);
       setClasses((prev) => prev.map((c) => (c.id === res.course.id ? res.course : c)));
       onRefreshStats();
-    } catch {
-      // Fehler
+    } catch (err) {
+      setError(fitnessError(err));
     } finally {
       setBookingLoading(false);
     }
@@ -132,6 +137,7 @@ export function ClassesTab({ onRefreshStats, isManager }: ClassesTabProps) {
     if (!formState.name.trim()) return;
 
     setSavingClass(true);
+    setError("");
     try {
       if (editingClassId) {
         const updated = await api<FitnessClass>(`/fitness/classes/${editingClassId}`, {
@@ -149,8 +155,8 @@ export function ClassesTab({ onRefreshStats, isManager }: ClassesTabProps) {
       setIsFormOpen(false);
       setEditingClassId(null);
       onRefreshStats();
-    } catch {
-      // Fehler
+    } catch (err) {
+      setError(fitnessError(err));
     } finally {
       setSavingClass(false);
     }
@@ -158,13 +164,14 @@ export function ClassesTab({ onRefreshStats, isManager }: ClassesTabProps) {
 
   const handleDeleteClass = async (id: string) => {
     if (!confirm(t("classes.confirmDelete"))) return;
+    setError("");
     try {
       await api(`/fitness/classes/${id}`, { method: "DELETE" });
       setClasses((prev) => prev.filter((c) => c.id !== id));
       if (activeClass?.id === id) setActiveClass(null);
       onRefreshStats();
-    } catch {
-      // Fehler
+    } catch (err) {
+      setError(fitnessError(err));
     }
   };
 
@@ -200,6 +207,7 @@ export function ClassesTab({ onRefreshStats, isManager }: ClassesTabProps) {
 
   return (
     <div className="stack">
+      {error && !activeClass && !isFormOpen && <p className="error" role="alert">{error}</p>}
       {/* Wochentagsleiste & Aktion */}
       <div className="fitness-toolbar">
         <div className="chips" role="tablist">
@@ -311,6 +319,7 @@ export function ClassesTab({ onRefreshStats, isManager }: ClassesTabProps) {
       {activeClass && (
         <Dialog title={activeClass.name} onClose={() => setActiveClass(null)}>
           <div className="fitness-dialog">
+            {error && <p className="error" role="alert">{error}</p>}
             <div className="stack-sm">
               <span className="eyebrow">
                 {weekday(activeClass.weekday)} · {t("common.timeRange", { start: activeClass.startTime, end: activeClass.endTime })}
@@ -415,6 +424,7 @@ export function ClassesTab({ onRefreshStats, isManager }: ClassesTabProps) {
       {isFormOpen && (
         <Dialog title={editingClassId ? t("classes.editTitle") : t("classes.newTitle")} onClose={() => setIsFormOpen(false)}>
           <form onSubmit={handleSaveClass} className="fitness-dialog">
+            {error && <p className="error" role="alert">{error}</p>}
             <div className="grid form-grid">
               <Field label={t("classes.name")} required wide>
                 <input

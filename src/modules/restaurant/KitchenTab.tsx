@@ -19,17 +19,20 @@ import type {
   ItemStatus,
   PrintDestination,
   RestaurantOrder,
+  RestaurantTable,
 } from "../../../shared/restaurant";
 import { RestaurantPrint } from "./RestaurantPrint";
 import { useRestaurantI18n } from "./i18n";
 
 interface KitchenTabProps {
   orders: RestaurantOrder[];
+  tables: RestaurantTable[];
   onRefresh: () => void;
 }
 
-export function KitchenTab({ orders, onRefresh }: KitchenTabProps) {
-  const { t, course, itemStatus } = useRestaurantI18n();
+export function KitchenTab({ orders, tables, onRefresh }: KitchenTabProps) {
+  const { t, course, itemStatus, restaurantError } = useRestaurantI18n();
+  const [error, setError] = useState("");
   const [stationFilter, setStationFilter] = useState<PrintDestination | "alle">("alle");
   const [showCompleted, setShowCompleted] = useState(false);
   const [activePrintOrder, setActivePrintOrder] = useState<RestaurantOrder | null>(null);
@@ -67,6 +70,7 @@ export function KitchenTab({ orders, onRefresh }: KitchenTabProps) {
         : "bestellt";
 
     setIsBusy(true);
+    setError("");
     try {
       await api(`/restaurant/orders/${orderId}/items/${itemId}/status`, {
         method: "POST",
@@ -74,7 +78,7 @@ export function KitchenTab({ orders, onRefresh }: KitchenTabProps) {
       });
       onRefresh();
     } catch (err) {
-      console.error(err);
+      setError(restaurantError(err));
     } finally {
       setIsBusy(false);
     }
@@ -82,6 +86,7 @@ export function KitchenTab({ orders, onRefresh }: KitchenTabProps) {
 
   const handleMarkAllFinished = async (order: RestaurantOrder) => {
     setIsBusy(true);
+    setError("");
     try {
       // Set all items to fertig
       for (const item of order.items) {
@@ -99,10 +104,19 @@ export function KitchenTab({ orders, onRefresh }: KitchenTabProps) {
       });
       onRefresh();
     } catch (err) {
-      console.error(err);
+      setError(restaurantError(err));
     } finally {
       setIsBusy(false);
     }
+  };
+
+  // Name des Tisches; fehlt er an der Bestellung, aus dem Tischplan, sonst nur „Tisch“ (die Bon-Nr. steht daneben)
+  const tableLabel = (order: RestaurantOrder) => {
+    if (order.tableName) return order.tableName;
+    const table = tables.find((x) => x.id === order.tableId);
+    if (table?.name) return table.name;
+    if (table?.tableNumber) return t("kitchen.table", { id: table.tableNumber });
+    return t("print.table");
   };
 
   const calculateElapsedMinutes = (createdAt: string) => {
@@ -150,6 +164,8 @@ export function KitchenTab({ orders, onRefresh }: KitchenTabProps) {
         </div>
       </div>
 
+      {error && <p className="error" role="alert">{error}</p>}
+
       <div className="restaurant-tickets">
         {kdsOrders.length === 0 ? (
           <div className="card restaurant-empty wide-card">
@@ -181,7 +197,7 @@ export function KitchenTab({ orders, onRefresh }: KitchenTabProps) {
                   <span className="list-main">
                     <span className="restaurant-ticket-title">
                       {order.type === "tisch" ? (
-                        <strong>{order.tableName || t("kitchen.table", { id: order.tableId ?? "" })}</strong>
+                        <strong>{tableLabel(order)}</strong>
                       ) : order.type === "abholung" ? (
                         <strong className="restaurant-accent">{t("kitchen.pickup", { n: order.pickupNumber || "?" })}</strong>
                       ) : (

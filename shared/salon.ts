@@ -152,3 +152,8 @@ export function timeSlotsOverlap(
   const b2 = timeToMinutes(endB);
   return Math.max(a1, b1) < Math.min(a2, b2);
 }
+
+/** Heutiges (bzw. angegebenes) Datum als JJJJ-MM-TT in der Ortszeit des Geräts, nicht in UTC. */
+export function localDay(d = new Date()): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}

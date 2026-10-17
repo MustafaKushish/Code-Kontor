@@ -48,7 +48,8 @@ export function MembersTab({
   onRefreshStats,
   isManager,
 }: MembersTabProps) {
-  const { t, money, day, dateTime, statusLabel } = useFitnessI18n();
+  const { t, fitnessError, money, day, dateTime, statusLabel } = useFitnessI18n();
+  const [error, setError] = useState("");
   const [members, setMembers] = useState<FitnessMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -78,14 +79,15 @@ export function MembersTab({
 
   const loadMembers = async () => {
     setLoading(true);
+    setError("");
     try {
       const query = new URLSearchParams();
       if (search.trim()) query.set("search", search.trim());
       if (statusFilter !== "alle") query.set("status", statusFilter);
       const data = await api<FitnessMember[]>(`/fitness/members?${query.toString()}`);
       setMembers(data);
-    } catch {
-      // Ignorieren
+    } catch (err) {
+      setError(fitnessError(err));
     } finally {
       setLoading(false);
     }
@@ -104,20 +106,22 @@ export function MembersTab({
 
   const loadMemberDetails = async (id: string) => {
     setHistoryLoading(true);
+    setError("");
     try {
       const data = await api<{ member: FitnessMember; history: FitnessCheckIn[] }>(
         `/fitness/members/${id}`
       );
       setDetailedMember(data.member);
       setMemberHistory(data.history);
-    } catch {
-      // Fehlerbehandlung
+    } catch (err) {
+      setError(fitnessError(err));
     } finally {
       setHistoryLoading(false);
     }
   };
 
   const handleStatusChange = async (memberId: string, newStatus: MemberStatus) => {
+    setError("");
     try {
       const updated = await api<FitnessMember>(`/fitness/members/${memberId}`, {
         method: "PUT",
@@ -126,14 +130,15 @@ export function MembersTab({
       setDetailedMember(updated);
       setMembers((prev) => prev.map((m) => (m.id === memberId ? updated : m)));
       onRefreshStats();
-    } catch {
-      // Fehler
+    } catch (err) {
+      setError(fitnessError(err));
     }
   };
 
   const handleAdjustUnits = async (delta: number) => {
     if (!detailedMember || detailedMember.remainingUnits === undefined) return;
     const nextUnits = Math.max(0, (detailedMember.remainingUnits || 0) + delta);
+    setError("");
     try {
       const updated = await api<FitnessMember>(`/fitness/members/${detailedMember.id}`, {
         method: "PUT",
@@ -141,8 +146,8 @@ export function MembersTab({
       });
       setDetailedMember(updated);
       setMembers((prev) => prev.map((m) => (m.id === detailedMember.id ? updated : m)));
-    } catch {
-      // Fehler
+    } catch (err) {
+      setError(fitnessError(err));
     }
   };
 
@@ -151,6 +156,7 @@ export function MembersTab({
     if (!newMemberForm.firstName.trim() || !newMemberForm.lastName.trim()) return;
 
     setSavingNew(true);
+    setError("");
     try {
       const selectedPlan = plans.find((p) => p.id === newMemberForm.planId) || plans[0];
       const created = await api<FitnessMember>("/fitness/members", {
@@ -187,8 +193,8 @@ export function MembersTab({
       await loadMembers();
       onRefreshStats();
       loadMemberDetails(created.id);
-    } catch {
-      // Fehler
+    } catch (err) {
+      setError(fitnessError(err));
     } finally {
       setSavingNew(false);
     }
@@ -196,14 +202,15 @@ export function MembersTab({
 
   const handleDeleteMember = async (id: string) => {
     if (!confirm(t("members.confirmDelete"))) return;
+    setError("");
     try {
       await api(`/fitness/members/${id}`, { method: "DELETE" });
       setDetailedMember(null);
       onClearSelectedMember();
       await loadMembers();
       onRefreshStats();
-    } catch {
-      // Fehler
+    } catch (err) {
+      setError(fitnessError(err));
     }
   };
 
@@ -247,6 +254,7 @@ export function MembersTab({
 
   return (
     <div className="stack">
+      {error && !detailedMember && !isNewMemberOpen && <p className="error" role="alert">{error}</p>}
       {/* Such- und Aktionsleiste */}
       <div className="toolbar">
         <div className="fitness-toolbar">
@@ -337,6 +345,7 @@ export function MembersTab({
       {detailedMember && (
         <Dialog title={`${detailedMember.firstName} ${detailedMember.lastName}`} onClose={closeDetails} wide>
           <div className="fitness-dialog">
+            {error && <p className="error" role="alert">{error}</p>}
             {/* Header */}
             <div className="fitness-member-head">
               <span className="fitness-avatar big" aria-hidden>
@@ -488,6 +497,7 @@ export function MembersTab({
       {isNewMemberOpen && (
         <Dialog title={t("members.newTitle")} onClose={() => setIsNewMemberOpen(false)} wide>
           <form onSubmit={handleCreateMember} className="fitness-dialog">
+            {error && <p className="error" role="alert">{error}</p>}
             <div className="grid form-grid">
               <Field label={t("members.firstName")} required>
                 <input

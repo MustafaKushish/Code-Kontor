@@ -26,6 +26,8 @@ import type {
   CraftReportStatus,
   ReportItemType,
 } from "../../../shared/craft";
+import { craftGrossShares } from "../../../shared/craft";
+import type { CompanyProfile } from "../../../shared/company";
 import { SignaturePad } from "./SignaturePad";
 import { CraftPrint } from "./CraftPrint";
 import { standardVat } from "../../money";
@@ -39,22 +41,25 @@ interface ReportsTabProps {
 }
 
 export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsTabProps) {
-  const { t, money, symbol, num, day, itemTypeLabel, unitLabel, paymentLabel } = useCraftI18n();
+  const { t, money, symbol, day, itemTypeLabel, unitLabel, paymentLabel, craftError } = useCraftI18n();
   const [filterStatus, setFilterStatus] = useState<string>("alle");
   const [search, setSearch] = useState("");
   const [signingReport, setSigningReport] = useState<CraftReport | null>(null);
-  const [printingReport, setPrintingReport] = useState<CraftReport | null>(null);
+  const [printing, setPrinting] = useState<{ report: CraftReport; company: CompanyProfile | null } | null>(null);
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
+  const [error, setError] = useState("");
 
-  // New Report Form State
+  // New Report Form State (Vorgaben erst beim Öffnen, wenn die Sprache geladen ist)
   const [newProjectId, setNewProjectId] = useState(projects[0]?.id || "");
-  const [newWorkerName, setNewWorkerName] = useState(() => t("reports.defaultWorker"));
+  const [newWorkerName, setNewWorkerName] = useState("");
   const [newDate, setNewDate] = useState(new Date().toISOString().slice(0, 10));
   const [newHours, setNewHours] = useState(8);
   const [newTravelKm, setNewTravelKm] = useState(15);
   const [newWorkDescription, setNewWorkDescription] = useState("");
-  const [newItems, setNewItems] = useState<CraftReportItem[]>(() => [
+  const [newItems, setNewItems] = useState<CraftReportItem[]>([]);
+
+  const defaultItems = (): CraftReportItem[] => [
     {
       id: "item-1",
       type: "lohn",
@@ -75,7 +80,37 @@ export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsT
       totalNet: 24.0,
       taxRate: standardVat(),
     },
-  ]);
+  ];
+
+  const openNewReport = () => {
+    setError("");
+    if (!projects.some((p) => p.id === newProjectId)) setNewProjectId(projects[0]?.id || "");
+    setNewWorkerName((name) => name || t("reports.defaultWorker"));
+    setNewItems((items) => (items.length ? items : defaultItems()));
+    setIsNewModalOpen(true);
+  };
+
+  const closeNewReport = () => {
+    setError("");
+    setIsNewModalOpen(false);
+  };
+
+  // Die Liste kommt ohne Unterschriftsbild; zum Drucken den ganzen Rapport und die Firmendaten laden
+  const openPrint = async (report: CraftReport) => {
+    setError("");
+    setIsBusy(true);
+    try {
+      const [full, company] = await Promise.all([
+        api<CraftReport>(`/craft/reports/${report.id}`),
+        api<{ company: CompanyProfile | null }>("/company").then((d) => d.company).catch(() => null),
+      ]);
+      setPrinting({ report: full, company });
+    } catch (err) {
+      setError(craftError(err));
+    } finally {
+      setIsBusy(false);
+    }
+  };
 
   const fmtEuro = money;
 
@@ -104,7 +139,8 @@ export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsT
       setSigningReport(null);
       onRefresh();
     } catch (err) {
-      console.error(err);
+      setSigningReport(null);
+      setError(craftError(err));
     } finally {
       setIsBusy(false);
     }
@@ -115,12 +151,13 @@ export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsT
 
   const handleDelete = async (id: string) => {
     if (!confirm(t("reports.confirmDelete"))) return;
+    setError("");
     setIsBusy(true);
     try {
       await api(`/craft/reports/${id}`, { method: "DELETE" });
       onRefresh();
     } catch (err) {
-      console.error(err);
+      setError(craftError(err));
     } finally {
       setIsBusy(false);
     }
@@ -159,6 +196,7 @@ export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsT
   const handleCreateReport = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newProjectId || !newWorkerName || !newWorkDescription) return;
+    setError("");
     setIsBusy(true);
     try {
       await api("/craft/reports", {
@@ -176,7 +214,7 @@ export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsT
       setIsNewModalOpen(false);
       onRefresh();
     } catch (err) {
-      console.error(err);
+      setError(craftError(err));
     } finally {
       setIsBusy(false);
     }
@@ -196,7 +234,7 @@ export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsT
               onChange={(e) => setSearch(e.target.value)}
             />
           </label>
-          <button onClick={() => setIsNewModalOpen(true)} className="button primary">
+          <button onClick={openNewReport} className="button primary">
             <Plus size={18} /> {t("reports.add")}
           </button>
         </div>
@@ -220,6 +258,8 @@ export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsT
         </div>
       </div>
 
+      {error && !isNewModalOpen && <p className="error" role="alert">{error}</p>}
+
       {filteredReports.length === 0 ? (
         <section className="card craft-empty">
           <FileText size={40} aria-hidden />
@@ -234,6 +274,7 @@ export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsT
             const isDraft = report.status === "entwurf";
             const isSigned = report.status === "unterschrieben";
             const isCompleted = report.status === "abgerechnet";
+            const shares = craftGrossShares(report.items);
 
             return (
               <article
@@ -260,11 +301,11 @@ export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsT
                 <div className="craft-sums">
                   <p>
                     <span>{t("reports.wageShare")}</span>
-                    <span>{fmtEuro(report.totalWageNet * 1.19)}</span>
+                    <span>{fmtEuro(shares.wageGross)}</span>
                   </p>
                   <p>
                     <span>{t("reports.materialShare")}</span>
-                    <span>{fmtEuro(report.totalMaterialNet * 1.19)}</span>
+                    <span>{fmtEuro(shares.materialGross)}</span>
                   </p>
                   <p className="grand">
                     <strong>{t("reports.total")}</strong>
@@ -272,9 +313,9 @@ export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsT
                   </p>
                 </div>
 
-                {report.signatureDataUrl ? (
+                {report.hasSignature || report.signatureDataUrl ? (
                   <div className="craft-signed">
-                    <img src={report.signatureDataUrl} alt={t("reports.signatureAlt")} />
+                    <CheckCircle2 size={22} aria-hidden />
                     <span>
                       <strong>{t("reports.signedDigitally")}</strong>
                       <small className="muted">
@@ -291,7 +332,8 @@ export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsT
                 <div className="craft-card-foot">
                   <div className="row">
                     <button
-                      onClick={() => setPrintingReport(report)}
+                      onClick={() => openPrint(report)}
+                      disabled={isBusy}
                       className="icon-button"
                       title={t("reports.print")}
                       aria-label={t("reports.print")}
@@ -339,15 +381,16 @@ export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsT
         />
       )}
 
-      {printingReport && (
+      {printing && (
         <CraftPrint
-          report={printingReport}
-          onClose={() => setPrintingReport(null)}
+          report={printing.report}
+          company={printing.company}
+          onClose={() => setPrinting(null)}
         />
       )}
 
       {isNewModalOpen && (
-        <Dialog title={t("reports.dialogTitle")} onClose={() => setIsNewModalOpen(false)} wide>
+        <Dialog title={t("reports.dialogTitle")} onClose={closeNewReport} wide>
           <form onSubmit={handleCreateReport} className="stack">
             <div className="grid form-grid craft-form-three">
               <Field label={t("common.projectOrSite")} required wide>
@@ -457,8 +500,10 @@ export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsT
               </div>
             </div>
 
+            {error && <p className="error" role="alert">{error}</p>}
+
             <div className="row gap craft-dialog-actions">
-              <button type="button" onClick={() => setIsNewModalOpen(false)} className="button">
+              <button type="button" onClick={closeNewReport} className="button">
                 {t("common.cancel")}
               </button>
               <button type="submit" disabled={isBusy} className="button primary">

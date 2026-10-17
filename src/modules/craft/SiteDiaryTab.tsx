@@ -28,19 +28,20 @@ interface SiteDiaryTabProps {
 }
 
 export function SiteDiaryTab({ diary, projects, onRefresh }: SiteDiaryTabProps) {
-  const { t, day, tradeLabel, weatherLabel } = useCraftI18n();
+  const { t, day, tradeLabel, weatherLabel, craftError } = useCraftI18n();
   const [selectedProjectId, setSelectedProjectId] = useState<string>("alle");
   const [search, setSearch] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
+  const [error, setError] = useState("");
 
   // New Entry Form State
   const [newProjectId, setNewProjectId] = useState(projects[0]?.id || "");
   const [newDate, setNewDate] = useState(new Date().toISOString().slice(0, 10));
-  const [newAuthor, setNewAuthor] = useState(() => t("diary.defaultAuthor"));
+  const [newAuthor, setNewAuthor] = useState("");
   const [newWeather, setNewWeather] = useState<CraftSiteDiaryEntry["weather"]>("Sonnig");
   const [newTemp, setNewTemp] = useState(19);
-  const [newTrades, setNewTrades] = useState<string[]>(["Elektro", "Sanitär"]);
+  const [newTrades, setNewTrades] = useState<string[]>(["Elektro", "Sanitär & Heizung"]);
   const [newActivities, setNewActivities] = useState("");
   const [newIssues, setNewIssues] = useState("");
 
@@ -77,6 +78,7 @@ export function SiteDiaryTab({ diary, projects, onRefresh }: SiteDiaryTabProps) 
   const handleSaveEntry = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newProjectId || !newAuthor || !newActivities) return;
+    setError("");
     setIsBusy(true);
     try {
       await api("/craft/site-diary", {
@@ -97,10 +99,23 @@ export function SiteDiaryTab({ diary, projects, onRefresh }: SiteDiaryTabProps) 
       setNewIssues("");
       onRefresh();
     } catch (err) {
-      console.error(err);
+      setError(craftError(err));
     } finally {
       setIsBusy(false);
     }
+  };
+
+  // Vorgaben erst beim Öffnen setzen, wenn die Sprache geladen ist
+  const openModal = () => {
+    setError("");
+    if (!projects.some((p) => p.id === newProjectId)) setNewProjectId(projects[0]?.id || "");
+    setNewAuthor((name) => name || t("diary.defaultAuthor"));
+    setIsModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setError("");
+    setIsModalOpen(false);
   };
 
   const getWeatherIcon = (weather?: CraftSiteDiaryEntry["weather"]) => {
@@ -144,7 +159,7 @@ export function SiteDiaryTab({ diary, projects, onRefresh }: SiteDiaryTabProps) 
               </option>
             ))}
           </select>
-          <button onClick={() => setIsModalOpen(true)} className="button primary">
+          <button onClick={openModal} className="button primary">
             <Plus size={18} /> {t("diary.add")}
           </button>
         </div>
@@ -225,7 +240,7 @@ export function SiteDiaryTab({ diary, projects, onRefresh }: SiteDiaryTabProps) 
       )}
 
       {isModalOpen && (
-        <Dialog title={t("diary.dialogTitle")} onClose={() => setIsModalOpen(false)} wide>
+        <Dialog title={t("diary.dialogTitle")} onClose={closeModal} wide>
           <form onSubmit={handleSaveEntry} className="stack">
             <div className="grid form-grid">
               <Field label={t("common.projectOrSite")} required wide>
@@ -321,8 +336,10 @@ export function SiteDiaryTab({ diary, projects, onRefresh }: SiteDiaryTabProps) 
               </Field>
             </div>
 
+            {error && <p className="error" role="alert">{error}</p>}
+
             <div className="row gap craft-dialog-actions">
-              <button type="button" onClick={() => setIsModalOpen(false)} className="button">
+              <button type="button" onClick={closeModal} className="button">
                 {t("common.cancel")}
               </button>
               <button type="submit" disabled={isBusy} className="button primary">

@@ -72,7 +72,7 @@ export const uk: WorkshopDict = {
   posType: { labor: "РОБ", part: "ЗЧ" },
   payment: { bar: "Готівка", karte: "Картка", rechnung: "Рахунок", pos: "Каса" },
   inspection: {
-    status: { ok: "OK", warning: "Зауваження", defect: "Дефект" },
+    status: { ok: "OK", warning: "Зауваження", defect: "Дефект", notChecked: "Не перевірено" },
     categories: {
       bremsen: "Гальма",
       reifen: "Шини",
@@ -202,6 +202,7 @@ export const uk: WorkshopDict = {
     statusError: "Помилка під час оновлення статусу.",
     positionsError: "Помилка під час збереження позицій.",
     checklistError: "Помилка під час оновлення чек-листа.",
+    notesError: "Помилка під час збереження нотаток.",
     deleteError: "Помилка під час видалення замовлення.",
   },
   parts: {
@@ -231,6 +232,7 @@ export const uk: WorkshopDict = {
     stock: "Поточний залишок",
     purchasePrice: "Закупівельна ціна без ПДВ ({symbol})",
     salePrice: "Ціна продажу без ПДВ ({symbol})",
+    vatRate: "Ставка ПДВ",
     save: "Зберегти запчастину",
     required: "Заповніть щонайменше артикул і найменування.",
     saveError: "Помилка під час збереження запчастини.",

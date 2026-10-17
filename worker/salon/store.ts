@@ -1023,7 +1023,7 @@ export class SalonStore {
     });
 
     // Beispieltermine heute
-    const today = new Date().toISOString().slice(0, 10);
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Berlin" });
     this.saveAppointment({
       clientId: c1.id,
       clientName: c1.name,

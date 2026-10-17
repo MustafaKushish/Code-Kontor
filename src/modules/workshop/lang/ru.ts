@@ -72,7 +72,7 @@ export const ru: WorkshopDict = {
   posType: { labor: "РАБ", part: "ЗЧ" },
   payment: { bar: "Наличные", karte: "Карта", rechnung: "Счёт", pos: "Касса" },
   inspection: {
-    status: { ok: "OK", warning: "Замечание", defect: "Дефект" },
+    status: { ok: "OK", warning: "Замечание", defect: "Дефект", notChecked: "Не проверено" },
     categories: {
       bremsen: "Тормоза",
       reifen: "Шины",
@@ -202,6 +202,7 @@ export const ru: WorkshopDict = {
     statusError: "Ошибка при обновлении статуса.",
     positionsError: "Ошибка при сохранении позиций.",
     checklistError: "Ошибка при обновлении чек-листа.",
+    notesError: "Ошибка при сохранении заметок.",
     deleteError: "Ошибка при удалении заказа.",
   },
   parts: {
@@ -231,6 +232,7 @@ export const ru: WorkshopDict = {
     stock: "Текущий остаток",
     purchasePrice: "Закупочная цена без НДС ({symbol})",
     salePrice: "Цена продажи без НДС ({symbol})",
+    vatRate: "Ставка НДС",
     save: "Сохранить запчасть",
     required: "Заполните как минимум артикул и наименование.",
     saveError: "Ошибка при сохранении запчасти.",

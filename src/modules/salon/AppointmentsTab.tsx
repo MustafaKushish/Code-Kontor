@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Plus, Clock, Calendar, Search, Sparkles, Trash2, Play } from "lucide-react";
 import { api } from "../../api";
-import type { AppointmentStatus, SalonAppointment } from "../../../shared/salon";
+import { localDay, type AppointmentStatus, type SalonAppointment } from "../../../shared/salon";
 import { useSalonI18n } from "./i18n";
 
 export function AppointmentsTab({
@@ -74,7 +74,7 @@ export function AppointmentsTab({
     return true;
   });
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDay();
   const todayApps = appointments.filter((a) => a.day === today && a.status !== "canceled");
   const inProgressApps = appointments.filter((a) => a.status === "in_progress");
   const completedTodayCents = appointments

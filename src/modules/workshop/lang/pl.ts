@@ -72,7 +72,7 @@ export const pl: WorkshopDict = {
   posType: { labor: "ROB", part: "CZ" },
   payment: { bar: "Gotówka", karte: "Karta", rechnung: "Faktura", pos: "Kasa" },
   inspection: {
-    status: { ok: "OK", warning: "Uwaga", defect: "Usterka" },
+    status: { ok: "OK", warning: "Uwaga", defect: "Usterka", notChecked: "Nie sprawdzono" },
     categories: {
       bremsen: "Hamulce",
       reifen: "Opony",
@@ -202,6 +202,7 @@ export const pl: WorkshopDict = {
     statusError: "Błąd podczas aktualizacji statusu.",
     positionsError: "Błąd podczas zapisywania pozycji.",
     checklistError: "Błąd podczas aktualizacji listy kontrolnej.",
+    notesError: "Błąd podczas zapisywania notatek.",
     deleteError: "Błąd podczas usuwania zlecenia.",
   },
   parts: {
@@ -231,6 +232,7 @@ export const pl: WorkshopDict = {
     stock: "Aktualny stan magazynowy",
     purchasePrice: "Cena zakupu netto ({symbol})",
     salePrice: "Cena sprzedaży netto ({symbol})",
+    vatRate: "Stawka VAT",
     save: "Zapisz część",
     required: "Wypełnij co najmniej numer części i nazwę.",
     saveError: "Błąd podczas zapisywania części.",

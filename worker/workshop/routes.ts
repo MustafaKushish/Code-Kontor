@@ -31,12 +31,17 @@ function store(env: Env, tenantId: string): Remote {
   });
 }
 
-// Deutscher Text als Rückfall, bis die Werkstatt eigene Übersetzungen hat
-const ERROR_TEXT: Record<string, string> = {
-  plateTaken: "Dieses Kennzeichen ist schon angelegt.",
-  partNumberTaken: "Diese Teilenummer gibt es schon.",
+// Deutscher Klartext für Aufrufer ohne Übersetzung; die App übersetzt jeden Code selbst (lang/*.ts → errors).
+// Muss alle Codes enthalten, die der WorkshopStore wirft.
+export const ERROR_TEXT: Record<string, string> = {
   orderNotFound: "Auftrag nicht gefunden.",
   vehicleNotFound: "Fahrzeug nicht gefunden.",
+  notFound: "Nicht gefunden.",
+  plateTaken: "Dieses Kennzeichen ist schon angelegt.",
+  partNumberTaken: "Diese Teilenummer gibt es schon.",
+  orderClosed: "Der Auftrag ist abgeschlossen und kann nicht mehr geändert werden.",
+  estimateDecided: "Über den Kostenvoranschlag wurde bereits entschieden.",
+  notPayable: "Dieser Auftrag ist bereits abgerechnet und kann nicht noch einmal bezahlt werden.",
 };
 
 function moduleError(c: Ctx, code: string) {
@@ -261,6 +266,6 @@ workshopPublicRoutes.post("/:tenantId/approve-estimate/:token", async (c) => {
   const token = c.req.param("token");
   if (!(await orderFor(c.env, tenantId, token))) return fail(c, "linkInvalid", 404);
   const res = await store(c.env, tenantId).approveEstimateByToken(token);
-  if (!res.ok) return c.json({ code: `workshop.${res.code}`, error: res.code }, 409);
+  if (!res.ok) return c.json({ code: `workshop.${res.code}`, error: ERROR_TEXT[res.code] ?? res.code }, 409);
   return c.json({ ok: true, order: publicOrder(res.value) });
 });

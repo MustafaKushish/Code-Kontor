@@ -5,6 +5,7 @@ import { Utensils, Clock, CheckCircle2, Maximize, Minimize } from "lucide-react"
 interface Called { id: string; number: string; name: string }
 import "./restaurant.css";
 import { useRestaurantI18n } from "./i18n";
+import { useVisiblePolling } from "./polling";
 
 interface PickupDisplayProps {
   tenantId: string;
@@ -35,16 +36,17 @@ export default function PickupDisplayPage({ tenantId }: PickupDisplayProps) {
 
   useEffect(() => {
     fetchQueue();
-    const interval = setInterval(fetchQueue, 4000);
     const clock = setInterval(() => {
       setNow(new Date());
     }, 1000);
 
     return () => {
-      clearInterval(interval);
       clearInterval(clock);
     };
   }, [tenantId]);
+
+  // Alle 4 Sekunden neu abfragen, nur solange die Anzeige sichtbar ist
+  useVisiblePolling(fetchQueue, 4000);
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {

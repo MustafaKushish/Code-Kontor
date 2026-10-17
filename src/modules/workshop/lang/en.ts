@@ -72,7 +72,7 @@ export const en: WorkshopDict = {
   posType: { labor: "LAB", part: "PRT" },
   payment: { bar: "Cash", karte: "Card", rechnung: "Invoice", pos: "POS" },
   inspection: {
-    status: { ok: "OK", warning: "Advisory", defect: "Defect" },
+    status: { ok: "OK", warning: "Advisory", defect: "Defect", notChecked: "Not checked" },
     categories: {
       bremsen: "Brakes",
       reifen: "Tires",
@@ -202,6 +202,7 @@ export const en: WorkshopDict = {
     statusError: "Error updating the status.",
     positionsError: "Error saving the line items.",
     checklistError: "Error updating the checklist.",
+    notesError: "Error saving the notes.",
     deleteError: "Error deleting the order.",
   },
   parts: {
@@ -231,6 +232,7 @@ export const en: WorkshopDict = {
     stock: "Current stock",
     purchasePrice: "Purchase price net ({symbol})",
     salePrice: "Sales price net ({symbol})",
+    vatRate: "VAT rate",
     save: "Save part",
     required: "Please enter at least the part number and description.",
     saveError: "Error saving the part.",

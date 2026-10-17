@@ -72,6 +72,7 @@
 .craft-signed { display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: 14px; background: var(--success-soft); }
 .craft-signed img { width: 96px; height: 40px; object-fit: contain; background: #fff; border-radius: 8px; padding: 2px; flex: none; }
 .craft-signed span { display: grid; color: var(--success); }
+.craft-signed > svg { color: var(--success); flex: none; }
 .craft-pay { flex-wrap: wrap; }
 .craft-pay .button { gap: 6px; }
 

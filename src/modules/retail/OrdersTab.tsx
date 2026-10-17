@@ -120,12 +120,14 @@ export function OrdersTab({ isManager }: { isManager: boolean }) {
     }
   };
 
+  const outstanding = (item: RetailPurchaseOrder["items"][number]) => Math.max(0, item.qtyOrdered - item.qtyReceived);
+
   const openReceiveModal = (order: RetailPurchaseOrder) => {
     setReceivingOrder(order);
     const initialMap: Record<string, number> = {};
     for (const item of order.items) {
-      // Vorauswahl: Restliche offene Menge vorschlagen
-      initialMap[item.productId] = item.qtyOrdered;
+      // Vorauswahl: restliche offene Menge
+      initialMap[item.productId] = outstanding(item);
     }
     setReceivedQtyMap(initialMap);
   };
@@ -137,7 +139,8 @@ export function OrdersTab({ isManager }: { isManager: boolean }) {
     try {
       const payload = receivingOrder.items.map((i) => ({
         productId: i.productId,
-        qtyReceived: Number(receivedQtyMap[i.productId] ?? i.qtyReceived),
+        // Neu geliefert; der Server addiert es zur bisherigen Eingangsmenge
+        qtyDelivered: Number(receivedQtyMap[i.productId] ?? outstanding(i)),
       }));
 
       await api(`/retail/orders/${receivingOrder.id}/receive`, {
@@ -394,7 +397,7 @@ export function OrdersTab({ isManager }: { isManager: boolean }) {
                 className="button small-button"
                 onClick={() => {
                   const full: Record<string, number> = {};
-                  for (const i of receivingOrder.items) full[i.productId] = i.qtyOrdered;
+                  for (const i of receivingOrder.items) full[i.productId] = outstanding(i);
                   setReceivedQtyMap(full);
                 }}
               >
@@ -412,11 +415,10 @@ export function OrdersTab({ isManager }: { isManager: boolean }) {
                   <small className="muted">{r("receiveDialog.lineInfo", { ordered: item.qtyOrdered, received: item.qtyReceived })}</small>
                   <input
                     type="number"
-                    min={item.qtyReceived}
-                    max={item.qtyOrdered * 2}
+                    min={0}
                     aria-label={r("receiveDialog.delivered")}
                     title={r("receiveDialog.delivered")}
-                    value={receivedQtyMap[item.productId] ?? item.qtyReceived}
+                    value={receivedQtyMap[item.productId] ?? outstanding(item)}
                     onChange={(e) => {
                       const val = parseInt(e.target.value, 10) || 0;
                       setReceivedQtyMap({

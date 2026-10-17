@@ -37,7 +37,7 @@ interface PickupTabProps {
 }
 
 export function PickupTab({ orders, menu, tenantId, onRefresh }: PickupTabProps) {
-  const { t, euro } = useRestaurantI18n();
+  const { t, euro, restaurantError } = useRestaurantI18n();
   const [filterStatus, setFilterStatus] = useState<"alle" | "zubereitung" | "bereit" | "abgeschlossen">("alle");
   const [search, setSearch] = useState("");
   const [isNewPickupModalOpen, setIsNewPickupModalOpen] = useState(false);
@@ -47,6 +47,9 @@ export function PickupTab({ orders, menu, tenantId, onRefresh }: PickupTabProps)
   const [selectedItems, setSelectedItems] = useState<{ menuItem: MenuItem; quantity: number }[]>([]);
   const [activePrintOrder, setActivePrintOrder] = useState<RestaurantOrder | null>(null);
   const [isBusy, setIsBusy] = useState(false);
+  // Fehler bei Statuswechseln (Liste) und beim Anlegen (Dialog)
+  const [error, setError] = useState("");
+  const [formError, setFormError] = useState("");
 
   const fmtEuro = euro;
 
@@ -76,6 +79,7 @@ export function PickupTab({ orders, menu, tenantId, onRefresh }: PickupTabProps)
 
   const handleUpdateStatus = async (orderId: string, status: "in_zubereitung" | "fertig" | "abgeschlossen") => {
     setIsBusy(true);
+    setError("");
     try {
       await api(`/restaurant/orders/${orderId}/status`, {
         method: "POST",
@@ -83,7 +87,7 @@ export function PickupTab({ orders, menu, tenantId, onRefresh }: PickupTabProps)
       });
       onRefresh();
     } catch (err) {
-      console.error(err);
+      setError(restaurantError(err));
     } finally {
       setIsBusy(false);
     }
@@ -95,6 +99,7 @@ export function PickupTab({ orders, menu, tenantId, onRefresh }: PickupTabProps)
     e.preventDefault();
     if (selectedItems.length === 0) return;
     setIsBusy(true);
+    setFormError("");
     try {
       const items: OrderItem[] = selectedItems.map(({ menuItem, quantity }) => ({
         id: "item-" + Math.random().toString(36).slice(2, 9),
@@ -127,7 +132,7 @@ export function PickupTab({ orders, menu, tenantId, onRefresh }: PickupTabProps)
       setSelectedItems([]);
       onRefresh();
     } catch (err) {
-      console.error(err);
+      setFormError(restaurantError(err));
     } finally {
       setIsBusy(false);
     }
@@ -175,7 +180,13 @@ export function PickupTab({ orders, menu, tenantId, onRefresh }: PickupTabProps)
             <ExternalLink size={18} />
             {t("pickup.openMonitor")}
           </a>
-          <button onClick={() => setIsNewPickupModalOpen(true)} className="button primary">
+          <button
+            onClick={() => {
+              setFormError("");
+              setIsNewPickupModalOpen(true);
+            }}
+            className="button primary"
+          >
             <Plus size={18} />
             {t("pickup.phoneOrder")}
           </button>
@@ -209,6 +220,8 @@ export function PickupTab({ orders, menu, tenantId, onRefresh }: PickupTabProps)
           />
         </label>
       </div>
+
+      {error && <p className="error" role="alert">{error}</p>}
 
       <div className="restaurant-orders">
         {filteredOrders.length === 0 ? (
@@ -391,6 +404,8 @@ export function PickupTab({ orders, menu, tenantId, onRefresh }: PickupTabProps)
                 ))}
               </div>
             )}
+
+            {formError && <p className="error" role="alert">{formError}</p>}
 
             <div className="row gap restaurant-form-actions">
               <button type="button" onClick={() => setIsNewPickupModalOpen(false)} className="button">

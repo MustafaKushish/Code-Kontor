@@ -7,7 +7,7 @@ import { calculateMarginPercent, generateInternalEan } from "../../../shared/ret
 import { useRetailI18n } from "./i18n";
 import { LabelsPrint } from "./LabelsPrint";
 import { Dialog } from "../../pos/ui";
-import { currencySymbol } from "../../money";
+import { currencySymbol, standardVat, vatChoices } from "../../money";
 
 export function ProductsTab({ isManager }: { isManager: boolean }) {
   const { r, euro, unit, lang, retailError } = useRetailI18n();
@@ -42,7 +42,7 @@ export function ProductsTab({ isManager }: { isManager: boolean }) {
     supplierArticleNo: "",
     purchasePriceEuro: "0.00",
     sellingPriceEuro: "0.00",
-    vatRate: 19.0,
+    vatRate: standardVat(),
     stockQty: 0,
     minStockQty: 5,
     unit: "Stk" as ProductUnit,
@@ -85,7 +85,7 @@ export function ProductsTab({ isManager }: { isManager: boolean }) {
       supplierArticleNo: "",
       purchasePriceEuro: "5.00",
       sellingPriceEuro: "12.90",
-      vatRate: 19.0,
+      vatRate: standardVat(),
       stockQty: 10,
       minStockQty: 5,
       unit: "Stk",
@@ -403,9 +403,11 @@ export function ProductsTab({ isManager }: { isManager: boolean }) {
                 </Field>
                 <Field label={r("productForm.vatRate")}>
                   <select value={form.vatRate} onChange={(e) => setForm({ ...form, vatRate: parseFloat(e.target.value) })}>
-                    <option value="19">{r("productForm.vatStandard", { rate: 19 })}</option>
-                    <option value="7">{r("productForm.vatReduced", { rate: 7 })}</option>
-                    <option value="0">{r("productForm.vatFree", { rate: 0 })}</option>
+                    {vatChoices(form.vatRate).map((v) => (
+                      <option key={v} value={v}>
+                        {r(v === 0 ? "productForm.vatFree" : v === standardVat() ? "productForm.vatStandard" : "productForm.vatReduced", { rate: new Intl.NumberFormat(lang).format(v) })}
+                      </option>
+                    ))}
                   </select>
                 </Field>
               </div>
