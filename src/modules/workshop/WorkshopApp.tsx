@@ -11,6 +11,7 @@ import { PartsTab } from "./PartsTab";
 import { TiresTab } from "./TiresTab";
 import { NewOrderModal } from "./NewOrderModal";
 import "./workshop.css";
+import { currency as companyCurrency } from "../../money";
 
 interface WorkshopAppProps {
   me: Me;
@@ -35,7 +36,7 @@ export default function WorkshopApp({ me, path }: WorkshopAppProps) {
   const [newOrderModalOpen, setNewOrderModalOpen] = useState(false);
 
   const fmtEuro = (amount: number) =>
-    new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(amount);
+    new Intl.NumberFormat("de-DE", { style: "currency", currency: companyCurrency() }).format(amount);
 
   const loadData = async () => {
     try {

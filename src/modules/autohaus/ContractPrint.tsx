@@ -108,7 +108,8 @@ export function ContractPrint({ contract: c, tradeIn, onClose }: { contract: Sal
         <div className="print-terms">
           {[
             `Zahlungsart: ${PAYMENT_LABEL[c.paymentMethod]}.${c.deliveryDate ? ` Übergabe am ${dateLabel(c.deliveryDate)}.` : ""}`,
-            c.taxation === "differenz" ? "Das Fahrzeug unterliegt der Differenzbesteuerung nach § 25a UStG. Die Umsatzsteuer wird nicht gesondert ausgewiesen." : "",
+            // § 25a UStG gilt nur in Deutschland
+            c.taxation === "differenz" && company?.country === "DE" ? "Das Fahrzeug unterliegt der Differenzbesteuerung nach § 25a UStG. Die Umsatzsteuer wird nicht gesondert ausgewiesen." : "",
             c.warranty ? `Gewährleistung: ${c.warranty}.` : "",
             c.notes ? `Besondere Vereinbarungen: ${c.notes}` : "",
             "Das Fahrzeug bleibt bis zur vollständigen Bezahlung Eigentum des Verkäufers. Fahrzeugbrief (Zulassungsbescheinigung Teil II) und Schlüssel werden nach Zahlungseingang übergeben.",

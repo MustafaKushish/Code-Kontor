@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Printer, X } from "lucide-react";
 import type { WorkshopOrder } from "../../../shared/workshop";
 import type { CompanyProfile } from "../../../shared/company";
+import { currency as companyCurrency } from "../../money";
 
 interface WorkshopPrintProps {
   order: WorkshopOrder;
@@ -19,7 +20,7 @@ export function WorkshopPrint({ order, company, type, onClose }: WorkshopPrintPr
   };
 
   const fmtEuro = (amount: number) =>
-    new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(amount);
+    new Intl.NumberFormat("de-DE", { style: "currency", currency: companyCurrency() }).format(amount);
 
   // Druckmodus der Plattform: blendet beim Drucken alles außer dem Blatt aus
   useEffect(() => {

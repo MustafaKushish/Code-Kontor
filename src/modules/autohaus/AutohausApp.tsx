@@ -6,7 +6,7 @@ import { navigate } from "../../router";
 import { findApp } from "../../../shared/apps";
 import { POS_APP_ID } from "../../../shared/pos";
 import type { AutohausStats, Lead, SalesContract, StockVehicle, TestDrive, TradeIn } from "../../../shared/autohaus";
-import { BASE, errorText, euro } from "./parts";
+import { BASE, errorText, euroShort } from "./parts";
 import { StockTab } from "./StockTab";
 import { LeadsTab } from "./LeadsTab";
 import { TestDrivesTab } from "./TestDrivesTab";
@@ -79,9 +79,9 @@ export default function AutohausApp({ me, path }: { me: Me; path: string }) {
 
   const kpis = [
     { label: "Im Bestand", value: String(stats.inStock), hint: stats.reserved ? `davon ${stats.reserved} reserviert` : "verfügbar und in Aufbereitung", icon: Car },
-    { label: "Bestandswert", value: euro(stats.stockValue), hint: `Ø ${stats.avgDaysInStock} Standtage`, icon: Gauge },
+    { label: "Bestandswert", value: euroShort(stats.stockValue), hint: `Ø ${stats.avgDaysInStock} Standtage`, icon: Gauge },
     { label: "Offene Interessenten", value: String(stats.openLeads), hint: `${stats.testDrivesToday} Probefahrten heute`, icon: Users },
-    { label: "Verkäufe diesen Monat", value: String(stats.salesThisMonth), hint: euro(stats.revenueThisMonth), icon: TrendingUp },
+    { label: "Verkäufe diesen Monat", value: String(stats.salesThisMonth), hint: euroShort(stats.revenueThisMonth), icon: TrendingUp },
   ];
 
   const props: TabProps = { ...data, me, reload, preset: action === "neu" ? (target ?? "") : null, sub: action ?? null };

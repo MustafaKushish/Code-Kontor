@@ -20,6 +20,7 @@ import type {
   MenuItem,
   PrintDestination,
 } from "../../../shared/restaurant";
+import { currency as companyCurrency, currencySymbol } from "../../money";
 
 interface MenuTabProps {
   menu: MenuItem[];
@@ -41,7 +42,7 @@ export function MenuTab({ menu, onRefresh }: MenuTabProps) {
   const [isBusy, setIsBusy] = useState(false);
 
   const fmtEuro = (amount: number) =>
-    new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(amount);
+    new Intl.NumberFormat("de-DE", { style: "currency", currency: companyCurrency() }).format(amount);
 
   const categories = [
     "alle",
@@ -260,7 +261,7 @@ export function MenuTab({ menu, onRefresh }: MenuTabProps) {
             </div>
 
             <div className="grid restaurant-three">
-              <Field label="Bruttopreis (€)" required>
+              <Field label={`Bruttopreis (${currencySymbol("de-DE")})`} required>
                 <input
                   type="number"
                   step="0.10"

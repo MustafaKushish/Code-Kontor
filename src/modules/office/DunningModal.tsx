@@ -7,6 +7,7 @@ import { Dialog } from "../../pos/ui";
 import type { CompanyProfile } from "../../../shared/company";
 import type { OfficeDunning, OfficeInvoice, OfficeSettings } from "../../../shared/office";
 import { useOfficeI18n } from "./i18n";
+import { currencySymbol } from "../../money";
 
 export function DunningModal({
   invoice,
@@ -213,7 +214,7 @@ export function DunningModal({
 
         <Field label="Mahnstufe auswählen" required>
           <select value={level} onChange={(e) => setLevel(parseInt(e.target.value, 10) as 1 | 2 | 3)}>
-            <option value={1}>Stufe 1: Zahlungserinnerung (0,00 € Gebühr)</option>
+            <option value={1}>Stufe 1: Zahlungserinnerung (0,00 {currencySymbol("de-DE")} Gebühr)</option>
             <option value={2}>Stufe 2: 1. Mahnung (+ {euro(settings?.dunningFeeLevel2Cents ?? 500)} Gebühr)</option>
             <option value={3}>Stufe 3: 2. Mahnung / Letzte Frist (+ {euro(settings?.dunningFeeLevel3Cents ?? 1000)} Gebühr)</option>
           </select>

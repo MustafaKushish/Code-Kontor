@@ -24,6 +24,15 @@ export const euro = (n: number) => {
     return `${n.toFixed(2)} ${currency()}`;
   }
 };
+/** Große Beträge kurz, z. B. „62,5 Mio. IQD“, damit sie in eine Kachel passen. */
+export const euroShort = (n: number) => {
+  if (Math.abs(n) < 1_000_000) return euro(n);
+  try {
+    return new Intl.NumberFormat("de-DE", { style: "currency", currency: currency(), notation: "compact", maximumFractionDigits: 1 }).format(n);
+  } catch {
+    return euro(n);
+  }
+};
 /** Währungszeichen für Feldbeschriftungen, z. B. „€“ oder „IQD“. */
 export const sym = () => currencySymbol("de-DE");
 export const km = (n: number) => `${n.toLocaleString("de-DE")} km`;

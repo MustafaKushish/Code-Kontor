@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Printer, X } from "lucide-react";
 import type { RestaurantOrder } from "../../../shared/restaurant";
 import type { CompanyProfile } from "../../../shared/company";
+import { currency as companyCurrency } from "../../money";
 
 interface RestaurantPrintProps {
   order: RestaurantOrder;
@@ -20,7 +21,7 @@ export function RestaurantPrint({ order, company, type, onClose }: RestaurantPri
   };
 
   const fmtEuro = (amount: number) =>
-    new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(amount);
+    new Intl.NumberFormat("de-DE", { style: "currency", currency: companyCurrency() }).format(amount);
 
   const filteredItems = isGuest
     ? order.items

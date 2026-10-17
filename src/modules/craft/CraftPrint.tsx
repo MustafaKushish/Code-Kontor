@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Printer, X, HardHat, ShieldCheck } from "lucide-react";
 import type { CraftReport } from "../../../shared/craft";
 import type { CompanyProfile } from "../../../shared/company";
+import { currency as companyCurrency, currencySymbol } from "../../money";
 
 interface CraftPrintProps {
   report: CraftReport;
@@ -21,7 +22,7 @@ export function CraftPrint({ report, company, onClose }: CraftPrintProps) {
   };
 
   const fmtEuro = (amount?: number) =>
-    new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(amount || 0);
+    new Intl.NumberFormat("de-DE", { style: "currency", currency: companyCurrency() }).format(amount || 0);
 
   return createPortal(
     <div className="print-layer">
@@ -93,8 +94,8 @@ export function CraftPrint({ report, company, onClose }: CraftPrintProps) {
                 <th>Art</th>
                 <th>Bezeichnung</th>
                 <th className="num">Menge</th>
-                <th className="num">Einzel (€)</th>
-                <th className="num">Gesamt Netto (€)</th>
+                <th className="num">Einzel ({currencySymbol("de-DE")})</th>
+                <th className="num">Gesamt Netto ({currencySymbol("de-DE")})</th>
               </tr>
             </thead>
             <tbody>

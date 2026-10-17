@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Printer, X, Dumbbell, ShieldCheck, QrCode, CheckCircle2 } from "lucide-react";
 import type { FitnessMember, FitnessPlan } from "../../../shared/fitness";
+import { currency as companyCurrency } from "../../money";
 
 interface FitnessPrintProps {
   member: FitnessMember;
@@ -19,7 +20,7 @@ export function FitnessPrint({
   onClose,
 }: FitnessPrintProps) {
   const fmtEuro = (amount: number) =>
-    new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(amount);
+    new Intl.NumberFormat("de-DE", { style: "currency", currency: companyCurrency() }).format(amount);
 
   const handlePrint = () => {
     window.print();

@@ -26,6 +26,7 @@ import { MeasurementsTab } from "./MeasurementsTab";
 import { ReportsTab } from "./ReportsTab";
 import { SiteDiaryTab } from "./SiteDiaryTab";
 import "./craft.css";
+import { currency as companyCurrency } from "../../money";
 
 export default function CraftApp({ me, path }: { me: Me; path: string }) {
   const { appText } = useI18n();
@@ -47,7 +48,7 @@ export default function CraftApp({ me, path }: { me: Me; path: string }) {
   const [refreshing, setRefreshing] = useState(false);
 
   const fmtEuro = (amount: number) =>
-    new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(amount);
+    new Intl.NumberFormat("de-DE", { style: "currency", currency: companyCurrency() }).format(amount);
 
   const loadData = useCallback(async (silent = false) => {
     if (!silent) setRefreshing(true);

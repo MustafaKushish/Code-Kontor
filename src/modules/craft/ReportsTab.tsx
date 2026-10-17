@@ -29,6 +29,7 @@ import type {
 } from "../../../shared/craft";
 import { SignaturePad } from "./SignaturePad";
 import { CraftPrint } from "./CraftPrint";
+import { currency as companyCurrency, currencySymbol } from "../../money";
 
 interface ReportsTabProps {
   reports: CraftReport[];
@@ -75,7 +76,7 @@ export function ReportsTab({ reports, projects, onRefresh }: ReportsTabProps) {
   ]);
 
   const fmtEuro = (amount?: number) =>
-    new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(amount || 0);
+    new Intl.NumberFormat("de-DE", { style: "currency", currency: companyCurrency() }).format(amount || 0);
 
   const filteredReports = reports.filter((r) => {
     const matchesStatus = filterStatus === "alle" || r.status === filterStatus;
@@ -455,7 +456,7 @@ export function ReportsTab({ reports, projects, onRefresh }: ReportsTabProps) {
                       type="number"
                       step="0.5"
                       value={item.unitPriceNet}
-                      aria-label="Einzel (€)"
+                      aria-label={`Einzel (${currencySymbol("de-DE")})`}
                       onChange={(e) => updateItemRow(idx, "unitPriceNet", e.target.value)}
                     />
                     <button

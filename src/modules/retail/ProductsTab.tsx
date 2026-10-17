@@ -7,6 +7,7 @@ import { calculateMarginPercent, generateInternalEan } from "../../../shared/ret
 import { useRetailI18n } from "./i18n";
 import { LabelsPrint } from "./LabelsPrint";
 import { Dialog } from "../../pos/ui";
+import { currencySymbol } from "../../money";
 
 export function ProductsTab({ isManager }: { isManager: boolean }) {
   const { r, euro } = useRetailI18n();
@@ -392,10 +393,10 @@ export function ProductsTab({ isManager }: { isManager: boolean }) {
             <div className="retail-calc">
               <strong>Preiskalkulation & Margenberechnung</strong>
               <div className="grid form-grid">
-                <Field label="Einkaufspreis Netto (€)">
+                <Field label={`Einkaufspreis Netto (${currencySymbol("de-DE")})`}>
                   <input type="text" value={form.purchasePriceEuro} onChange={(e) => setForm({ ...form, purchasePriceEuro: e.target.value })} />
                 </Field>
-                <Field label="Verkaufspreis Brutto (€)" required>
+                <Field label={`Verkaufspreis Brutto (${currencySymbol("de-DE")})`} required>
                   <input type="text" required value={form.sellingPriceEuro} onChange={(e) => setForm({ ...form, sellingPriceEuro: e.target.value })} />
                 </Field>
                 <Field label="MwSt.-Satz">

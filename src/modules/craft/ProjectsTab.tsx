@@ -24,6 +24,7 @@ import type {
   CraftProjectStatus,
   CraftTrade,
 } from "../../../shared/craft";
+import { currency as companyCurrency, currencySymbol } from "../../money";
 
 interface ProjectsTabProps {
   projects: CraftProject[];
@@ -50,7 +51,7 @@ export function ProjectsTab({
   const [isBusy, setIsBusy] = useState(false);
 
   const fmtEuro = (amount?: number) =>
-    new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(amount || 0);
+    new Intl.NumberFormat("de-DE", { style: "currency", currency: companyCurrency() }).format(amount || 0);
 
   const trades: CraftTrade[] = [
     "Elektro",
@@ -383,7 +384,7 @@ export function ProjectsTab({
                 />
               </Field>
 
-              <Field label="Budget (€ brutto)">
+              <Field label={`Budget (${currencySymbol("de-DE")} brutto)`}>
                 <input
                   type="number"
                   step="100"

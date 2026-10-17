@@ -6,6 +6,7 @@ import { api } from "../../api";
 import type { CompanyProfile } from "../../../shared/company";
 import type { OfficeInvoice, OfficeQuote } from "../../../shared/office";
 import { useOfficeI18n } from "./i18n";
+import { currency as companyCurrency } from "../../money";
 
 export function PrintDocument({
   doc,
@@ -81,7 +82,7 @@ export function PrintDocument({
     <cac:InvoiceLine>
       <cbc:ID>${idx + 1}</cbc:ID>
       <cbc:InvoicedQuantity unitCode="HUR">${it.qty}</cbc:InvoicedQuantity>
-      <cbc:LineExtensionAmount currencyID="EUR">${((it.qty * it.unitCents) / 100).toFixed(2)}</cbc:LineExtensionAmount>
+      <cbc:LineExtensionAmount currencyID="${companyCurrency()}">${((it.qty * it.unitCents) / 100).toFixed(2)}</cbc:LineExtensionAmount>
       <cac:Item>
         <cbc:Description>${escapeXml(it.description || it.title)}</cbc:Description>
         <cbc:Name>${escapeXml(it.title)}</cbc:Name>
@@ -92,7 +93,7 @@ export function PrintDocument({
         </cac:ClassifiedTaxCategory>
       </cac:Item>
       <cac:Price>
-        <cbc:PriceAmount currencyID="EUR">${(it.unitCents / 100).toFixed(2)}</cbc:PriceAmount>
+        <cbc:PriceAmount currencyID="${companyCurrency()}">${(it.unitCents / 100).toFixed(2)}</cbc:PriceAmount>
       </cac:Price>
     </cac:InvoiceLine>`,
       )
@@ -132,10 +133,10 @@ export function PrintDocument({
     </cac:Party>
   </cac:AccountingCustomerParty>
   <cac:TaxTotal>
-    <cbc:TaxAmount currencyID="EUR">${vat}</cbc:TaxAmount>
+    <cbc:TaxAmount currencyID="${companyCurrency()}">${vat}</cbc:TaxAmount>
     <cac:TaxSubtotal>
-      <cbc:TaxableAmount currencyID="EUR">${net}</cbc:TaxableAmount>
-      <cbc:TaxAmount currencyID="EUR">${vat}</cbc:TaxAmount>
+      <cbc:TaxableAmount currencyID="${companyCurrency()}">${net}</cbc:TaxableAmount>
+      <cbc:TaxAmount currencyID="${companyCurrency()}">${vat}</cbc:TaxAmount>
       <cac:TaxCategory>
         <cbc:ID>S</cbc:ID>
         <cbc:Percent>19</cbc:Percent>
@@ -144,10 +145,10 @@ export function PrintDocument({
     </cac:TaxSubtotal>
   </cac:TaxTotal>
   <cac:LegalMonetaryTotal>
-    <cbc:LineExtensionAmount currencyID="EUR">${net}</cbc:LineExtensionAmount>
-    <cbc:TaxExclusiveAmount currencyID="EUR">${net}</cbc:TaxExclusiveAmount>
-    <cbc:TaxInclusiveAmount currencyID="EUR">${total}</cbc:TaxInclusiveAmount>
-    <cbc:PayableAmount currencyID="EUR">${total}</cbc:PayableAmount>
+    <cbc:LineExtensionAmount currencyID="${companyCurrency()}">${net}</cbc:LineExtensionAmount>
+    <cbc:TaxExclusiveAmount currencyID="${companyCurrency()}">${net}</cbc:TaxExclusiveAmount>
+    <cbc:TaxInclusiveAmount currencyID="${companyCurrency()}">${total}</cbc:TaxInclusiveAmount>
+    <cbc:PayableAmount currencyID="${companyCurrency()}">${total}</cbc:PayableAmount>
   </cac:LegalMonetaryTotal>${itemsXml}
 </Invoice>`;
   };

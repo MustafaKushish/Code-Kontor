@@ -115,6 +115,16 @@ function CompanySection({ part, saved, onSaved, canEdit, addressLookup, children
   );
 }
 
+/** „IQD · Irakischer Dinar“; ohne Namen in der Sprache nur der Code. */
+function currencyName(code: string, lang: string) {
+  try {
+    const name = new Intl.DisplayNames([lang], { type: "currency" }).of(code);
+    return name && name !== code ? `${code} · ${name}` : code;
+  } catch {
+    return code;
+  }
+}
+
 /** Land, Währung und Steuersätze: Vorgaben des Landes, vom Inhaber oder Admin anpassbar. */
 function TaxRates({ canEdit, onChanged }: { canEdit: boolean; onChanged: () => void }) {
   const { t, lang, errorText } = useI18n();
@@ -169,12 +179,12 @@ function TaxRates({ canEdit, onChanged }: { canEdit: boolean; onChanged: () => v
         <label className="field">
           <span className="field-label">{t("settings.currency")}</span>
           <select value={currency} onChange={(e) => (setCurrency(e.target.value), setDone(false))}>
-            {(CURRENCIES.includes(currency) ? CURRENCIES : [currency, ...CURRENCIES]).map((code) => <option key={code} value={code}>{code}</option>)}
+            {(CURRENCIES.includes(currency) ? CURRENCIES : [currency, ...CURRENCIES]).map((code) => <option key={code} value={code}>{currencyName(code, lang)}</option>)}
           </select>
         </label>
         <label className="field">
           <span className="field-label">{t("settings.ratesLabel")}</span>
-          <input value={rates} onChange={(e) => (setRates(e.target.value), setDone(false))} inputMode="decimal" placeholder="19; 7" />
+          <input value={rates} onChange={(e) => (setRates(e.target.value), setDone(false))} inputMode="decimal" placeholder={tax.vatRates.length ? rateText(tax.vatRates, lang) : "0"} />
         </label>
         <small className="muted wide">{t("settings.ratesHint")} {t("settings.taxNote")}</small>
       </fieldset>
