@@ -72,7 +72,7 @@ export const fr: WorkshopDict = {
   posType: { labor: "MO", part: "PR" },
   payment: { bar: "Espèces", karte: "Carte", rechnung: "Facture", pos: "Caisse" },
   inspection: {
-    status: { ok: "OK", warning: "Remarque", defect: "Défaut" },
+    status: { ok: "OK", warning: "Remarque", defect: "Défaut", notChecked: "Non contrôlé" },
     categories: {
       bremsen: "Freins",
       reifen: "Pneus",
@@ -202,6 +202,7 @@ export const fr: WorkshopDict = {
     statusError: "Erreur lors de la mise à jour du statut.",
     positionsError: "Erreur lors de l’enregistrement des lignes.",
     checklistError: "Erreur lors de la mise à jour de la check-list.",
+    notesError: "Erreur lors de l’enregistrement des notes.",
     deleteError: "Erreur lors de la suppression de l’ordre.",
   },
   parts: {
@@ -231,6 +232,7 @@ export const fr: WorkshopDict = {
     stock: "Stock actuel",
     purchasePrice: "Prix d’achat HT ({symbol})",
     salePrice: "Prix de vente HT ({symbol})",
+    vatRate: "Taux de TVA",
     save: "Enregistrer la pièce",
     required: "Veuillez renseigner au moins la référence et la désignation.",
     saveError: "Erreur lors de l’enregistrement de la pièce.",

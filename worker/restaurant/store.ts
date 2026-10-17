@@ -12,6 +12,59 @@ import type {
   RestaurantTable,
 } from "../../shared/restaurant";
 
+/** Zeitpunkt (ISO oder SQLite-Format) so, wie `datetime('now')` ihn speichert: „YYYY-MM-DD HH:MM:SS“ in UTC. */
+function sqliteTime(value?: string): string | null {
+  if (!value) return null;
+  const ms = timeOf(value);
+  return Number.isNaN(ms) ? null : new Date(ms).toISOString().slice(0, 19).replace("T", " ");
+}
+
+/** Zeitpunkt aus der Datenbank (SQLite-Format in UTC oder ISO) als Millisekunden. */
+function timeOf(value?: string): number {
+  if (!value) return NaN;
+  return new Date(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value) ? value.replace(" ", "T") + "Z" : value).getTime();
+}
+
+/**
+ * Ø Zubereitungszeit in Minuten: vom Start in der Küche (sonst Anlage) bis „fertig“,
+ * über die Bestellungen mit Fertig-Zeitpunkt. null, wenn es keine gibt.
+ */
+export function averagePrepMinutes(orders: Pick<RestaurantOrder, "createdAt" | "kitchenStartedAt" | "readyAt">[]): number | null {
+  const minutes = orders
+    .map((o) => (timeOf(o.readyAt) - timeOf(o.kitchenStartedAt ?? o.createdAt)) / 60000)
+    .filter((m) => Number.isFinite(m) && m >= 0 && m < 24 * 60);
+  if (!minutes.length) return null;
+  return Math.round(minutes.reduce((s, m) => s + m, 0) / minutes.length);
+}
+
+/**
+ * Summen einer Bestellung. Die Steuer wird je Steuersatz aus der Bruttosumme herausgerechnet,
+ * auch für andere Sätze als 7 % und 19 % (z. B. 0 %, 10 %, 20 %). `totalTax7` enthält die Steuer zu 7 %,
+ * `totalTax19` die Steuer aller übrigen Sätze; die Aufteilung je Satz zeigt die Oberfläche aus den Positionen.
+ */
+export function orderTotals(items: { quantity: number; unitPriceGross: number; taxRate: number }[]) {
+  const byRate = new Map<number, number>();
+  for (const item of items) {
+    const gross = item.quantity * item.unitPriceGross;
+    const rate = Number(item.taxRate) || 0;
+    byRate.set(rate, (byRate.get(rate) ?? 0) + gross);
+  }
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  let tax7 = 0;
+  let taxOther = 0;
+  let gross = 0;
+  for (const [rate, sum] of byRate) {
+    gross += sum;
+    const tax = r2((sum * rate) / (100 + rate));
+    if (rate === 7) tax7 += tax;
+    else taxOther += tax;
+  }
+  const totalGross = r2(gross);
+  const totalTax7 = r2(tax7);
+  const totalTax19 = r2(taxOther);
+  return { totalNet: r2(totalGross - totalTax7 - totalTax19), totalTax7, totalTax19, totalGross };
+}
+
 export class RestaurantError extends Error {
   constructor(public code: string) {
     super(code);
@@ -560,7 +613,13 @@ export class RestaurantStore {
 
   // ==================== BESTELLUNGEN (ORDERS) ====================
 
-  listOrders(): RestaurantOrder[] {
+  /**
+   * Bestellungen, neueste zuerst. Mit `since` nur die noch laufenden Bestellungen plus alle,
+   * die seit diesem Zeitpunkt angelegt wurden (spart beim Abfragen im Sekundentakt die ganze Historie).
+   */
+  listOrders(filter: { since?: string } = {}): RestaurantOrder[] {
+    const since = sqliteTime(filter.since);
+    const where = since ? "WHERE status NOT IN ('abgeschlossen', 'storniert') OR created_at >= ?" : "";
     const rows = this.sql
       .exec<{
         id: string;
@@ -585,7 +644,7 @@ export class RestaurantStore {
         kitchen_started_at: string | null;
         ready_at: string | null;
         completed_at: string | null;
-      }>("SELECT * FROM restaurant_orders ORDER BY created_at DESC")
+      }>(`SELECT * FROM restaurant_orders ${where} ORDER BY created_at DESC`, ...(since ? [since] : []))
       .toArray();
 
     return rows.map((r) => this.mapOrder(r));
@@ -651,25 +710,8 @@ export class RestaurantStore {
         pickupNumber = sameDay ? (last.p % 99) + 1 : 1;
       }
 
-      // Summen kalkulieren
-      let tax7 = 0;
-      let tax19 = 0;
-      let totalGross = 0;
-
-      for (const item of data.items) {
-        const itemGross = item.quantity * item.unitPriceGross;
-        totalGross += itemGross;
-        if (item.taxRate === 7.0) {
-          tax7 += itemGross - itemGross / 1.07;
-        } else {
-          tax19 += itemGross - itemGross / 1.19;
-        }
-      }
-
-      tax7 = Math.round(tax7 * 100) / 100;
-      tax19 = Math.round(tax19 * 100) / 100;
-      totalGross = Math.round(totalGross * 100) / 100;
-      const totalNet = Math.round((totalGross - tax7 - tax19) * 100) / 100;
+      // Summen kalkulieren (Steuer je Satz der Position)
+      const { totalNet, totalTax7: tax7, totalTax19: tax19, totalGross } = orderTotals(data.items);
 
       const isPaid = !!data.paymentMethod;
 
@@ -720,24 +762,7 @@ export class RestaurantStore {
       const updated = { ...cur, ...patch };
 
       if (patch.items) {
-        let tax7 = 0;
-        let tax19 = 0;
-        let totalGross = 0;
-
-        for (const item of patch.items) {
-          const itemGross = item.quantity * item.unitPriceGross;
-          totalGross += itemGross;
-          if (item.taxRate === 7.0) {
-            tax7 += itemGross - itemGross / 1.07;
-          } else {
-            tax19 += itemGross - itemGross / 1.19;
-          }
-        }
-
-        updated.totalTax7 = Math.round(tax7 * 100) / 100;
-        updated.totalTax19 = Math.round(tax19 * 100) / 100;
-        updated.totalGross = Math.round(totalGross * 100) / 100;
-        updated.totalNet = Math.round((updated.totalGross - updated.totalTax7 - updated.totalTax19) * 100) / 100;
+        Object.assign(updated, orderTotals(patch.items));
       }
 
       this.sql.exec(
@@ -969,9 +994,10 @@ export class RestaurantStore {
 
   getStats(): RestaurantStats {
     const tables = this.listTables();
-    const orders = this.listOrders();
-
     const todayStr = new Date().toISOString().slice(0, 10);
+    // Laufende Bestellungen und die von heute reichen für alle Kennzahlen
+    const orders = this.listOrders({ since: `${todayStr} 00:00:00` });
+
     const todayOrders = orders.filter((o) => o.createdAt.startsWith(todayStr));
 
     const openTablesCount = tables.filter((t) => t.status !== "frei").length;
@@ -990,7 +1016,7 @@ export class RestaurantStore {
       waitingPickupCount,
       ordersTodayCount: todayOrders.length,
       revenueTodayGross: Math.round(revenueTodayGross * 100) / 100,
-      averagePrepTimeMinutes: 14,
+      averagePrepTimeMinutes: averagePrepMinutes(todayOrders),
     };
   }
 

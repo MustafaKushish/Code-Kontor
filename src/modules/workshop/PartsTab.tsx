@@ -4,7 +4,7 @@ import { api } from "../../api";
 import { Field } from "../../components";
 import { Dialog } from "../../pos/ui";
 import type { SparePart } from "../../../shared/workshop";
-import { standardVat } from "../../money";
+import { formatRate, standardVat, vatChoices } from "../../money";
 import { useWorkshopI18n } from "./i18n";
 
 interface PartsTabProps {
@@ -25,7 +25,7 @@ const CATEGORIES: SparePart["category"][] = [
 ];
 
 export function PartsTab({ parts, onPartsChanged, isManager }: PartsTabProps) {
-  const { t, workshopError, euro: fmtEuro, symbol, category } = useWorkshopI18n();
+  const { t, lang, workshopError, euro: fmtEuro, symbol, category } = useWorkshopI18n();
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [lowStockOnly, setLowStockOnly] = useState(false);
@@ -128,7 +128,7 @@ export function PartsTab({ parts, onPartsChanged, isManager }: PartsTabProps) {
           minStock: Number(form.minStock) || 0,
           purchasePriceNet: Number(form.purchasePriceNet) || 0,
           salePriceNet: Number(form.salePriceNet) || 0,
-          taxRate: standardVat(),
+          taxRate: Number(form.taxRate),
           storageBin: form.storageBin.trim(),
         },
       });
@@ -332,6 +332,11 @@ export function PartsTab({ parts, onPartsChanged, isManager }: PartsTabProps) {
                   onChange={(e) => setForm({ ...form, salePriceNet: Number(e.target.value) })}
                   className="workshop-mono"
                 />
+              </Field>
+              <Field label={t("parts.vatRate")}>
+                <select value={form.taxRate} onChange={(e) => setForm({ ...form, taxRate: Number(e.target.value) })}>
+                  {vatChoices(form.taxRate).map((v) => <option key={v} value={v}>{formatRate(v, lang)}</option>)}
+                </select>
               </Field>
             </div>
 

@@ -1,9 +1,11 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Printer, X } from "lucide-react";
 import type { RestaurantOrder } from "../../../shared/restaurant";
 import type { CompanyProfile } from "../../../shared/company";
+import { api } from "../../api";
 import { useRestaurantI18n } from "./i18n";
+import { vatSummary } from "./vat";
 
 interface RestaurantPrintProps {
   order: RestaurantOrder;
@@ -12,7 +14,10 @@ interface RestaurantPrintProps {
   onClose: () => void;
 }
 
-export function RestaurantPrint({ order, company, type, onClose }: RestaurantPrintProps) {
+export function RestaurantPrint({ order, company: given, type, onClose }: RestaurantPrintProps) {
+  // Firmendaten für den Kopf des Gastbelegs, wie bei den anderen Druckansichten
+  const [loaded, setLoaded] = useState<CompanyProfile | null>(null);
+  const company = given ?? loaded;
   const isGuest = type === "guest";
   const isBar = type === "bar";
   const { t, euro, time, day, course, payment } = useRestaurantI18n();
@@ -31,6 +36,11 @@ export function RestaurantPrint({ order, company, type, onClose }: RestaurantPri
 
   useEffect(() => {
     document.body.classList.add("ck-printing");
+    if (!given) {
+      api<{ company: CompanyProfile | null }>("/company")
+        .then((d) => setLoaded(d.company))
+        .catch(() => {});
+    }
     return () => document.body.classList.remove("ck-printing");
   }, []);
 
@@ -98,18 +108,12 @@ export function RestaurantPrint({ order, company, type, onClose }: RestaurantPri
               <span>{t("print.net")}</span>
               <span>{fmtEuro(order.totalNet)}</span>
             </p>
-            {order.totalTax7 > 0 && (
-              <p className="restaurant-bon-split restaurant-bon-soft">
-                <span>{t("print.tax7")}</span>
-                <span>{fmtEuro(order.totalTax7)}</span>
+            {vatSummary(order.items).vat.map((v) => (
+              <p key={v.rate} className="restaurant-bon-split restaurant-bon-soft">
+                <span>{t("common.vat", { rate: v.rate })}</span>
+                <span>{fmtEuro(v.amount)}</span>
               </p>
-            )}
-            {order.totalTax19 > 0 && (
-              <p className="restaurant-bon-split restaurant-bon-soft">
-                <span>{t("print.tax19")}</span>
-                <span>{fmtEuro(order.totalTax19)}</span>
-              </p>
-            )}
+            ))}
             <p className="restaurant-bon-split restaurant-bon-grand">
               <span>{t("print.total")}</span>
               <span>{fmtEuro(order.totalGross)}</span>

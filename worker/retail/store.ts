@@ -450,7 +450,8 @@ export class RetailStore {
    */
   receiveOrder(
     orderId: string,
-    receivedItems: { productId: string; qtyReceived: number }[],
+    /** Neu gelieferte Menge je Artikel (nicht die Gesamtmenge); wird zur bisherigen Eingangsmenge addiert. */
+    receivedItems: { productId: string; qtyDelivered: number }[],
     user = { name: "Mitarbeiter" }
   ): RetailPurchaseOrder {
     return this.transaction(() => {
@@ -461,13 +462,8 @@ export class RetailStore {
       let allFulfilled = true;
 
       const updatedItems = order.items.map((item) => {
-        const matching = receivedItems.find((r) => r.productId === item.productId);
-        if (!matching) {
-          if (item.qtyReceived < item.qtyOrdered) allFulfilled = false;
-          return item;
-        }
-
-        const delta = matching.qtyReceived - item.qtyReceived;
+        const matching = receivedItems.find((r) => r?.productId === item.productId);
+        const delta = Math.max(0, Math.floor(Number(matching?.qtyDelivered) || 0));
         if (delta > 0) {
           // Bestand für dieses Produkt aufbuchen
           const prod = this.getProduct(item.productId);
@@ -479,7 +475,7 @@ export class RetailStore {
           }
         }
 
-        const newReceived = matching.qtyReceived;
+        const newReceived = item.qtyReceived + delta;
         if (newReceived < item.qtyOrdered) allFulfilled = false;
 
         return {
@@ -488,7 +484,9 @@ export class RetailStore {
         };
       });
 
-      const nextStatus: OrderStatus = allFulfilled ? "received" : "partially_received";
+      // Noch gar nichts eingegangen: Status bleibt (z. B. „bestellt“)
+      const anyReceived = updatedItems.some((i) => i.qtyReceived > 0);
+      const nextStatus: OrderStatus = allFulfilled ? "received" : anyReceived ? "partially_received" : order.status;
 
       this.sql.exec(
         `UPDATE retail_purchase_orders SET

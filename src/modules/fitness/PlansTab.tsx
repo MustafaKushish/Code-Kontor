@@ -13,7 +13,8 @@ interface PlansTabProps {
 }
 
 export function PlansTab({ plans, onRefreshPlans }: PlansTabProps) {
-  const { t, money, lang } = useFitnessI18n();
+  const { t, fitnessError, money, lang } = useFitnessI18n();
+  const [error, setError] = useState("");
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -70,6 +71,7 @@ export function PlansTab({ plans, onRefreshPlans }: PlansTabProps) {
     if (!formState.name.trim()) return;
 
     setSaving(true);
+    setError("");
     try {
       if (editingPlanId) {
         await api<FitnessPlan>(`/fitness/plans/${editingPlanId}`, {
@@ -84,8 +86,8 @@ export function PlansTab({ plans, onRefreshPlans }: PlansTabProps) {
       }
       setIsFormOpen(false);
       onRefreshPlans();
-    } catch {
-      // Fehler
+    } catch (err) {
+      setError(fitnessError(err));
     } finally {
       setSaving(false);
     }
@@ -100,6 +102,7 @@ export function PlansTab({ plans, onRefreshPlans }: PlansTabProps) {
 
   return (
     <div className="stack">
+      {error && !isFormOpen && <p className="error" role="alert">{error}</p>}
       {/* Kopfzeile */}
       <section className="card">
         <div className="section-head fitness-toolbar">
@@ -163,6 +166,7 @@ export function PlansTab({ plans, onRefreshPlans }: PlansTabProps) {
       {isFormOpen && (
         <Dialog title={editingPlanId ? t("plans.edit") : t("plans.newTitle")} onClose={() => setIsFormOpen(false)}>
           <form onSubmit={handleSave} className="fitness-dialog">
+            {error && <p className="error" role="alert">{error}</p>}
             <div className="grid form-grid">
               <Field label={t("plans.name")} required wide>
                 <input

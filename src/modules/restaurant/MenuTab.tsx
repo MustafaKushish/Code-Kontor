@@ -21,6 +21,7 @@ import type {
   PrintDestination,
 } from "../../../shared/restaurant";
 import { useRestaurantI18n } from "./i18n";
+import { standardVat, vatChoices } from "../../money";
 
 interface MenuTabProps {
   menu: MenuItem[];
@@ -28,19 +29,22 @@ interface MenuTabProps {
 }
 
 export function MenuTab({ menu, onRefresh }: MenuTabProps) {
-  const { t, euro, symbol, category } = useRestaurantI18n();
+  const { t, euro, symbol, category, restaurantError } = useRestaurantI18n();
   const [selectedCategory, setSelectedCategory] = useState<string>("alle");
   const [search, setSearch] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Partial<MenuItem>>({
     category: "Hauptspeisen",
-    taxRate: 19,
+    taxRate: standardVat(),
     destination: "kueche",
     active: true,
     isFavorite: false,
     allergens: [],
   });
   const [isBusy, setIsBusy] = useState(false);
+  // Fehler der Liste (Löschen, Schnellwahl) und des Bearbeiten-Dialogs (Speichern)
+  const [error, setError] = useState("");
+  const [formError, setFormError] = useState("");
 
   const fmtEuro = euro;
 
@@ -71,17 +75,19 @@ export function MenuTab({ menu, onRefresh }: MenuTabProps) {
       name: "",
       category: selectedCategory === "alle" ? "Hauptspeisen" : (selectedCategory as any),
       priceGross: 9.5,
-      taxRate: 19,
+      taxRate: standardVat(),
       destination: "kueche",
       active: true,
       isFavorite: false,
       allergens: [],
     });
+    setFormError("");
     setIsModalOpen(true);
   };
 
   const handleOpenEdit = (item: MenuItem) => {
     setEditingItem({ ...item });
+    setFormError("");
     setIsModalOpen(true);
   };
 
@@ -91,6 +97,7 @@ export function MenuTab({ menu, onRefresh }: MenuTabProps) {
       return;
     }
     setIsBusy(true);
+    setFormError("");
     try {
       await api("/restaurant/menu", {
         method: "POST",
@@ -99,7 +106,7 @@ export function MenuTab({ menu, onRefresh }: MenuTabProps) {
       setIsModalOpen(false);
       onRefresh();
     } catch (err) {
-      console.error(err);
+      setFormError(restaurantError(err));
     } finally {
       setIsBusy(false);
     }
@@ -108,11 +115,12 @@ export function MenuTab({ menu, onRefresh }: MenuTabProps) {
   const handleDelete = async (id: string) => {
     if (!confirm(t("menu.confirmDelete"))) return;
     setIsBusy(true);
+    setError("");
     try {
       await api(`/restaurant/menu/${id}`, { method: "DELETE" });
       onRefresh();
     } catch (err) {
-      console.error(err);
+      setError(restaurantError(err));
     } finally {
       setIsBusy(false);
     }
@@ -120,6 +128,7 @@ export function MenuTab({ menu, onRefresh }: MenuTabProps) {
 
   const handleToggleFavorite = async (item: MenuItem) => {
     setIsBusy(true);
+    setError("");
     try {
       await api("/restaurant/menu", {
         method: "POST",
@@ -127,7 +136,7 @@ export function MenuTab({ menu, onRefresh }: MenuTabProps) {
       });
       onRefresh();
     } catch (err) {
-      console.error(err);
+      setError(restaurantError(err));
     } finally {
       setIsBusy(false);
     }
@@ -166,6 +175,8 @@ export function MenuTab({ menu, onRefresh }: MenuTabProps) {
         ))}
       </div>
 
+      {error && <p className="error" role="alert">{error}</p>}
+
       <section className="card list-card">
         {filteredMenu.map((item) => (
           <div key={item.id} className="list-row restaurant-menu-row">
@@ -191,7 +202,7 @@ export function MenuTab({ menu, onRefresh }: MenuTabProps) {
                   </>
                 )}
               </span>
-              <span className="pill">{item.taxRate}%</span>
+              <span className="pill">{t("common.rate", { rate: item.taxRate })}</span>
               <strong className="restaurant-amount">{fmtEuro(item.priceGross)}</strong>
             </span>
             <span className="restaurant-menu-actions">
@@ -276,13 +287,17 @@ export function MenuTab({ menu, onRefresh }: MenuTabProps) {
 
               <Field label={t("menu.taxRate")}>
                 <select
-                  value={editingItem.taxRate || 19}
-                  onChange={(e) =>
-                    setEditingItem({ ...editingItem, taxRate: parseInt(e.target.value) || 19 })
-                  }
+                  value={editingItem.taxRate ?? standardVat()}
+                  onChange={(e) => {
+                    const rate = parseFloat(e.target.value);
+                    setEditingItem({ ...editingItem, taxRate: Number.isFinite(rate) ? rate : standardVat() });
+                  }}
                 >
-                  <option value="19">{t("menu.tax19")}</option>
-                  <option value="7">{t("menu.tax7")}</option>
+                  {vatChoices(editingItem.taxRate).map((rate) => (
+                    <option key={rate} value={rate}>
+                      {t("common.rate", { rate })}
+                    </option>
+                  ))}
                 </select>
               </Field>
 
@@ -318,6 +333,8 @@ export function MenuTab({ menu, onRefresh }: MenuTabProps) {
                 <span>{t("menu.active")}</span>
               </label>
             </div>
+
+            {formError && <p className="error" role="alert">{formError}</p>}
 
             <div className="row gap restaurant-form-actions">
               <button type="button" onClick={() => setIsModalOpen(false)} className="button">

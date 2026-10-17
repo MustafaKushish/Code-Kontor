@@ -28,6 +28,7 @@ import { Dialog } from "../../pos/ui";
 import { ModuleCheckout } from "../../pos/ModuleCheckout";
 import { RestaurantPrint } from "./RestaurantPrint";
 import { useRestaurantI18n } from "./i18n";
+import { vatSummary } from "./vat";
 
 interface CounterTabProps {
   menu: MenuItem[];
@@ -35,7 +36,7 @@ interface CounterTabProps {
 }
 
 export function CounterTab({ menu, onRefresh }: CounterTabProps) {
-  const { t, euro, category } = useRestaurantI18n();
+  const { t, euro, category, restaurantError } = useRestaurantI18n();
   const [selectedCategory, setSelectedCategory] = useState<string>("alle");
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<OrderItem[]>([]);
@@ -44,6 +45,7 @@ export function CounterTab({ menu, onRefresh }: CounterTabProps) {
   const [customerPhone, setCustomerPhone] = useState("");
   const [orderNotes, setOrderNotes] = useState("");
   const [isBusy, setIsBusy] = useState(false);
+  const [error, setError] = useState("");
   const [completedOrder, setCompletedOrder] = useState<RestaurantOrder | null>(null);
   const [printType, setPrintType] = useState<"kitchen" | "bar" | "guest" | null>(null);
 
@@ -79,9 +81,7 @@ export function CounterTab({ menu, onRefresh }: CounterTabProps) {
 
     const existingIndex = cart.findIndex((i) => i.menuItemId === item.id && !i.note);
     if (existingIndex > -1) {
-      const updated = [...cart];
-      updated[existingIndex].quantity += 1;
-      setCart(updated);
+      setCart(cart.map((line, i) => (i === existingIndex ? { ...line, quantity: line.quantity + 1 } : line)));
     } else {
       const newItem: OrderItem = {
         id: "cart-" + Math.random().toString(36).slice(2, 9),
@@ -99,20 +99,16 @@ export function CounterTab({ menu, onRefresh }: CounterTabProps) {
   };
 
   const updateQuantity = (index: number, delta: number) => {
-    const updated = [...cart];
-    const newQty = updated[index].quantity + delta;
-    if (newQty <= 0) {
-      updated.splice(index, 1);
-    } else {
-      updated[index].quantity = newQty;
-    }
-    setCart(updated);
+    const newQty = cart[index].quantity + delta;
+    setCart(
+      newQty <= 0
+        ? cart.filter((_, i) => i !== index)
+        : cart.map((line, i) => (i === index ? { ...line, quantity: newQty } : line)),
+    );
   };
 
   const updateItemNote = (index: number, note: string) => {
-    const updated = [...cart];
-    updated[index].note = note;
-    setCart(updated);
+    setCart(cart.map((line, i) => (i === index ? { ...line, note } : line)));
   };
 
   const clearCart = () => {
@@ -123,23 +119,14 @@ export function CounterTab({ menu, onRefresh }: CounterTabProps) {
   };
 
   // Calculations
-  const totalGross = cart.reduce((sum, item) => sum + item.unitPriceGross * item.quantity, 0);
-  const totalNet = cart.reduce((sum, item) => {
-    const taxMultiplier = 1 + item.taxRate / 100;
-    return sum + (item.unitPriceGross * item.quantity) / taxMultiplier;
-  }, 0);
-  const tax7 = cart
-    .filter((i) => i.taxRate === 7)
-    .reduce((sum, item) => sum + (item.unitPriceGross * item.quantity * 7) / 107, 0);
-  const tax19 = cart
-    .filter((i) => i.taxRate === 19)
-    .reduce((sum, item) => sum + (item.unitPriceGross * item.quantity * 19) / 119, 0);
+  const { gross: totalGross, net: totalNet, vat } = vatSummary(cart);
 
   // Die Bestellung geht sofort an die Küche; bezahlt wird über die Kasse (Beleg mit Nummer).
   const [paying, setPaying] = useState<RestaurantOrder | null>(null);
   const handleCheckout = async (pay: boolean) => {
     if (cart.length === 0) return;
     setIsBusy(true);
+    setError("");
     try {
       const created = await api<RestaurantOrder>("/restaurant/orders", {
         method: "POST",
@@ -157,7 +144,7 @@ export function CounterTab({ menu, onRefresh }: CounterTabProps) {
       if (pay) setPaying(created);
       else setCompletedOrder(created);
     } catch (err) {
-      console.error(err);
+      setError(restaurantError(err));
     } finally {
       setIsBusy(false);
     }
@@ -343,23 +330,19 @@ export function CounterTab({ menu, onRefresh }: CounterTabProps) {
             <span>{t("counter.net")}</span>
             <span>{fmtEuro(totalNet)}</span>
           </p>
-          {tax7 > 0 && (
-            <p className="muted">
-              <span>{t("counter.tax7")}</span>
-              <span>{fmtEuro(tax7)}</span>
+          {vat.map((v) => (
+            <p key={v.rate} className="muted">
+              <span>{t("common.vat", { rate: v.rate })}</span>
+              <span>{fmtEuro(v.amount)}</span>
             </p>
-          )}
-          {tax19 > 0 && (
-            <p className="muted">
-              <span>{t("counter.tax19")}</span>
-              <span>{fmtEuro(tax19)}</span>
-            </p>
-          )}
+          ))}
           <p className="grand">
             <span>{t("counter.due")}</span>
             <strong>{fmtEuro(totalGross)}</strong>
           </p>
         </div>
+
+        {error && <p className="error" role="alert">{error}</p>}
 
         <div className="restaurant-actions">
           <button onClick={() => handleCheckout(true)} disabled={isBusy || cart.length === 0} className="button primary">

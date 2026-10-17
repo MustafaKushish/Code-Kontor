@@ -73,9 +73,29 @@ export default function CraftApp({ me, path }: { me: Me; path: string }) {
 
   useEffect(() => {
     loadData();
-    // Auto-refresh every 12 seconds
-    const interval = setInterval(() => loadData(true), 12000);
-    return () => clearInterval(interval);
+    // Alle 12 s still aktualisieren, aber nur solange die Seite sichtbar ist
+    let interval: ReturnType<typeof setInterval> | undefined;
+    const start = () => {
+      if (interval === undefined) interval = setInterval(() => loadData(true), 12000);
+    };
+    const stop = () => {
+      if (interval !== undefined) clearInterval(interval);
+      interval = undefined;
+    };
+    const onVisibility = () => {
+      if (document.hidden) {
+        stop();
+      } else {
+        loadData(true);
+        start();
+      }
+    };
+    if (!document.hidden) start();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, [loadData]);
 
   if (loading) {

@@ -99,8 +99,8 @@ export function CheckInTab({
       });
       await loadActiveVisits();
       onRefresh();
-    } catch {
-      // Fehlerbehandlung
+    } catch (err: unknown) {
+      setFeedback({ success: false, message: fitnessError(err), alertLevel: "error" });
     } finally {
       setCheckingOutId(null);
     }
@@ -172,26 +172,6 @@ export function CheckInTab({
               {t("checkin.submit")}
             </button>
           </form>
-
-          {/* Schnelltasten für Test/Empfang */}
-          <div className="row wrap gap fitness-quick">
-            <span className="small muted">{t("checkin.quick")}</span>
-            {["M-1001", "M-1002", "M-1003", "M-1004", "M-1005", "M-1006"].map((num) => (
-              <button
-                key={num}
-                type="button"
-                onClick={() => {
-                  setQuery(num);
-                  setTimeout(() => {
-                    inputRef.current?.focus();
-                  }, 50);
-                }}
-                className="chip mono"
-              >
-                {num}
-              </button>
-            ))}
-          </div>
 
           {/* RÜCKMELDUNG / VALIDIERUNGS-SIGNAL (GRÜN / ROT / GELB) */}
           {feedback && (

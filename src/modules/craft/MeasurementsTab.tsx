@@ -29,7 +29,7 @@ interface MeasurementsTabProps {
 }
 
 export function MeasurementsTab({ measurements, projects, onRefresh, isManager }: MeasurementsTabProps) {
-  const { t, num, categoryLabel, unitLabel } = useCraftI18n();
+  const { t, num, categoryLabel, unitLabel, craftError } = useCraftI18n();
   const [selectedProjectId, setSelectedProjectId] = useState<string>("alle");
   const [search, setSearch] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -39,6 +39,7 @@ export function MeasurementsTab({ measurements, projects, onRefresh, isManager }
     formula: "",
   });
   const [isBusy, setIsBusy] = useState(false);
+  const [error, setError] = useState("");
 
   const filtered = measurements.filter((m) => {
     const matchesProj = selectedProjectId === "alle" || m.projectId === selectedProjectId;
@@ -59,6 +60,7 @@ export function MeasurementsTab({ measurements, projects, onRefresh, isManager }
       unit: "m²",
       notes: "",
     });
+    setError("");
     setIsModalOpen(true);
   };
 
@@ -82,6 +84,7 @@ export function MeasurementsTab({ measurements, projects, onRefresh, isManager }
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingMeasurement.projectId || !editingMeasurement.roomName) return;
+    setError("");
     setIsBusy(true);
     try {
       await api("/craft/measurements", {
@@ -91,19 +94,20 @@ export function MeasurementsTab({ measurements, projects, onRefresh, isManager }
       setIsModalOpen(false);
       onRefresh();
     } catch (err) {
-      console.error(err);
+      setError(craftError(err));
     } finally {
       setIsBusy(false);
     }
   };
 
   const handleDelete = async (id: string) => {
+    setError("");
     setIsBusy(true);
     try {
       await api(`/craft/measurements/${id}`, { method: "DELETE" });
       onRefresh();
     } catch (err) {
-      console.error(err);
+      setError(craftError(err));
     } finally {
       setIsBusy(false);
     }
@@ -118,6 +122,7 @@ export function MeasurementsTab({ measurements, projects, onRefresh, isManager }
 
   return (
     <div className="stack">
+      {error && !isModalOpen && <p className="error" role="alert">{error}</p>}
       <div className="toolbar craft-toolbar">
         <div className="craft-toolbar-row">
           <label className="search">
@@ -223,7 +228,7 @@ export function MeasurementsTab({ measurements, projects, onRefresh, isManager }
       )}
 
       {isModalOpen && (
-        <Dialog title={t("measurements.dialogTitle")} onClose={() => setIsModalOpen(false)}>
+        <Dialog title={t("measurements.dialogTitle")} onClose={() => { setError(""); setIsModalOpen(false); }}>
           <form onSubmit={handleSave} className="stack">
             <div className="grid form-grid">
               <Field label={t("common.projectOrSite")} required wide>
@@ -295,8 +300,10 @@ export function MeasurementsTab({ measurements, projects, onRefresh, isManager }
               </Field>
             </div>
 
+            {error && <p className="error" role="alert">{error}</p>}
+
             <div className="row gap craft-dialog-actions">
-              <button type="button" onClick={() => setIsModalOpen(false)} className="button">
+              <button type="button" onClick={() => { setError(""); setIsModalOpen(false); }} className="button">
                 {t("common.cancel")}
               </button>
               <button

@@ -72,7 +72,7 @@ export const it: WorkshopDict = {
   posType: { labor: "MO", part: "RIC" },
   payment: { bar: "Contanti", karte: "Carta", rechnung: "Fattura", pos: "Cassa" },
   inspection: {
-    status: { ok: "OK", warning: "Avviso", defect: "Difetto" },
+    status: { ok: "OK", warning: "Avviso", defect: "Difetto", notChecked: "Non controllato" },
     categories: {
       bremsen: "Freni",
       reifen: "Pneumatici",
@@ -202,6 +202,7 @@ export const it: WorkshopDict = {
     statusError: "Errore durante l’aggiornamento dello stato.",
     positionsError: "Errore durante il salvataggio delle voci.",
     checklistError: "Errore durante l’aggiornamento della checklist.",
+    notesError: "Errore durante il salvataggio delle note.",
     deleteError: "Errore durante l’eliminazione dell’ordine.",
   },
   parts: {
@@ -231,6 +232,7 @@ export const it: WorkshopDict = {
     stock: "Giacenza attuale",
     purchasePrice: "Prezzo d’acquisto netto ({symbol})",
     salePrice: "Prezzo di vendita netto ({symbol})",
+    vatRate: "Aliquota IVA",
     save: "Salva ricambio",
     required: "Compilare almeno codice ricambio e descrizione.",
     saveError: "Errore durante il salvataggio del ricambio.",

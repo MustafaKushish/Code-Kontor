@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Printer, X, HardHat, ShieldCheck } from "lucide-react";
-import type { CraftReport } from "../../../shared/craft";
+import { craftGrossShares, craftVatTotals, type CraftReport } from "../../../shared/craft";
 import type { CompanyProfile } from "../../../shared/company";
 import { useCraftI18n } from "./i18n";
 
@@ -24,6 +24,9 @@ export function CraftPrint({ report, company, onClose }: CraftPrintProps) {
 
   const fmtEuro = money;
   const currency = symbol();
+  const vatLines = craftVatTotals(report.items);
+  // § 35a EStG (Steuerermäßigung für Handwerkerleistungen) gilt nur in Deutschland
+  const showTaxProof = company?.country === "DE";
 
   return createPortal(
     <div className="print-layer">
@@ -52,7 +55,7 @@ export function CraftPrint({ report, company, onClose }: CraftPrintProps) {
               <HardHat size={22} /> {company?.name || t("print.companyFallback")}
             </strong>
             <p className="craft-print-muted">
-              {company?.legalForm || "GmbH & Co. KG"} · {t("print.masterBusiness")}
+              {[company?.legalForm, t("print.masterBusiness")].filter(Boolean).join(" · ")}
             </p>
             {company?.street && (
               <p className="craft-print-muted">
@@ -125,23 +128,29 @@ export function CraftPrint({ report, company, onClose }: CraftPrintProps) {
         {/* Summen & § 35a Steuer-Hinweis */}
         <section className="craft-print-two">
           {/* § 35a EStG Handwerkerleistungen Hinweis */}
+          {showTaxProof ? (
           <div className="craft-print-box">
             <strong className="craft-print-35a">
               <ShieldCheck size={15} /> {t("print.taxProof")}
             </strong>
             <p className="craft-print-small">
               {t("print.taxProofBefore")}{" "}
-              <strong>{t("print.taxProofAmount", { amount: fmtEuro(report.totalWageNet * 1.19) })}</strong>{" "}
+              <strong>{t("print.taxProofAmount", { amount: fmtEuro(craftGrossShares(report.items).wageGross) })}</strong>{" "}
               {t("print.taxProofAfter")}
             </p>
           </div>
+          ) : (
+            <div />
+          )}
 
           {/* Summen-Block */}
           <div className="print-totals craft-print-totals">
             <p><span>{t("print.wageCosts")}</span><span>{fmtEuro(report.totalWageNet)}</span></p>
             <p><span>{t("print.materialCosts")}</span><span>{fmtEuro(report.totalMaterialNet)}</span></p>
             <p><span>{t("print.totalNet")}</span><span>{fmtEuro(report.totalWageNet + report.totalMaterialNet)}</span></p>
-            <p><span>{t("print.vat", { rate: num(19) })}</span><span>{fmtEuro(report.totalTax)}</span></p>
+            {vatLines.map((v) => (
+              <p key={v.rate}><span>{t("print.vat", { rate: num(v.rate) })}</span><span>{fmtEuro(vatLines.length === 1 ? report.totalTax : v.tax)}</span></p>
+            ))}
             <p className="grand"><strong>{t("print.totalGross")}</strong><strong>{fmtEuro(report.totalGross)}</strong></p>
           </div>
         </section>

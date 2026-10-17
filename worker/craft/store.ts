@@ -534,7 +534,11 @@ export class CraftStore {
       ? this.sql.exec<any>(query, projectId).toArray()
       : this.sql.exec<any>(query).toArray();
 
-    return rows.map(this.mapReport);
+    // Liste ohne Unterschriftsbilder (Data-URLs sind groß); das Bild liefert getReport
+    return rows.map((r) => {
+      const { signatureDataUrl: _image, ...report } = this.mapReport(r);
+      return report;
+    });
   }
 
   getReport(id: string): CraftReport {
@@ -823,6 +827,7 @@ export class CraftStore {
       workDescription: r.work_description || "",
       status: r.status as CraftReportStatus,
       signatureDataUrl: r.signature_data_url || undefined,
+      hasSignature: Boolean(r.signature_data_url),
       signedByName: r.signed_by_name || undefined,
       signedAt: r.signed_at || undefined,
       totalWageNet: r.total_wage_net,

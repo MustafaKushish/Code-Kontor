@@ -1,7 +1,8 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Printer, X } from "lucide-react";
-import type { WorkshopOrder } from "../../../shared/workshop";
+import { billedPositions, workshopTotals, type WorkshopOrder } from "../../../shared/workshop";
+import { api } from "../../api";
 import type { CompanyProfile } from "../../../shared/company";
 import { useWorkshopI18n } from "./i18n";
 
@@ -12,7 +13,7 @@ interface WorkshopPrintProps {
   onClose: () => void;
 }
 
-export function WorkshopPrint({ order, company, type, onClose }: WorkshopPrintProps) {
+export function WorkshopPrint({ order, company: given, type, onClose }: WorkshopPrintProps) {
   const isInvoice = type === "invoice";
   const { t, euro: fmtEuro, num, day, lift, unit, payment, inspectionName } = useWorkshopI18n();
 
@@ -21,8 +22,12 @@ export function WorkshopPrint({ order, company, type, onClose }: WorkshopPrintPr
   };
 
   // Druckmodus der Plattform: blendet beim Drucken alles außer dem Blatt aus
+  // Firmendaten wie bei den anderen Ausdrucken: übergeben oder aus /company
+  const [company, setCompany] = useState<CompanyProfile | null>(given ?? null);
+
   useEffect(() => {
     document.body.classList.add("ck-printing");
+    if (!given) api<{ company: CompanyProfile | null }>("/company").then((d) => setCompany(d.company)).catch(() => {});
     return () => document.body.classList.remove("ck-printing");
   }, []);
 
@@ -109,7 +114,7 @@ export function WorkshopPrint({ order, company, type, onClose }: WorkshopPrintPr
                     <td>{inspectionName(item)}</td>
                     <td className="num">
                       <strong>
-                        {item.status === "ok" ? t("inspection.status.ok") : item.status === "warning" ? t("inspection.status.warning") : t("inspection.status.defect")}
+                        {t(`inspection.status.${item.status === "not_checked" ? "notChecked" : item.status}`)}
                         {item.value ? ` (${item.value})` : ""}
                       </strong>
                     </td>
@@ -166,10 +171,13 @@ export function WorkshopPrint({ order, company, type, onClose }: WorkshopPrintPr
             <span>{t("print.totalNet")}</span>
             <span>{fmtEuro(order.totalNet)}</span>
           </p>
-          <p>
-            <span>{t("print.vat", { rate: 19 })}</span>
-            <span>{fmtEuro(order.totalTax)}</span>
-          </p>
+          {/* Eine Zeile je Steuersatz der abgerechneten Positionen */}
+          {workshopTotals(billedPositions(order)).vat.map((v) => (
+            <p key={v.rate}>
+              <span>{t("print.vat", { rate: num(v.rate) })}</span>
+              <span>{fmtEuro(v.tax)}</span>
+            </p>
+          ))}
           <p className="grand">
             <strong>{t("print.total")}</strong>
             <strong>{fmtEuro(order.totalGross)}</strong>

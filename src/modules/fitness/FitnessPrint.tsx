@@ -1,13 +1,15 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Printer, X, Dumbbell, ShieldCheck, QrCode, CheckCircle2 } from "lucide-react";
+import { api } from "../../api";
+import type { CompanyProfile } from "../../../shared/company";
 import type { FitnessMember, FitnessPlan } from "../../../shared/fitness";
 import { useFitnessI18n } from "./i18n";
 
 interface FitnessPrintProps {
   member: FitnessMember;
   plan?: FitnessPlan;
-  companyName?: string;
+  company?: CompanyProfile | null;
   type: "contract" | "card";
   onClose: () => void;
 }
@@ -15,7 +17,7 @@ interface FitnessPrintProps {
 export function FitnessPrint({
   member,
   plan,
-  companyName = "Code Kontor Fitness & Athletics",
+  company: given,
   type,
   onClose,
 }: FitnessPrintProps) {
@@ -26,9 +28,15 @@ export function FitnessPrint({
     window.print();
   };
 
+  // Firmendaten wie bei den anderen Ausdrucken: übergeben oder aus /company
+  const [company, setCompany] = useState<CompanyProfile | null>(given ?? null);
+  const companyName = company?.name || "";
+  const companyAddress = [company?.street, [company?.postalCode, company?.city].filter(Boolean).join(" ")].filter(Boolean).join(" · ");
+
   // Druckebene: beim Drucken wird nur das Blatt ausgegeben (Regeln in styles.css)
   useEffect(() => {
     document.body.classList.add("ck-printing");
+    if (!given) api<{ company: CompanyProfile | null }>("/company").then((d) => setCompany(d.company)).catch(() => {});
     return () => document.body.classList.remove("ck-printing");
   }, []);
 
@@ -60,7 +68,7 @@ export function FitnessPrint({
                 <Dumbbell size={20} />
                 <span>{companyName}</span>
               </strong>
-              <p className="fitness-print-sub">{t("print.subBrand")}</p>
+              {companyAddress && <p className="fitness-print-sub">{companyAddress}</p>}
             </div>
             <div className="print-meta">
               <strong>{t("print.memberNo", { n: member.memberNumber })}</strong>
@@ -144,7 +152,7 @@ export function FitnessPrint({
               <ShieldCheck size={12} /> {t("print.sepaTitle")}
             </h2>
             <p className="plain fitness-print-sub">
-              {t("print.sepaText", { company: companyName })}
+              {t("print.sepaText", { company: companyName || "____________________" })}
             </p>
             <div className="fitness-print-sepa">
               <div>
@@ -153,7 +161,8 @@ export function FitnessPrint({
               </div>
               <div>
                 <small>{t("print.creditorId")}</small>
-                <strong>DE98ZZZ00002148911 / {member.memberNumber}</strong>
+                {/* Keine Gläubiger-ID hinterlegt: Linie zum Ausfüllen von Hand */}
+                <strong>____________________ / {member.memberNumber}</strong>
               </div>
             </div>
           </section>

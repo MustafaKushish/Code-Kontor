@@ -131,3 +131,24 @@ export interface WorkshopStats {
   tireSetsStored: number;
   lowStockPartsCount: number;
 }
+
+/** Positionen, die abgerechnet werden: bei freigegebenem Kostenvoranschlag nur die freigegebenen. */
+export const billedPositions = (order: Pick<WorkshopOrder, "estimateStatus" | "positions">) =>
+  order.estimateStatus === "approved" ? order.positions.filter((p) => p.approvedByCustomer) : order.positions;
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Summen je Steuersatz (eine Zeile pro Satz, auch 0 %) und gesamt, in Euro auf Cent gerundet. */
+export function workshopTotals(positions: Pick<OrderPosition, "quantity" | "unitPriceNet" | "taxRate">[]) {
+  const byRate = new Map<number, number>();
+  for (const p of positions) {
+    const rate = Number(p.taxRate) || 0;
+    byRate.set(rate, (byRate.get(rate) ?? 0) + p.quantity * p.unitPriceNet);
+  }
+  const vat = [...byRate.entries()]
+    .sort((a, b) => b[0] - a[0])
+    .map(([rate, net]) => ({ rate, net: round2(net), tax: round2((net * rate) / 100) }));
+  const totalNet = round2(vat.reduce((s, v) => s + v.net, 0));
+  const totalTax = round2(vat.reduce((s, v) => s + v.tax, 0));
+  return { vat, totalNet, totalTax, totalGross: round2(totalNet + totalTax) };
+}

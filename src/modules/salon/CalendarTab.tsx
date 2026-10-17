@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, Plus, Clock, CheckCircle, Play, X, Sparkles 
 import { api } from "../../api";
 import { Field } from "../../components";
 import type { AppointmentStatus, SalonAppointment, SalonClient, SalonService, SalonStaff } from "../../../shared/salon";
-import { addMinutesToTime, timeToMinutes } from "../../../shared/salon";
+import { addMinutesToTime, localDay, timeToMinutes } from "../../../shared/salon";
 import { useSalonI18n } from "./i18n";
 import { Dialog } from "../../pos/ui";
 
@@ -15,7 +15,7 @@ export function CalendarTab({
   onNavigateToCheckout?: (app: SalonAppointment) => void;
 }) {
   const { s, euro, day: formatDay, errorText } = useSalonI18n();
-  const [selectedDay, setSelectedDay] = useState(new Date().toISOString().slice(0, 10));
+  const [selectedDay, setSelectedDay] = useState(localDay());
   const [staff, setStaff] = useState<SalonStaff[]>([]);
   const [services, setServices] = useState<SalonService[]>([]);
   const [clients, setClients] = useState<SalonClient[]>([]);
@@ -69,7 +69,7 @@ export function CalendarTab({
   const handleDayShift = (days: number) => {
     const d = new Date(selectedDay + "T12:00:00");
     d.setDate(d.getDate() + days);
-    setSelectedDay(d.toISOString().slice(0, 10));
+    setSelectedDay(localDay(d));
   };
 
   const handleOpenSlot = (staffId: string, startTime: string) => {
@@ -195,7 +195,7 @@ export function CalendarTab({
           <button className="icon-button" onClick={() => handleDayShift(1)} title={s("calendar.nextDay")} aria-label={s("calendar.nextDay")}>
             <ChevronRight size={20} className="flip-rtl" />
           </button>
-          <button className="button" onClick={() => setSelectedDay(new Date().toISOString().slice(0, 10))}>
+          <button className="button" onClick={() => setSelectedDay(localDay())}>
             {s("calendar.today")}
           </button>
         </div>

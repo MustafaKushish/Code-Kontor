@@ -72,7 +72,7 @@ export const tr: WorkshopDict = {
   posType: { labor: "İŞÇ", part: "PRÇ" },
   payment: { bar: "Nakit", karte: "Kart", rechnung: "Fatura", pos: "Kasa" },
   inspection: {
-    status: { ok: "Tamam", warning: "Uyarı", defect: "Kusur" },
+    status: { ok: "Tamam", warning: "Uyarı", defect: "Kusur", notChecked: "Kontrol edilmedi" },
     categories: {
       bremsen: "Frenler",
       reifen: "Lastikler",
@@ -202,6 +202,7 @@ export const tr: WorkshopDict = {
     statusError: "Durum güncellenirken hata oluştu.",
     positionsError: "Kalemler kaydedilirken hata oluştu.",
     checklistError: "Kontrol listesi güncellenirken hata oluştu.",
+    notesError: "Notlar kaydedilirken hata oluştu.",
     deleteError: "İş emri silinirken hata oluştu.",
   },
   parts: {
@@ -231,6 +232,7 @@ export const tr: WorkshopDict = {
     stock: "Mevcut stok",
     purchasePrice: "Net alış fiyatı ({symbol})",
     salePrice: "Net satış fiyatı ({symbol})",
+    vatRate: "KDV oranı",
     save: "Parçayı kaydet",
     required: "Lütfen en azından parça numarası ve açıklama girin.",
     saveError: "Parça kaydedilirken hata oluştu.",

@@ -71,7 +71,7 @@ export const de = {
   posType: { labor: "AW", part: "ET" },
   payment: { bar: "Bar", karte: "Karte", rechnung: "Rechnung", pos: "Kasse" },
   inspection: {
-    status: { ok: "OK", warning: "Hinweis", defect: "Mangel" },
+    status: { ok: "OK", warning: "Hinweis", defect: "Mangel", notChecked: "Nicht geprüft" },
     categories: {
       bremsen: "Bremsen",
       reifen: "Reifen",
@@ -201,6 +201,7 @@ export const de = {
     statusError: "Fehler beim Aktualisieren des Status.",
     positionsError: "Fehler beim Speichern der Positionen.",
     checklistError: "Fehler beim Aktualisieren der Checkliste.",
+    notesError: "Fehler beim Speichern der Notizen.",
     deleteError: "Fehler beim Löschen des Auftrags.",
   },
   parts: {
@@ -230,6 +231,7 @@ export const de = {
     stock: "Aktueller Lagerbestand",
     purchasePrice: "Einkaufspreis Netto ({symbol})",
     salePrice: "Verkaufspreis Netto ({symbol})",
+    vatRate: "Steuersatz",
     save: "Teil speichern",
     required: "Bitte mindestens Teilenummer und Bezeichnung ausfüllen.",
     saveError: "Fehler beim Speichern des Teils.",

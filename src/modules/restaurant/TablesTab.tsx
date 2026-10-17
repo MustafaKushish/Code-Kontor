@@ -27,6 +27,7 @@ import type {
 import { Dialog } from "../../pos/ui";
 import { RestaurantPrint } from "./RestaurantPrint";
 import { useRestaurantI18n } from "./i18n";
+import { vatSummary } from "./vat";
 
 // Gänge so, wie sie an den Server gehen; angezeigt wird der Text der Sprache
 const COURSES: OrderItem["course"][] = ["Sofort", "1. Gang", "2. Gang", "Dessert", "Getränke"];
@@ -40,7 +41,7 @@ interface TablesTabProps {
 }
 
 export function TablesTab({ tables, menu, orders, isManager, onRefresh }: TablesTabProps) {
-  const { t, euro, area, course } = useRestaurantI18n();
+  const { t, euro, area, course, restaurantError } = useRestaurantI18n();
   const [selectedArea, setSelectedArea] = useState<TableArea | "alle">("alle");
   const [selectedTable, setSelectedTable] = useState<RestaurantTable | null>(null);
   const [isEditTableModalOpen, setIsEditTableModalOpen] = useState(false);
@@ -59,6 +60,9 @@ export function TablesTab({ tables, menu, orders, isManager, onRefresh }: Tables
     type: "kitchen" | "bar" | "guest";
   } | null>(null);
   const [isBusy, setIsBusy] = useState(false);
+  // Fehler im Tisch-Dialog (Positionen) und im Tisch-Formular
+  const [error, setError] = useState("");
+  const [tableError, setTableError] = useState("");
 
   // Format currency
   const fmtEuro = euro;
@@ -75,14 +79,17 @@ export function TablesTab({ tables, menu, orders, isManager, onRefresh }: Tables
     (t) => selectedArea === "alle" || t.area === selectedArea
   );
 
-  const activeOrder = selectedTable?.currentOrderId
-    ? orders.find((o) => o.id === selectedTable.currentOrderId) || null
+  // Aktueller Stand des gewählten Tisches (nach dem Neuladen hat er z. B. eine neue Bestellung)
+  const liveTable = selectedTable ? tables.find((x) => x.id === selectedTable.id) ?? selectedTable : null;
+  const activeOrder = liveTable?.currentOrderId
+    ? orders.find((o) => o.id === liveTable.currentOrderId) || null
     : null;
 
   const handleSaveTable = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingTable.tableNumber || !editingTable.name) return;
     setIsBusy(true);
+    setTableError("");
     try {
       await api("/restaurant/tables", {
         method: "POST",
@@ -92,7 +99,7 @@ export function TablesTab({ tables, menu, orders, isManager, onRefresh }: Tables
       setEditingTable({ area: "innen", seats: 4, status: "frei" });
       onRefresh();
     } catch (err) {
-      console.error(err);
+      setTableError(restaurantError(err));
     } finally {
       setIsBusy(false);
     }
@@ -101,6 +108,7 @@ export function TablesTab({ tables, menu, orders, isManager, onRefresh }: Tables
   const handleAddItemToTable = async (menuItem: MenuItem) => {
     if (!selectedTable) return;
     setIsBusy(true);
+    setError("");
     try {
       const newItem: OrderItem = {
         id: "item-" + Math.random().toString(36).slice(2, 9),
@@ -134,7 +142,7 @@ export function TablesTab({ tables, menu, orders, isManager, onRefresh }: Tables
       setItemNote("");
       onRefresh();
     } catch (err) {
-      console.error(err);
+      setError(restaurantError(err));
     } finally {
       setIsBusy(false);
     }
@@ -143,12 +151,13 @@ export function TablesTab({ tables, menu, orders, isManager, onRefresh }: Tables
   const handleRemoveItem = async (itemId: string) => {
     if (!activeOrder) return;
     setIsBusy(true);
+    setError("");
     try {
       // Ist die letzte Position weg, storniert der Server die Bestellung und gibt den Tisch frei
       await api(`/restaurant/orders/${activeOrder.id}/items/${itemId}`, { method: "DELETE" });
       onRefresh();
     } catch (err) {
-      console.error(err);
+      setError(restaurantError(err));
     } finally {
       setIsBusy(false);
     }
@@ -191,6 +200,7 @@ export function TablesTab({ tables, menu, orders, isManager, onRefresh }: Tables
               seats: 4,
               status: "frei",
             });
+            setTableError("");
             setIsEditTableModalOpen(true);
           }}
           className="button primary"
@@ -209,7 +219,10 @@ export function TablesTab({ tables, menu, orders, isManager, onRefresh }: Tables
           return (
             <button
               key={table.id}
-              onClick={() => setSelectedTable(table)}
+              onClick={() => {
+                setError("");
+                setSelectedTable(table);
+              }}
               className={`tile restaurant-table ${isSelected ? "selected" : isBillRequested ? "bill" : isOccupied ? "occupied" : ""}`}
             >
               <span className="restaurant-table-top">
@@ -282,18 +295,12 @@ export function TablesTab({ tables, menu, orders, isManager, onRefresh }: Tables
                     <span>{t("tables.subtotalNet")}</span>
                     <span>{fmtEuro(activeOrder.totalNet)}</span>
                   </p>
-                  {activeOrder.totalTax7 > 0 && (
-                    <p className="muted">
-                      <span>{t("tables.tax7")}</span>
-                      <span>{fmtEuro(activeOrder.totalTax7)}</span>
+                  {vatSummary(activeOrder.items).vat.map((v) => (
+                    <p key={v.rate} className="muted">
+                      <span>{t("common.vat", { rate: v.rate })}</span>
+                      <span>{fmtEuro(v.amount)}</span>
                     </p>
-                  )}
-                  {activeOrder.totalTax19 > 0 && (
-                    <p className="muted">
-                      <span>{t("tables.tax19")}</span>
-                      <span>{fmtEuro(activeOrder.totalTax19)}</span>
-                    </p>
-                  )}
+                  ))}
                   <p className="grand">
                     <span>{t("tables.totalGross")}</span>
                     <strong>{fmtEuro(activeOrder.totalGross)}</strong>
@@ -309,6 +316,8 @@ export function TablesTab({ tables, menu, orders, isManager, onRefresh }: Tables
                 </p>
               </div>
             )}
+
+            {error && <p className="error" role="alert">{error}</p>}
 
             <div className="stack-sm restaurant-add">
               <div className="section-head">
@@ -466,6 +475,8 @@ export function TablesTab({ tables, menu, orders, isManager, onRefresh }: Tables
                 />
               </Field>
             </div>
+
+            {tableError && <p className="error" role="alert">{tableError}</p>}
 
             <div className="row gap restaurant-form-actions">
               <button

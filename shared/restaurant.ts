@@ -80,5 +80,6 @@ export interface RestaurantStats {
   waitingPickupCount: number;
   ordersTodayCount: number;
   revenueTodayGross: number;
-  averagePrepTimeMinutes: number;
+  /** Ø Minuten von Bestellung bis fertig (heute); null, solange heute nichts fertig wurde */
+  averagePrepTimeMinutes: number | null;
 }

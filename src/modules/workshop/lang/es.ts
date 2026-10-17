@@ -72,7 +72,7 @@ export const es: WorkshopDict = {
   posType: { labor: "MO", part: "REC" },
   payment: { bar: "Efectivo", karte: "Tarjeta", rechnung: "Factura", pos: "Caja" },
   inspection: {
-    status: { ok: "OK", warning: "Aviso", defect: "Defecto" },
+    status: { ok: "OK", warning: "Aviso", defect: "Defecto", notChecked: "No revisado" },
     categories: {
       bremsen: "Frenos",
       reifen: "Neumáticos",
@@ -202,6 +202,7 @@ export const es: WorkshopDict = {
     statusError: "Error al actualizar el estado.",
     positionsError: "Error al guardar las líneas.",
     checklistError: "Error al actualizar la lista de control.",
+    notesError: "Error al guardar las notas.",
     deleteError: "Error al eliminar la orden.",
   },
   parts: {
@@ -231,6 +232,7 @@ export const es: WorkshopDict = {
     stock: "Stock actual",
     purchasePrice: "Precio de compra neto ({symbol})",
     salePrice: "Precio de venta neto ({symbol})",
+    vatRate: "Tipo de IVA",
     save: "Guardar recambio",
     required: "Indique al menos la referencia y la denominación.",
     saveError: "Error al guardar el recambio.",

@@ -23,7 +23,7 @@ import { api } from "../../api";
 import { Field } from "../../components";
 import { Dialog } from "../../pos/ui";
 import { ModuleCheckout } from "../../pos/ModuleCheckout";
-import type { InspectionItem, OrderPosition, SparePart, WorkshopOrder, WorkshopOrderStatus } from "../../../shared/workshop";
+import { billedPositions, workshopTotals, type InspectionItem, type OrderPosition, type SparePart, type WorkshopOrder, type WorkshopOrderStatus } from "../../../shared/workshop";
 import { WorkshopPrint } from "./WorkshopPrint";
 import { standardVat } from "../../money";
 import { useWorkshopI18n } from "./i18n";
@@ -418,7 +418,9 @@ export function OrderDetailsModal({
               {/* Summen */}
               <div className="workshop-totals">
                 <div><span className="muted">{t("details.totalNet")}</span><span className="workshop-num">{fmtEuro(order.totalNet)}</span></div>
-                <div><span className="muted">{t("details.vat", { rate: 19 })}</span><span className="workshop-num">{fmtEuro(order.totalTax)}</span></div>
+                {workshopTotals(billedPositions(order)).vat.map((v) => (
+                  <div key={v.rate}><span className="muted">{t("details.vat", { rate: num(v.rate) })}</span><span className="workshop-num">{fmtEuro(v.tax)}</span></div>
+                ))}
                 <div className="workshop-totals-sum"><span>{t("details.total")}</span><span className="workshop-num">{fmtEuro(order.totalGross)}</span></div>
               </div>
             </div>
@@ -505,6 +507,9 @@ export function OrderDetailsModal({
                       });
                       setOrder(updated);
                       onUpdated(updated);
+                      setErrorMsg("");
+                    } catch (err: unknown) {
+                      setErrorMsg(workshopError(err, t("details.notesError")));
                     } finally {
                       setSaving(false);
                     }

@@ -72,7 +72,7 @@ export const ar: WorkshopDict = {
   posType: { labor: "عمل", part: "قطعة" },
   payment: { bar: "نقدًا", karte: "بطاقة", rechnung: "فاتورة", pos: "الكاشير" },
   inspection: {
-    status: { ok: "سليم", warning: "ملاحظة", defect: "عيب" },
+    status: { ok: "سليم", warning: "ملاحظة", defect: "عيب", notChecked: "لم يُفحص" },
     categories: {
       bremsen: "الفرامل",
       reifen: "الإطارات",
@@ -202,6 +202,7 @@ export const ar: WorkshopDict = {
     statusError: "حدث خطأ أثناء تحديث الحالة.",
     positionsError: "حدث خطأ أثناء حفظ البنود.",
     checklistError: "حدث خطأ أثناء تحديث قائمة الفحص.",
+    notesError: "حدث خطأ أثناء حفظ الملاحظات.",
     deleteError: "حدث خطأ أثناء حذف الأمر.",
   },
   parts: {
@@ -231,6 +232,7 @@ export const ar: WorkshopDict = {
     stock: "المخزون الحالي",
     purchasePrice: "سعر الشراء الصافي ({symbol})",
     salePrice: "سعر البيع الصافي ({symbol})",
+    vatRate: "نسبة الضريبة",
     save: "حفظ القطعة",
     required: "يرجى إدخال رقم القطعة والوصف على الأقل.",
     saveError: "حدث خطأ أثناء حفظ القطعة.",
