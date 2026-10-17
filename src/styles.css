@@ -1245,3 +1245,57 @@ input[aria-invalid="true"] { border-color: var(--error); }
 /* Registrierung: was das gewählte Land bedeutet */
 .country-facts { display: grid; gap: 4px; margin: -6px 0 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; color: var(--muted); font-size: 0.86rem; }
 .country-facts strong { color: var(--ink); font-weight: 600; }
+
+/* ---------- Seite „Firma“: Bereiche direkt bearbeiten ---------- */
+fieldset.grid { border: 0; padding: 0; margin: 0; min-width: 0; }
+.settings-layout { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 28px; align-items: start; }
+.settings-nav { position: sticky; top: 24px; display: grid; gap: 4px; }
+.settings-nav button { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border: 0; border-radius: 12px; background: none; color: var(--muted); font-weight: 600; text-align: start; transition: background 0.15s, color 0.15s; }
+.settings-nav button:hover { color: var(--ink); background: var(--panel-2); }
+.settings-nav button.active { color: var(--ink); background: var(--panel); box-shadow: var(--shadow-sm); }
+.settings-nav button.active svg { color: var(--brand); }
+.settings-section { scroll-margin-top: 24px; }
+.settings-section .card-title { margin: 0 0 4px; }
+.settings-section > div > p { margin: 0; }
+.settings-subform { border-top: 1px solid var(--line); padding-top: 18px; }
+.settings-save { align-items: center; }
+.settings-save .success-text { align-items: center; }
+.settings-toggles { padding: 0; }
+.settings-toggle { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 4px; cursor: pointer; }
+.settings-toggle + .settings-toggle { border-top: 1px solid var(--line); }
+.settings-toggle .list-main { display: grid; gap: 2px; }
+.settings-toggle input[role="switch"] {
+  appearance: none; flex: none; width: 46px; height: 28px; margin: 0; border-radius: 999px;
+  background: var(--line-strong); position: relative; cursor: pointer; transition: background 0.2s;
+}
+.settings-toggle input[role="switch"]::after {
+  content: ""; position: absolute; top: 3px; inset-inline-start: 3px; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--panel); box-shadow: var(--shadow-sm); transition: transform 0.2s;
+}
+.settings-toggle input[role="switch"]:checked { background: var(--brand); }
+.settings-toggle input[role="switch"]:checked::after { transform: translateX(18px); }
+[dir="rtl"] .settings-toggle input[role="switch"]:checked::after { transform: translateX(-18px); }
+.settings-toggle input[role="switch"]:disabled { opacity: 0.5; cursor: default; }
+.settings-toggle input[role="switch"]:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.settings-display { align-items: center; }
+@media (max-width: 1100px) {
+  .settings-layout { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .settings-nav {
+    top: 12px; z-index: 5; display: flex; overflow-x: auto; scrollbar-width: none; padding: 6px;
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px;
+  }
+  .settings-nav::-webkit-scrollbar { display: none; }
+  .settings-nav button { flex: none; border-radius: 999px; padding: 8px 14px; }
+  .settings-section { scroll-margin-top: 72px; }
+}
+@media (max-width: 900px) {
+  .settings-nav { top: calc(72px + env(safe-area-inset-top)); background: var(--panel); box-shadow: var(--shadow-sm); }
+  .settings-section { scroll-margin-top: calc(130px + env(safe-area-inset-top)); }
+}
+.logo-upload { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.logo-box { display: grid; place-items: center; width: 160px; height: 80px; border: 1px dashed var(--line-strong); border-radius: 14px; background: var(--panel-2); color: var(--faint); overflow: hidden; }
+.logo-box img { max-width: 140px; max-height: 64px; object-fit: contain; }
+.logo-upload input[type="file"] { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+@media (max-width: 640px) {
+  .settings-section fieldset.grid { grid-template-columns: minmax(0, 1fr); }
+}

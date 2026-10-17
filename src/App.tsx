@@ -40,7 +40,6 @@ const PosKiosk = lazy(() => import("./pos/PosApp").then((m) => ({ default: m.Kio
 export function App() {
   const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
-  const [editingCompany, setEditingCompany] = useState(false);
   const path = usePath();
 
   const refresh = useCallback(async () => {
@@ -96,16 +95,12 @@ export function App() {
   if (!me) return <AuthPage onDone={refresh} />;
 
   const isManager = me.user.role !== "staff";
-  if ((!me.setupComplete && isManager) || editingCompany)
+  if (!me.setupComplete && isManager)
     return (
       <SetupWizard
         firstRun={!me.setupComplete}
         addressLookup={!!me.privacy?.addressLookup}
-        onDone={async () => {
-          setEditingCompany(false);
-          await refresh();
-        }}
-        onCancel={me.setupComplete ? () => setEditingCompany(false) : undefined}
+        onDone={refresh}
         onLogout={logout}
       />
     );
@@ -158,7 +153,7 @@ export function App() {
   } else if (section === "konto") {
     page = <AccountPage me={me} onChanged={refresh} />;
   } else if (section === "einstellungen") {
-    page = <Settings me={me} onEdit={() => setEditingCompany(true)} onTaxChanged={refresh} />;
+    page = <Settings me={me} onChanged={refresh} />;
   } else {
     page = <Overview me={me} />;
   }
