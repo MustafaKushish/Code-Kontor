@@ -137,8 +137,8 @@ export const CATALOG: CatalogApp[] = [
     icon: "car",
     hue: 0,
     priceMonthly: 79,
-    status: "preview",
-    features: ["Fahrzeugbestand", "Interessenten & Anfragen", "Probefahrten", "Kaufverträge", "Inzahlungnahme"],
+    status: "ready",
+    features: ["Fahrzeugbestand mit Fotos", "Interessenten & Anfragen", "Probefahrten mit Führerscheinprüfung", "Kaufverträge zum Drucken", "Inzahlungnahme", "Werkstatt-Anbindung"],
   },
   {
     id: "handwerk",

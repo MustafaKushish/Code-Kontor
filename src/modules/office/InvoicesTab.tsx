@@ -7,6 +7,7 @@ import type { InvoiceStatus, LineItem, OfficeClient, OfficeInvoice, OfficeProjec
 import { useOfficeI18n } from "./i18n";
 import { PrintDocument } from "./PrintDocument";
 import { DunningModal } from "./DunningModal";
+import { currencySymbol } from "../../money";
 
 export function InvoicesTab({
   isManager,
@@ -616,7 +617,7 @@ export function InvoicesTab({
                       <option value="Pauschal">Pauschal</option>
                     </select>
                   </Field>
-                  <Field label="Einzelpreis (€)">
+                  <Field label={`Einzelpreis (${currencySymbol("de-DE")})`}>
                     <input
                       type="number"
                       step="0.01"

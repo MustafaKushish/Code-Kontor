@@ -6,6 +6,7 @@ import { Dialog } from "../../pos/ui";
 import type { OfficeClient, OfficeProject, OfficeTimeEntry, LineItem, OfficeTask, RoleRate, OfficeSettings } from "../../../shared/office";
 import { useOfficeI18n } from "./i18n";
 import { TimesheetPrint } from "./TimesheetPrint";
+import { currencySymbol } from "../../money";
 
 export function TimeTab({
   me,
@@ -440,7 +441,7 @@ export function TimeTab({
                 </Field>
               )}
 
-              <Field label="Stundensatz (€/Std)" wide={roleRates.length === 0}>
+              <Field label={`Stundensatz (${currencySymbol("de-DE")}/Std)`} wide={roleRates.length === 0}>
                 <input
                   type="number"
                   step="0.01"

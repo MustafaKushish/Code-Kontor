@@ -5,6 +5,7 @@ import { Field } from "../../components";
 import { Dialog } from "../../pos/ui";
 import type { OfficeClient } from "../../../shared/office";
 import { useOfficeI18n } from "./i18n";
+import { currencySymbol } from "../../money";
 
 export function ClientsTab({
   isManager,
@@ -333,7 +334,7 @@ export function ClientsTab({
                   onChange={(e) => setForm({ ...form, paymentTermsDays: parseInt(e.target.value, 10) || 14 })}
                 />
               </Field>
-              <Field label="Individueller Stundensatz (€/h, netto)">
+              <Field label={`Individueller Stundensatz (${currencySymbol("de-DE")}/h, netto)`}>
                 <input
                   type="number"
                   step="0.01"

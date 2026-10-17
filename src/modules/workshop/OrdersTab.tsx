@@ -16,6 +16,7 @@ import {
 import type { SparePart, Vehicle, WorkshopOrder, WorkshopOrderStatus } from "../../../shared/workshop";
 import { OrderDetailsModal } from "./OrderDetailsModal";
 import { NewOrderModal } from "./NewOrderModal";
+import { currency as companyCurrency } from "../../money";
 
 interface OrdersTabProps {
   orders: WorkshopOrder[];
@@ -54,7 +55,7 @@ export function OrdersTab({
   const [newOrderModalOpen, setNewOrderModalOpen] = useState(false);
 
   const fmtEuro = (amount: number) =>
-    new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(amount);
+    new Intl.NumberFormat("de-DE", { style: "currency", currency: companyCurrency() }).format(amount);
 
   // Filter
   const filtered = orders.filter((o) => {

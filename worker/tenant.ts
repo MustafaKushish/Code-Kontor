@@ -13,6 +13,7 @@ import { WORKSHOP_MIGRATIONS, WorkshopError, WorkshopStore } from "./workshop/st
 import { RESTAURANT_MIGRATIONS, RestaurantError, RestaurantStore } from "./restaurant/store";
 import { CRAFT_MIGRATIONS, CraftError, CraftStore } from "./craft/store";
 import { FITNESS_MIGRATIONS, FitnessError, FitnessStore } from "./fitness/store";
+import { AUTOHAUS_MIGRATIONS, AutohausError, AutohausStore } from "./autohaus/store";
 import { bucketOf, comparisonRange, workTime, type Insights, type Range } from "../shared/insights";
 
 // Die eigene Datenbank eines Kunden. Jede Firma bekommt bei der Anmeldung
@@ -64,6 +65,7 @@ const MODULE_MIGRATIONS: Record<string, (string | ((sql: SqlStorage) => void))[]
   restaurant: RESTAURANT_MIGRATIONS,
   handwerk: CRAFT_MIGRATIONS,
   fitness: FITNESS_MIGRATIONS,
+  autohaus: AUTOHAUS_MIGRATIONS,
 };
 
 /** Antwort eines Modul-Aufrufs: Fehler kommen als Code zurück, weil eigene Fehlerklassen den Weg aus dem Durable Object nicht überstehen. */
@@ -127,7 +129,7 @@ export class TenantDatabase extends DurableObject<Record<string, never>> {
     }
   }
 
-  private storesCache?: { pos: PosStore; repairs: RepairStore; office: OfficeStore; salon: SalonStore; retail: RetailStore; workshop: WorkshopStore; restaurant: RestaurantStore; craft: CraftStore; fitness: FitnessStore };
+  private storesCache?: { pos: PosStore; repairs: RepairStore; office: OfficeStore; salon: SalonStore; retail: RetailStore; workshop: WorkshopStore; restaurant: RestaurantStore; craft: CraftStore; fitness: FitnessStore; autohaus: AutohausStore };
   private txDepth = 0;
 
   /** Kasse und Module teilen sich eine Datenbank; verschachtelte Transaktionen laufen in der äußeren mit. */
@@ -151,8 +153,9 @@ export class TenantDatabase extends DurableObject<Record<string, never>> {
       const restaurant = new RestaurantStore(this.sql, transaction);
       const craft = new CraftStore(this.sql);
       const fitness = new FitnessStore(this.sql);
+      const autohaus = new AutohausStore(this.sql, transaction);
       pos.register("repairs", repairs.posModule());
-      this.storesCache = { pos, repairs, office, salon, retail, workshop, restaurant, craft, fitness };
+      this.storesCache = { pos, repairs, office, salon, retail, workshop, restaurant, craft, fitness, autohaus };
     }
     return this.storesCache!;
   }
@@ -172,6 +175,7 @@ export class TenantDatabase extends DurableObject<Record<string, never>> {
       if (error instanceof RestaurantError) return { ok: false, code: error.code };
       if (error instanceof CraftError) return { ok: false, code: error.code };
       if (error instanceof FitnessError) return { ok: false, code: error.code };
+      if (error instanceof AutohausError) return { ok: false, code: error.code };
       throw error;
     }
   }
@@ -210,6 +214,10 @@ export class TenantDatabase extends DurableObject<Record<string, never>> {
 
   async fitness(action: string, args: unknown[]): Promise<ModuleResult<unknown>> {
     return this.call(this.stores().fitness, action, args, { repairs: "repairs.", pos: "pos." });
+  }
+
+  async autohaus(action: string, args: unknown[]): Promise<ModuleResult<unknown>> {
+    return this.call(this.stores().autohaus, action, args, { repairs: "repairs.", pos: "pos." });
   }
 
   async getCompany(): Promise<CompanyProfile | null> {

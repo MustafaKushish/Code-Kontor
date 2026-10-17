@@ -14,6 +14,7 @@ import { ClassesTab } from "./ClassesTab";
 import { PlansTab } from "./PlansTab";
 import { FitnessPrint } from "./FitnessPrint";
 import "./fitness.css";
+import { currency as companyCurrency } from "../../money";
 
 export default function FitnessApp({ me, path }: { me: Me; path: string }) {
   const app = findApp("fitness")!;
@@ -42,7 +43,7 @@ export default function FitnessApp({ me, path }: { me: Me; path: string }) {
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
 
   const fmtEuro = (amount: number) =>
-    new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(amount);
+    new Intl.NumberFormat("de-DE", { style: "currency", currency: companyCurrency() }).format(amount);
 
   const loadData = useCallback(async (silent = false) => {
     if (!silent) setRefreshing(true);

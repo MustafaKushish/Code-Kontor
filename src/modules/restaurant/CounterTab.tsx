@@ -27,6 +27,7 @@ import type {
 } from "../../../shared/restaurant";
 import { Dialog } from "../../pos/ui";
 import { RestaurantPrint } from "./RestaurantPrint";
+import { currency as companyCurrency } from "../../money";
 
 interface CounterTabProps {
   menu: MenuItem[];
@@ -46,7 +47,7 @@ export function CounterTab({ menu, onRefresh }: CounterTabProps) {
   const [printType, setPrintType] = useState<"kitchen" | "bar" | "guest" | null>(null);
 
   const fmtEuro = (amount: number) =>
-    new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(amount);
+    new Intl.NumberFormat("de-DE", { style: "currency", currency: companyCurrency() }).format(amount);
 
   const categories = [
     "alle",

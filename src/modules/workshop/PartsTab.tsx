@@ -4,6 +4,7 @@ import { api } from "../../api";
 import { Field } from "../../components";
 import { Dialog } from "../../pos/ui";
 import type { SparePart } from "../../../shared/workshop";
+import { currency as companyCurrency, currencySymbol } from "../../money";
 
 interface PartsTabProps {
   parts: SparePart[];
@@ -48,7 +49,7 @@ export function PartsTab({ parts, onPartsChanged }: PartsTabProps) {
   const [errorMsg, setErrorMsg] = useState("");
 
   const fmtEuro = (amount: number) =>
-    new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(amount);
+    new Intl.NumberFormat("de-DE", { style: "currency", currency: companyCurrency() }).format(amount);
 
   const filtered = parts.filter((p) => {
     if (lowStockOnly && p.stock > p.minStock) return false;
@@ -309,7 +310,7 @@ export function PartsTab({ parts, onPartsChanged }: PartsTabProps) {
               <Field label="Aktueller Lagerbestand">
                 <input type="number" value={form.stock} onChange={(e) => setForm({ ...form, stock: Number(e.target.value) })} className="workshop-mono" />
               </Field>
-              <Field label="Einkaufspreis Netto (€)">
+              <Field label={`Einkaufspreis Netto (${currencySymbol("de-DE")})`}>
                 <input
                   type="number"
                   step="0.01"
@@ -318,7 +319,7 @@ export function PartsTab({ parts, onPartsChanged }: PartsTabProps) {
                   className="workshop-mono"
                 />
               </Field>
-              <Field label="Verkaufspreis Netto (€)">
+              <Field label={`Verkaufspreis Netto (${currencySymbol("de-DE")})`}>
                 <input
                   type="number"
                   step="0.01"

@@ -25,6 +25,7 @@ import type {
   FitnessPlan,
   MemberStatus,
 } from "../../../shared/fitness";
+import { currency as companyCurrency } from "../../money";
 
 interface MembersTabProps {
   plans: FitnessPlan[];
@@ -71,7 +72,7 @@ export function MembersTab({
   const [savingNew, setSavingNew] = useState(false);
 
   const fmtEuro = (amount: number) =>
-    new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(amount);
+    new Intl.NumberFormat("de-DE", { style: "currency", currency: companyCurrency() }).format(amount);
 
   const loadMembers = async () => {
     setLoading(true);

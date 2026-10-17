@@ -38,6 +38,7 @@ import { workshopRoutes } from "./workshop/routes";
 import { restaurantRoutes } from "./restaurant/routes";
 import { craftRoutes } from "./craft/routes";
 import { fitnessRoutes } from "./fitness/routes";
+import { autohausRoutes } from "./autohaus/routes";
 import { sanitizeRange } from "../shared/insights";
 import { REPAIR_APP_ID } from "../shared/repairs";
 import { OFFICE_APP_ID } from "../shared/office";
@@ -284,7 +285,7 @@ async function ensureDemoAccount(env: Env) {
   if (!apps.includes("buero")) await db.installApp("buero");
   if (!apps.includes(SALON_APP_ID)) await db.installApp(SALON_APP_ID);
   if (!apps.includes(RETAIL_APP_ID)) await db.installApp(RETAIL_APP_ID);
-  for (const id of ["werkstatt", "restaurant", "handwerk", "fitness"]) if (!apps.includes(id)) await db.installApp(id);
+  for (const id of ["werkstatt", "restaurant", "handwerk", "fitness", "autohaus"]) if (!apps.includes(id)) await db.installApp(id);
 
   // Beispieldaten nur für das Demo-Konto
   await db.salon("seedIfEmpty", []);
@@ -293,6 +294,7 @@ async function ensureDemoAccount(env: Env) {
   await db.restaurant("seedIfEmpty", []);
   await db.craft("seedIfEmpty", []);
   await db.fitness("seedIfEmpty", []);
+  await db.autohaus("seedIfEmpty", []);
     const listRes = (await db.repairs("list", ["all", "", 10])) as { ok: boolean; value?: { orders: unknown[] } };
     if (listRes.ok && (!listRes.value?.orders || listRes.value.orders.length === 0)) {
       await db.repairs("create", [
@@ -1667,6 +1669,7 @@ app.route("/workshop", workshopRoutes);
 app.route("/restaurant", restaurantRoutes);
 app.route("/craft", craftRoutes);
 app.route("/fitness", fitnessRoutes);
+app.route("/autohaus", autohausRoutes);
 
 app.notFound((c) => fail(c, "notFound", 404));
 

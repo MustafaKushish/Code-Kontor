@@ -4,6 +4,7 @@ import { api } from "../../api";
 import { Field } from "../../components";
 import { Dialog } from "../../pos/ui";
 import type { FitnessPlan } from "../../../shared/fitness";
+import { currency as companyCurrency, currencySymbol } from "../../money";
 
 interface PlansTabProps {
   plans: FitnessPlan[];
@@ -28,7 +29,7 @@ export function PlansTab({ plans, onRefreshPlans }: PlansTabProps) {
   });
 
   const fmtEuro = (amount: number) =>
-    new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(amount);
+    new Intl.NumberFormat("de-DE", { style: "currency", currency: companyCurrency() }).format(amount);
 
   const handleOpenNew = () => {
     setEditingPlanId(null);
@@ -170,7 +171,7 @@ export function PlansTab({ plans, onRefreshPlans }: PlansTabProps) {
                   placeholder="z. B. All-Inclusive Premium"
                 />
               </Field>
-              <Field label={formState.isPass10 ? "Preis 10er-Karte (€)" : "Monatsbeitrag (€)"}>
+              <Field label={formState.isPass10 ? `Preis 10er-Karte (${currencySymbol("de-DE")})` : `Monatsbeitrag (${currencySymbol("de-DE")})`}>
                 <input
                   type="number"
                   step="0.10"
@@ -181,7 +182,7 @@ export function PlansTab({ plans, onRefreshPlans }: PlansTabProps) {
                   }
                 />
               </Field>
-              <Field label="Aufnahmegebühr (€)">
+              <Field label={`Aufnahmegebühr (${currencySymbol("de-DE")})`}>
                 <input
                   type="number"
                   step="0.10"

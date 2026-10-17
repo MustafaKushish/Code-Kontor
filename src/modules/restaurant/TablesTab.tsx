@@ -26,6 +26,7 @@ import type {
 } from "../../../shared/restaurant";
 import { Dialog } from "../../pos/ui";
 import { RestaurantPrint } from "./RestaurantPrint";
+import { currency as companyCurrency } from "../../money";
 
 interface TablesTabProps {
   tables: RestaurantTable[];
@@ -56,7 +57,7 @@ export function TablesTab({ tables, menu, orders, onRefresh }: TablesTabProps) {
 
   // Format currency
   const fmtEuro = (amount?: number) =>
-    new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(amount || 0);
+    new Intl.NumberFormat("de-DE", { style: "currency", currency: companyCurrency() }).format(amount || 0);
 
   const areas: { id: TableArea | "alle"; label: string }[] = [
     { id: "alle", label: "Alle Bereiche" },

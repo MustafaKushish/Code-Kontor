@@ -27,6 +27,7 @@ import type {
 } from "../../../shared/restaurant";
 import { Dialog } from "../../pos/ui";
 import { RestaurantPrint } from "./RestaurantPrint";
+import { currency as companyCurrency } from "../../money";
 
 interface PickupTabProps {
   orders: RestaurantOrder[];
@@ -47,7 +48,7 @@ export function PickupTab({ orders, menu, tenantId, onRefresh }: PickupTabProps)
   const [isBusy, setIsBusy] = useState(false);
 
   const fmtEuro = (amount: number) =>
-    new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(amount);
+    new Intl.NumberFormat("de-DE", { style: "currency", currency: companyCurrency() }).format(amount);
 
   // Filter only pickup / takeaway orders
   const pickupOrders = orders.filter((o) => o.type === "abholung");

@@ -5,6 +5,7 @@ import { Field } from "../../components";
 import { Dialog } from "../../pos/ui";
 import type { ExpenseCategory, LineItem, OfficeClient, OfficeExpense, OfficeProject } from "../../../shared/office";
 import { useOfficeI18n } from "./i18n";
+import { currencySymbol } from "../../money";
 
 export function ExpensesTab({
   isManager,
@@ -261,7 +262,7 @@ export function ExpensesTab({
               <Field label="Belegdatum" required>
                 <input type="date" required value={form.day} onChange={(e) => setForm({ ...form, day: e.target.value })} />
               </Field>
-              <Field label="Nettobetrag (€)" required>
+              <Field label={`Nettobetrag (${currencySymbol("de-DE")})`} required>
                 <input
                   type="number"
                   step="0.01"

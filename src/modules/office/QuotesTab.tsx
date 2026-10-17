@@ -6,6 +6,7 @@ import { Dialog } from "../../pos/ui";
 import type { LineItem, OfficeClient, OfficeProject, OfficeQuote, QuoteStatus } from "../../../shared/office";
 import { useOfficeI18n } from "./i18n";
 import { PrintDocument } from "./PrintDocument";
+import { currencySymbol } from "../../money";
 
 export function QuotesTab({ isManager }: { isManager: boolean }) {
   const { o, euro, day, officeError } = useOfficeI18n();
@@ -390,7 +391,7 @@ export function QuotesTab({ isManager }: { isManager: boolean }) {
                       <option value="Pauschal">Pauschal</option>
                     </select>
                   </Field>
-                  <Field label="Einzelpreis (€)">
+                  <Field label={`Einzelpreis (${currencySymbol("de-DE")})`}>
                     <input
                       type="number"
                       step="0.01"

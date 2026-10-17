@@ -4,6 +4,7 @@ import { api } from "../../api";
 import { Field } from "../../components";
 import type { OfficeSettings, RoleRate } from "../../../shared/office";
 import { useOfficeI18n } from "./i18n";
+import { currencySymbol } from "../../money";
 
 export function SettingsTab() {
   const { o, euro, officeError } = useOfficeI18n();
@@ -181,7 +182,7 @@ export function SettingsTab() {
                 onChange={(e) => setNewRoleName(e.target.value)}
               />
             </Field>
-            <Field label="Satz (€/Std)">
+            <Field label={`Satz (${currencySymbol("de-DE")}/Std)`}>
               <input type="number" step="0.01" min="0" value={newRoleRateEur} onChange={(e) => setNewRoleRateEur(e.target.value)} />
             </Field>
             <button type="button" className="button" onClick={handleAddRoleRate} disabled={!newRoleName.trim()}>
@@ -197,7 +198,7 @@ export function SettingsTab() {
             Feste Gebührensätze für Mahnungen überfälliger Rechnungen (Stufe 1 Zahlungserinnerung ist kostenlos).
           </p>
           <div className="grid form-grid">
-            <Field label="Mahngebühr 1. Mahnung (Stufe 2, €)">
+            <Field label={`Mahngebühr 1. Mahnung (Stufe 2, ${currencySymbol("de-DE")})`}>
               <input
                 type="number"
                 step="0.01"
@@ -211,7 +212,7 @@ export function SettingsTab() {
                 }
               />
             </Field>
-            <Field label="Mahngebühr 2. / Letzte Mahnung (Stufe 3, €)">
+            <Field label={`Mahngebühr 2. / Letzte Mahnung (Stufe 3, ${currencySymbol("de-DE")})`}>
               <input
                 type="number"
                 step="0.01"

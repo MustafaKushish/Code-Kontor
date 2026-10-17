@@ -26,6 +26,7 @@ import { Field } from "../../components";
 import { Dialog } from "../../pos/ui";
 import type { InspectionItem, OrderPosition, SparePart, WorkshopOrder, WorkshopOrderStatus } from "../../../shared/workshop";
 import { WorkshopPrint } from "./WorkshopPrint";
+import { currency as companyCurrency, currencySymbol } from "../../money";
 
 interface OrderDetailsModalProps {
   order: WorkshopOrder;
@@ -89,7 +90,7 @@ export function OrderDetailsModal({
   const [selectedPartId, setSelectedPartId] = useState("");
 
   const fmtEuro = (amount: number) =>
-    new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(amount);
+    new Intl.NumberFormat("de-DE", { style: "currency", currency: companyCurrency() }).format(amount);
 
   // Status-URL für den Kunden
   const statusUrl = `${window.location.origin}/status/kfz/${tenantId}/${order.statusToken}`;
@@ -374,7 +375,7 @@ export function OrderDetailsModal({
                       </select>
                     </div>
                   </Field>
-                  <Field label="Einzelpreis Netto (€)">
+                  <Field label={`Einzelpreis Netto (${currencySymbol("de-DE")})`}>
                     <input type="number" step="0.01" value={newPosPrice} onChange={(e) => setNewPosPrice(Number(e.target.value))} className="workshop-mono" />
                   </Field>
                   <button type="button" onClick={handleAddPosition} disabled={!newPosName.trim() || saving} className="button primary workshop-pos-add" aria-label="Position hinzufügen">
@@ -538,7 +539,7 @@ export function OrderDetailsModal({
                   <div className="workshop-pay-grid">
                     <button type="button" onClick={() => handleCheckout("bar")} className="button primary">
                       <Banknote size={18} />
-                      Barzahlung (€)
+                      Barzahlung ({currencySymbol("de-DE")})
                     </button>
                     <button type="button" onClick={() => handleCheckout("karte")} className="button primary">
                       <CreditCard size={18} />

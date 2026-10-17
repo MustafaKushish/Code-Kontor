@@ -5,6 +5,7 @@ import { Field } from "../../components";
 import type { SalonService, ServiceCategory } from "../../../shared/salon";
 import { useSalonI18n } from "./i18n";
 import { Dialog } from "../../pos/ui";
+import { currencySymbol } from "../../money";
 
 export function ServicesTab({ isManager }: { isManager: boolean }) {
   const { s, euro } = useSalonI18n();
@@ -227,7 +228,7 @@ export function ServicesTab({ isManager }: { isManager: boolean }) {
                 />
               </Field>
 
-              <Field label="Preis (€, brutto)" required>
+              <Field label={`Preis (${currencySymbol("de-DE")}, brutto)`} required>
                 <input type="text" required placeholder="48.00" value={form.priceEuro} onChange={(e) => setForm({ ...form, priceEuro: e.target.value })} />
               </Field>
               <Field label="MwSt.-Satz (%)">
