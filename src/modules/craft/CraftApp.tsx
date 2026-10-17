@@ -29,6 +29,8 @@ import "./craft.css";
 import { currency as companyCurrency } from "../../money";
 
 export default function CraftApp({ me, path }: { me: Me; path: string }) {
+  // Löschen nur für Inhaber und Admins (prüft auch der Server)
+  const isManager = me.user.role !== "staff";
   const { appText } = useI18n();
   const app = findApp("handwerk")!;
   const [activeTab, setActiveTab] = useState<"projects" | "measurements" | "reports" | "diary">("projects");
@@ -166,6 +168,7 @@ export default function CraftApp({ me, path }: { me: Me; path: string }) {
       {activeTab === "projects" && (
         <ProjectsTab
           projects={projects}
+          isManager={isManager}
           onRefresh={() => loadData(true)}
         />
       )}
@@ -173,6 +176,7 @@ export default function CraftApp({ me, path }: { me: Me; path: string }) {
       {activeTab === "measurements" && (
         <MeasurementsTab
           measurements={measurements}
+          isManager={isManager}
           projects={projects}
           onRefresh={() => loadData(true)}
         />
@@ -181,6 +185,7 @@ export default function CraftApp({ me, path }: { me: Me; path: string }) {
       {activeTab === "reports" && (
         <ReportsTab
           reports={reports}
+          isManager={isManager}
           projects={projects}
           onRefresh={() => loadData(true)}
         />

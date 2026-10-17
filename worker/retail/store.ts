@@ -12,6 +12,8 @@ import {
   type RetailStockMovement,
   type RetailSupplier,
 } from "../../shared/retail";
+import type { PosArticle, PosLine } from "../../shared/pos";
+import type { PosModule } from "../pos/store";
 
 export class RetailError extends Error {
   constructor(public code: string) {
@@ -194,7 +196,8 @@ export class RetailStore {
           input.purchasePriceCents ?? existing.purchasePriceCents,
           input.sellingPriceCents ?? existing.sellingPriceCents,
           input.vatRate ?? existing.vatRate,
-          input.stockQty ?? existing.stockQty,
+          // Bestand ändert sich nur über Buchungen (adjustStock): das Formular hat einen alten Stand
+          existing.stockQty,
           input.minStockQty ?? existing.minStockQty,
           input.unit ?? existing.unit,
           input.location ?? existing.location ?? "",
@@ -202,12 +205,6 @@ export class RetailStore {
           now,
           id
         );
-
-        // Protokolliere Bestandsveränderung, falls Bestand manuell überschrieben wurde
-        if (input.stockQty !== undefined && input.stockQty !== existing.stockQty) {
-          const delta = input.stockQty - existing.stockQty;
-          this.logStockMovement(id, existing.name, delta, existing.stockQty, input.stockQty, "correction", "", "Manuelle Artikelbearbeitung");
-        }
 
         return this.getProduct(id)!;
       }
@@ -270,11 +267,13 @@ export class RetailStore {
       const product = this.getProduct(productId);
       if (!product) throw new RetailError("productNotFound");
 
+      if (!Number.isFinite(deltaQty) || Math.round(deltaQty) !== deltaQty) throw new RetailError("invalidQty");
       const previousQty = product.stockQty;
       const newQty = Math.max(0, previousQty + deltaQty);
 
       this.sql.exec(`UPDATE retail_products SET stock_qty = ?, updated_at = datetime('now') WHERE id = ?`, newQty, productId);
-      this.logStockMovement(productId, product.name, deltaQty, previousQty, newQty, reason, "", note, createdByName);
+      // Im Journal die tatsächliche Änderung, damit die Summe der Buchungen zum Bestand passt
+      this.logStockMovement(productId, product.name, newQty - previousQty, previousQty, newQty, reason, "", note, createdByName);
 
       return this.getProduct(productId)!;
     });
@@ -555,6 +554,38 @@ export class RetailStore {
       note,
       createdByName
     );
+  }
+
+  // ==========================================
+  // KASSE: Artikel werden in der Kasse der Plattform verkauft, der Bestand folgt
+  // ==========================================
+
+  posModule(): PosModule {
+    const article = (p: RetailProduct): PosArticle => ({
+      source: "retail", kind: "product", refId: p.id, name: p.name, detail: [p.brand, p.ean].filter(Boolean).join(" · "),
+      priceCents: p.sellingPriceCents, vatRate: p.vatRate, stock: p.stockQty, group: "@retail.product", code: String(p.number),
+    });
+    const move = (lines: PosLine[], sign: 1 | -1, reason: MovementReason, note: string, by: string) => {
+      for (const l of lines) {
+        if (l.source !== "retail" || l.kind !== "product" || !l.refId || !this.getProduct(l.refId)) continue;
+        this.adjustStock(l.refId, sign * Math.ceil(l.qty), reason, note, by);
+      }
+    };
+    return {
+      articles: (query) => this.listProducts(query).slice(0, 60).map(article),
+      catalog: () => this.listProducts().slice(0, 1000).map(article),
+      scan: (code) => {
+        const p = this.getProductByEan(code);
+        return p ? [article(p)] : [];
+      },
+      prepare: (line) => {
+        const p = line.refId ? this.getProduct(line.refId) : null;
+        if (!p || !p.active) throw new RetailError("notFound");
+        return { lines: [{ ...line, kind: "product", name: line.name || p.name, qty: Math.max(1, Math.round(line.qty)), vatRate: p.vatRate }] };
+      },
+      booked: (receipt, lines, _refs, ctx) => move(lines, -1, "sale", `Kasse ${receipt?.number ?? ""}`.trim(), ctx.actor.name ?? "Kasse"),
+      canceled: (original, cancel, actor) => move(original.lines, 1, "return", `Storno ${cancel.number}`, actor.name ?? "Kasse"),
+    };
   }
 
   // ==========================================

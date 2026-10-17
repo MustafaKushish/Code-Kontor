@@ -32,10 +32,10 @@ import { sanitizePrivacy } from "../shared/privacy";
 import { repairRoutes, repairStatusRoutes } from "./repairs/routes";
 import { posRoutes } from "./pos/routes";
 import { officeRoutes } from "./office/routes";
-import { salonRoutes } from "./salon/routes";
+import { salonPublicRoutes, salonRoutes } from "./salon/routes";
 import { retailRoutes } from "./retail/routes";
-import { workshopRoutes } from "./workshop/routes";
-import { restaurantRoutes } from "./restaurant/routes";
+import { workshopPublicRoutes, workshopRoutes } from "./workshop/routes";
+import { restaurantPublicRoutes, restaurantRoutes } from "./restaurant/routes";
 import { craftRoutes } from "./craft/routes";
 import { fitnessRoutes } from "./fitness/routes";
 import { autohausRoutes } from "./autohaus/routes";
@@ -753,6 +753,11 @@ async function stamp(env: Env, tenantId: string, employeeId: string, source: "ap
 
 // Reparatur-Status für Endkunden (Handy- & IT-Service), ohne Anmeldung
 app.route("/repair-status", repairStatusRoutes);
+
+// Online-Termine (Friseur), Statusseite (Werkstatt) und Abholanzeige (Restaurant), ohne Anmeldung
+app.route("/salon/public", salonPublicRoutes);
+app.route("/workshop/public", workshopPublicRoutes);
+app.route("/restaurant/public", restaurantPublicRoutes);
 
 // ---------- Ab hier nur mit Anmeldung ----------
 

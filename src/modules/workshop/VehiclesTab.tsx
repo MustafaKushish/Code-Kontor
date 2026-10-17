@@ -6,12 +6,13 @@ import { Dialog } from "../../pos/ui";
 import type { Vehicle, WorkshopOrder } from "../../../shared/workshop";
 
 interface VehiclesTabProps {
+  isManager: boolean;
   vehicles: Vehicle[];
   orders: WorkshopOrder[];
   onVehiclesChanged: (vehicles: Vehicle[]) => void;
 }
 
-export function VehiclesTab({ vehicles, orders, onVehiclesChanged }: VehiclesTabProps) {
+export function VehiclesTab({ vehicles, orders, onVehiclesChanged, isManager }: VehiclesTabProps) {
   const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
@@ -227,7 +228,7 @@ export function VehiclesTab({ vehicles, orders, onVehiclesChanged }: VehiclesTab
                     <Pencil size={15} />
                     Bearbeiten
                   </button>
-                  {deleteConfirmId === v.id ? (
+                  {!isManager ? null : deleteConfirmId === v.id ? (
                     <div className="row gap">
                       <button onClick={() => handleDelete(v.id)} className="button danger small-button">
                         Löschen

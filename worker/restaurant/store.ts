@@ -1,3 +1,6 @@
+import { berlinDayOf, nextNumber } from "../numbers";
+import type { PosArticle, PosLine } from "../../shared/pos";
+import type { PosModule } from "../pos/store";
 import type {
   ItemStatus,
   MenuItem,
@@ -614,7 +617,7 @@ export class RestaurantStore {
         ready_at: string | null;
         completed_at: string | null;
       }>("SELECT * FROM restaurant_orders WHERE id = ?", id)
-      .one();
+      .toArray()[0];
 
     if (!r) throw new RestaurantError("orderNotFound");
     return this.mapOrder(r);
@@ -633,17 +636,17 @@ export class RestaurantStore {
   }): RestaurantOrder {
     return this.tx(() => {
       const id = crypto.randomUUID();
-      const count = this.sql.exec<{ c: number }>("SELECT COUNT(*) AS c FROM restaurant_orders").one().c;
-      const orderNumber = `BON-${count + 101}`;
+      const orderNumber = `BON-${nextNumber(this.sql, "restaurant_orders", "order_number", "BON-", 101)}`;
 
-      // Falls Theke/Abholung: Abholnummer vergeben (z.B. fortlaufend 1..99)
+      // Falls Theke/Abholung: Abholnummer 1..99, jeden Tag neu ab 1. Nach 99 geht es mit 1 weiter
+      // (vorher blieb die Nummer nach 99 auf 1 stehen, weil das Maximum 99 blieb).
       let pickupNumber: number | undefined;
       if (data.type === "theke" || data.type === "abholung") {
-        const lastPickup =
-          this.sql
-            .exec<{ p: number | null }>("SELECT MAX(pickup_number) AS p FROM restaurant_orders WHERE pickup_number IS NOT NULL")
-            .one().p ?? 0;
-        pickupNumber = (lastPickup % 99) + 1;
+        const last = this.sql
+          .exec<{ p: number; c: string }>("SELECT pickup_number AS p, created_at AS c FROM restaurant_orders WHERE pickup_number IS NOT NULL ORDER BY rowid DESC LIMIT 1")
+          .toArray()[0];
+        const sameDay = last && berlinDayOf(last.c) === berlinDayOf(new Date().toISOString());
+        pickupNumber = sameDay ? (last.p % 99) + 1 : 1;
       }
 
       // Summen kalkulieren
@@ -779,8 +782,8 @@ export class RestaurantStore {
     if (status === "fertig") {
       patch.readyAt = new Date().toISOString();
     } else if (status === "abgeschlossen") {
+      // Bezahlt wird nur über die Kasse (mit Beleg), nicht durch Abschließen
       patch.completedAt = new Date().toISOString();
-      patch.paymentStatus = "bezahlt";
     }
     return this.updateOrder(id, patch);
   }
@@ -802,16 +805,79 @@ export class RestaurantStore {
     });
   }
 
-  checkoutOrder(id: string, paymentMethod: "bar" | "karte" | "rechnung" | "pos"): RestaurantOrder {
-    return this.tx(() => {
-      const order = this.getOrder(id);
-      return this.updateOrder(id, {
-        status: "abgeschlossen",
-        paymentMethod,
-        paymentStatus: "bezahlt",
-        completedAt: new Date().toISOString(),
-      });
+  // ---------- KASSE: Bestellungen und Speisen werden in der Kasse der Plattform abgerechnet ----------
+
+  posModule(): PosModule {
+    const payable = (o: RestaurantOrder) => o.paymentStatus !== "bezahlt" && o.status !== "storniert";
+    const cents = (euro: number) => Math.round(euro * 100);
+    const label = (o: RestaurantOrder) =>
+      [o.orderNumber, o.tableName ?? (o.pickupNumber ? `#${o.pickupNumber}` : ""), o.customerName ?? ""].filter(Boolean).join(" · ");
+    const orderArticle = (o: RestaurantOrder): PosArticle => ({
+      source: "restaurant", kind: "order", refId: o.id, name: label(o), detail: o.items.map((i) => `${i.quantity}× ${i.name}`).join(", "),
+      priceCents: o.items.reduce((sum, i) => sum + i.quantity * cents(i.unitPriceGross), 0),
+      vatRate: 0, single: true, group: "@restaurant.order", code: o.orderNumber,
     });
+    const menuArticle = (m: MenuItem): PosArticle => ({
+      source: "restaurant", kind: "menu", refId: m.id, name: m.name, detail: m.category,
+      priceCents: cents(m.priceGross), vatRate: m.taxRate, group: "@restaurant.menu", code: m.itemNumber,
+    });
+    const open = () => this.listOrders().filter(payable);
+    const order = (id: string | null) => {
+      const r = id ? this.sql.exec<{ id: string }>("SELECT id FROM restaurant_orders WHERE id = ?", id).toArray()[0] : undefined;
+      return r ? this.getOrder(r.id) : null;
+    };
+    const menu = () => this.listMenu().filter((m) => m.active);
+    return {
+      articles: (query) => {
+        const q = query.trim().toLowerCase();
+        const orders = open().filter((o) => [o.orderNumber, o.tableName ?? "", o.customerName ?? "", String(o.pickupNumber ?? "")].some((v) => v.toLowerCase().includes(q)));
+        const items = menu().filter((m) => [m.name, m.itemNumber, m.category].some((v) => v.toLowerCase().includes(q)));
+        return [...orders.slice(0, 20).map(orderArticle), ...items.slice(0, 40).map(menuArticle)];
+      },
+      catalog: () => [...open().map(orderArticle), ...menu().map(menuArticle)],
+      scan: (code) => {
+        const o = order(code) ?? this.listOrders().find((x) => x.orderNumber === code.toUpperCase()) ?? null;
+        if (o && payable(o)) return [orderArticle(o)];
+        const m = menu().find((x) => x.itemNumber === code);
+        return m ? [menuArticle(m)] : [];
+      },
+      prepare: (line) => {
+        if (line.kind === "menu") {
+          const m = menu().find((x) => x.id === line.refId);
+          if (!m) throw new RestaurantError("notFound");
+          return { lines: [{ ...line, name: line.name || m.name, vatRate: m.taxRate }] };
+        }
+        const o = order(line.refId);
+        if (!o) throw new RestaurantError("notFound");
+        if (!payable(o)) throw new RestaurantError("notPayable");
+        return {
+          lines: o.items.map((i): PosLine => ({
+            source: "restaurant", kind: "order:item", refId: o.id, name: i.name, qty: i.quantity, unitCents: cents(i.unitPriceGross), vatRate: i.taxRate,
+          })),
+          refs: [{ source: "restaurant", kind: "order", refId: o.id, label: label(o) }],
+          customer: o.customerName || o.customerPhone ? { id: null, name: o.customerName ?? "", address: "", phone: o.customerPhone ?? "", email: "" } : undefined,
+        };
+      },
+      booked: (_receipt, _lines, refs) => {
+        for (const ref of refs) {
+          const o = order(ref.refId);
+          if (!o || !payable(o)) throw new RestaurantError("notPayable");
+          // Am Tisch ist mit dem Bezahlen alles erledigt und der Tisch frei. Theke und Abholung
+          // bleiben in der Küche, bis sie fertig sind und abgeholt werden.
+          this.updateOrder(o.id, o.type === "tisch"
+            ? { status: "abgeschlossen", paymentMethod: "pos", paymentStatus: "bezahlt", completedAt: new Date().toISOString() }
+            : { paymentMethod: "pos", paymentStatus: "bezahlt" });
+        }
+      },
+      canceled: (original) => {
+        for (const ref of original.refs) {
+          if (ref.source !== "restaurant") continue;
+          const o = order(ref.refId);
+          if (!o || o.paymentStatus !== "bezahlt") continue;
+          this.updateOrder(o.id, { paymentMethod: undefined, paymentStatus: "offen", ...(o.status === "abgeschlossen" ? { status: "fertig" as const, completedAt: undefined } : {}) });
+        }
+      },
+    };
   }
 
   getPickupQueue(): { preparing: RestaurantOrder[]; ready: RestaurantOrder[] } {

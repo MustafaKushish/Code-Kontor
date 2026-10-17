@@ -96,6 +96,11 @@ export function SettingsTab() {
       <form onSubmit={handleSave} className="card stack">
         <h2 className="card-title"><Clock size={20} /> {s("settings.hours")} & Terminregeln</h2>
 
+        <label className="check">
+          <input type="checkbox" checked={settings.onlineBookingEnabled} onChange={(e) => setSettings({ ...settings, onlineBookingEnabled: e.target.checked })} />
+          <span className="stack-sm"><span>Online-Terminbuchung erlauben</span><small className="muted">Kunden buchen über den Link oben freie Zeiten selbst.</small></span>
+        </label>
+
         <div className="grid form-grid">
           <Field label="Salonname / Studio" wide>
             <input type="text" required value={settings.salonName} onChange={(e) => setSettings({ ...settings, salonName: e.target.value })} />
@@ -135,6 +140,7 @@ export function SettingsTab() {
                 { d: 4, label: "Donnerstag" },
                 { d: 5, label: "Freitag" },
                 { d: 6, label: "Samstag" },
+                { d: 7, label: "Sonntag" },
               ].map(({ d, label }) => {
                 const active = settings.openDays.includes(d);
                 return (

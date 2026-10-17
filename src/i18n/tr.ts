@@ -695,7 +695,7 @@ export const tr: Dict = {
     toPos: "Kasaya git",
     noData: "Henüz yok",
     noGroup: "Ürün grubu yok",
-    moduleGroups: { repair: "Onarımlar", part: "Yedek parçalar", used: "İkinci el cihazlar", other: "Diğer" },
+    moduleGroups: { appointment: "Randevular", service: "Hizmetler", product: "Ürünler", order: "Siparişler", menu: "Yiyecek ve içecek", report: "İş raporları", repair: "Onarımlar", part: "Yedek parçalar", used: "İkinci el cihazlar", other: "Diğer" },
     chart: { hour: "Saate göre ciro", day: "Günlük ciro", month: "Aylık ciro" },
   },
   legal: {

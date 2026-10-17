@@ -20,10 +20,11 @@ const WEEKDAYS: Weekday[] = [
 ];
 
 interface ClassesTabProps {
+  isManager: boolean;
   onRefreshStats: () => void;
 }
 
-export function ClassesTab({ onRefreshStats }: ClassesTabProps) {
+export function ClassesTab({ onRefreshStats, isManager }: ClassesTabProps) {
   const [classes, setClasses] = useState<FitnessClass[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDay, setSelectedDay] = useState<string>("alle");
@@ -220,10 +221,12 @@ export function ClassesTab({ onRefreshStats }: ClassesTabProps) {
           ))}
         </div>
 
-        <button onClick={handleOpenNew} className="button primary">
-          <Plus size={18} />
-          Kurs anlegen
-        </button>
+        {isManager && (
+          <button onClick={handleOpenNew} className="button primary">
+            <Plus size={18} />
+            Kurs anlegen
+          </button>
+        )}
       </div>
 
       {/* Kursplan Kacheln */}
@@ -244,12 +247,16 @@ export function ClassesTab({ onRefreshStats }: ClassesTabProps) {
               <section key={course.id} className="card fitness-card">
                 <div className="fitness-card-top">
                   <span className="pill accent-pill">{course.weekday}</span>
-                  <button onClick={() => handleOpenEdit(course)} className="icon-button" title="Bearbeiten" aria-label="Bearbeiten">
-                    <Edit size={16} />
-                  </button>
-                  <button onClick={() => handleDeleteClass(course.id)} className="icon-button danger" title="Löschen" aria-label="Löschen">
-                    <Trash2 size={16} />
-                  </button>
+                  {isManager && (
+                    <>
+                      <button onClick={() => handleOpenEdit(course)} className="icon-button" title="Bearbeiten" aria-label="Bearbeiten">
+                        <Edit size={16} />
+                      </button>
+                      <button onClick={() => handleDeleteClass(course.id)} className="icon-button danger" title="Löschen" aria-label="Löschen">
+                        <Trash2 size={16} />
+                      </button>
+                    </>
+                  )}
                 </div>
 
                 <h3>{course.name}</h3>

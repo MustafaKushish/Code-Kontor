@@ -311,9 +311,11 @@ export function ProductsTab({ isManager }: { isManager: boolean }) {
                     <button className="button small-button" onClick={() => openStock(p)} title="Bestand anpassen">
                       <ArrowUpDown size={14} /> ±
                     </button>
-                    <button className="icon-button" onClick={() => openEdit(p)} title={r("actions.edit")} aria-label={r("actions.edit")}>
-                      <Pencil size={16} />
-                    </button>
+                    {isManager && (
+                      <button className="icon-button" onClick={() => openEdit(p)} title={r("actions.edit")} aria-label={r("actions.edit")}>
+                        <Pencil size={16} />
+                      </button>
+                    )}
                     {isManager && (
                       deleteConfirmId === p.id ? (
                         <>
@@ -415,9 +417,12 @@ export function ProductsTab({ isManager }: { isManager: boolean }) {
 
             {/* Bestandsführung, Lagerplatz & Lieferant */}
             <div className="grid form-grid">
-              <Field label="Ist-Bestand">
-                <input type="number" min="0" value={form.stockQty} onChange={(e) => setForm({ ...form, stockQty: parseInt(e.target.value, 10) || 0 })} />
-              </Field>
+              {/* Später ändert sich der Bestand nur über „±“ (Buchung mit Grund), damit nichts überschrieben wird */}
+              {!editingProduct && (
+                <Field label="Anfangsbestand">
+                  <input type="number" min="0" value={form.stockQty} onChange={(e) => setForm({ ...form, stockQty: parseInt(e.target.value, 10) || 0 })} />
+                </Field>
+              )}
               <Field label="Mindestbestand (Meldebestand)">
                 <input type="number" min="0" value={form.minStockQty} onChange={(e) => setForm({ ...form, minStockQty: parseInt(e.target.value, 10) || 0 })} />
               </Field>

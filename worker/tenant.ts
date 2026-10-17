@@ -155,25 +155,32 @@ export class TenantDatabase extends DurableObject<Record<string, never>> {
       const fitness = new FitnessStore(this.sql);
       const autohaus = new AutohausStore(this.sql, transaction);
       pos.register("repairs", repairs.posModule());
+      pos.register("salon", salon.posModule());
+      pos.register("retail", retail.posModule());
+      pos.register("workshop", workshop.posModule());
+      pos.register("restaurant", restaurant.posModule());
+      pos.register("craft", craft.posModule());
       this.storesCache = { pos, repairs, office, salon, retail, workshop, restaurant, craft, fitness, autohaus };
     }
     return this.storesCache!;
   }
 
   private call(target: object, action: string, args: unknown[], prefix: { pos: string; repairs: string }): ModuleResult<unknown> {
+    // Über die Kasse gerufen: Fehler der Systeme mit Vorsilbe, damit die Kasse sie zuordnen kann (z. B. „salon.notPayable“)
+    const pre = (module: string) => (target === this.storesCache?.pos ? `${module}.` : "");
     const method = (target as Record<string, unknown>)[action];
-    if (action === "constructor" || action === "posModule" || typeof method !== "function") return { ok: false, code: "notFound" };
+    if (action === "constructor" || action === "posModule" || action.startsWith("pos") || typeof method !== "function") return { ok: false, code: "notFound" };
     try {
       return { ok: true, value: (method as (...a: unknown[]) => unknown).apply(target, args) };
     } catch (error) {
       if (error instanceof RepairError) return { ok: false, code: prefix.repairs + error.code };
       if (error instanceof PosError) return { ok: false, code: prefix.pos + error.code };
       if (error instanceof OfficeError) return { ok: false, code: error.code };
-      if (error instanceof SalonError) return { ok: false, code: error.code };
-      if (error instanceof RetailError) return { ok: false, code: error.code };
-      if (error instanceof WorkshopError) return { ok: false, code: error.code };
-      if (error instanceof RestaurantError) return { ok: false, code: error.code };
-      if (error instanceof CraftError) return { ok: false, code: error.code };
+      if (error instanceof SalonError) return { ok: false, code: pre("salon") + error.code };
+      if (error instanceof RetailError) return { ok: false, code: pre("retail") + error.code };
+      if (error instanceof WorkshopError) return { ok: false, code: pre("workshop") + error.code };
+      if (error instanceof RestaurantError) return { ok: false, code: pre("restaurant") + error.code };
+      if (error instanceof CraftError) return { ok: false, code: pre("craft") + error.code };
       if (error instanceof FitnessError) return { ok: false, code: error.code };
       if (error instanceof AutohausError) return { ok: false, code: error.code };
       throw error;

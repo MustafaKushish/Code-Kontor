@@ -6,12 +6,13 @@ import { Dialog } from "../../pos/ui";
 import type { TireStorage, Vehicle } from "../../../shared/workshop";
 
 interface TiresTabProps {
+  isManager: boolean;
   tires: TireStorage[];
   vehicles: Vehicle[];
   onTiresChanged: (tires: TireStorage[]) => void;
 }
 
-export function TiresTab({ tires, vehicles, onTiresChanged }: TiresTabProps) {
+export function TiresTab({ tires, vehicles, onTiresChanged, isManager }: TiresTabProps) {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
 
@@ -243,7 +244,7 @@ export function TiresTab({ tires, vehicles, onTiresChanged }: TiresTabProps) {
                   <Pencil size={15} />
                   Bearbeiten
                 </button>
-                {deleteConfirmId === t.id ? (
+                {!isManager ? null : deleteConfirmId === t.id ? (
                   <div className="row gap">
                     <button onClick={() => handleDelete(t.id)} className="button danger small-button">
                       Löschen

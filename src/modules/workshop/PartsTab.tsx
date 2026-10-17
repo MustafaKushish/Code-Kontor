@@ -7,6 +7,7 @@ import type { SparePart } from "../../../shared/workshop";
 import { currency as companyCurrency, currencySymbol } from "../../money";
 
 interface PartsTabProps {
+  isManager: boolean;
   parts: SparePart[];
   onPartsChanged: (parts: SparePart[]) => void;
 }
@@ -22,7 +23,7 @@ const CATEGORIES: SparePart["category"][] = [
   "Sonstiges",
 ];
 
-export function PartsTab({ parts, onPartsChanged }: PartsTabProps) {
+export function PartsTab({ parts, onPartsChanged, isManager }: PartsTabProps) {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [lowStockOnly, setLowStockOnly] = useState(false);
@@ -196,10 +197,12 @@ export function PartsTab({ parts, onPartsChanged }: PartsTabProps) {
             <AlertTriangle size={15} />
             Nur Mindestbestand
           </button>
-          <button onClick={openNewModal} className="button primary">
-            <Plus size={18} />
-            Teil anlegen
-          </button>
+          {isManager && (
+            <button onClick={openNewModal} className="button primary">
+              <Plus size={18} />
+              Teil anlegen
+            </button>
+          )}
         </div>
       </div>
 
@@ -240,10 +243,12 @@ export function PartsTab({ parts, onPartsChanged }: PartsTabProps) {
                 </span>
 
                 <span className="row workshop-row-actions">
-                  <button onClick={() => openEditModal(p)} className="icon-button" title="Bearbeiten" aria-label="Bearbeiten">
-                    <Pencil size={17} />
-                  </button>
-                  {deleteConfirmId === p.id ? (
+                  {isManager && (
+                    <button onClick={() => openEditModal(p)} className="icon-button" title="Bearbeiten" aria-label="Bearbeiten">
+                      <Pencil size={17} />
+                    </button>
+                  )}
+                  {!isManager ? null : deleteConfirmId === p.id ? (
                     <>
                       <button onClick={() => handleDelete(p.id)} className="button danger small-button">
                         Ja

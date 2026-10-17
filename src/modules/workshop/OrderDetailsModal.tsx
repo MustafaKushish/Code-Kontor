@@ -12,10 +12,8 @@ import {
   CheckCircle2,
   Clock,
   AlertTriangle,
-  CreditCard,
   Banknote,
   FileText,
-  ShoppingCart,
   Send,
   Shield,
   Phone,
@@ -24,6 +22,7 @@ import {
 import { api } from "../../api";
 import { Field } from "../../components";
 import { Dialog } from "../../pos/ui";
+import { ModuleCheckout } from "../../pos/ModuleCheckout";
 import type { InspectionItem, OrderPosition, SparePart, WorkshopOrder, WorkshopOrderStatus } from "../../../shared/workshop";
 import { WorkshopPrint } from "./WorkshopPrint";
 import { currency as companyCurrency, currencySymbol } from "../../money";
@@ -32,6 +31,7 @@ interface OrderDetailsModalProps {
   order: WorkshopOrder;
   parts: SparePart[];
   tenantId: string;
+  isManager: boolean;
   hasPos: boolean;
   onClose: () => void;
   onUpdated: (updated: WorkshopOrder) => void;
@@ -65,6 +65,7 @@ export function OrderDetailsModal({
   parts,
   tenantId,
   hasPos,
+  isManager,
   onClose,
   onUpdated,
   onDeleted,
@@ -201,20 +202,13 @@ export function OrderDetailsModal({
     }
   };
 
-  const handleCheckout = async (paymentMethod: "bar" | "karte" | "rechnung" | "pos") => {
-    setSaving(true);
-    try {
-      const updated = await api<WorkshopOrder>(`/workshop/orders/${order.id}/checkout`, {
-        method: "POST",
-        body: { paymentMethod },
-      });
+  const [paying, setPaying] = useState(false);
+  const afterPaid = async () => {
+    setPaying(false);
+    const updated = await api<WorkshopOrder>(`/workshop/orders/${order.id}`).catch(() => null);
+    if (updated) {
       setOrder(updated);
       onUpdated(updated);
-      setPrintDoc("invoice");
-    } catch (err: any) {
-      setErrorMsg(err.message || "Fehler beim Abrechnen.");
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -535,31 +529,11 @@ export function OrderDetailsModal({
 
               {order.paymentStatus !== "bezahlt" ? (
                 <div className="stack">
-                  <p className="muted">Direkte Zahlung erfassen und Werkstattauftrag abschließen:</p>
-                  <div className="workshop-pay-grid">
-                    <button type="button" onClick={() => handleCheckout("bar")} className="button primary">
-                      <Banknote size={18} />
-                      Barzahlung ({currencySymbol("de-DE")})
-                    </button>
-                    <button type="button" onClick={() => handleCheckout("karte")} className="button primary">
-                      <CreditCard size={18} />
-                      EC- / Kreditkarte
-                    </button>
-                    <button type="button" onClick={() => handleCheckout("rechnung")} className="button">
-                      <FileText size={18} />
-                      Auf Rechnung (Überweisung)
-                    </button>
-                  </div>
-
-                  {hasPos && (
-                    <div className="workshop-panel workshop-panel-head">
-                      <span className="muted">Möchtest du den Betrag an die Hauptkasse übergeben?</span>
-                      <a href="/kasse" className="button small-button">
-                        <ShoppingCart size={15} />
-                        Zur Kasse wechseln
-                      </a>
-                    </div>
-                  )}
+                  <p className="muted">Bezahlt wird über die Kasse: mit Belegnummer, im Tagesabschluss und stornierbar.</p>
+                  <button type="button" onClick={() => setPaying(true)} className="button primary">
+                    <Banknote size={18} />
+                    Bezahlen
+                  </button>
                 </div>
               ) : (
                 <div className="notice success workshop-paid">
@@ -579,7 +553,9 @@ export function OrderDetailsModal({
 
           {/* Fuß mit Löschen-Sicherheit */}
           <div className="workshop-dialog-foot">
-            {deleteConfirm ? (
+            {!isManager ? (
+              <span />
+            ) : deleteConfirm ? (
               <div className="row wrap gap">
                 <strong className="error">Unwiderruflich löschen?</strong>
                 <button onClick={handleDelete} className="button danger small-button">
@@ -603,6 +579,9 @@ export function OrderDetailsModal({
       </Dialog>
 
       {/* Druck-Overlay */}
+      {paying && (
+        <ModuleCheckout source="workshop" kind="order" refId={order.id} title={`${order.orderNumber} · ${order.licensePlate}`} onClose={() => setPaying(false)} onPaid={afterPaid} />
+      )}
       {printDoc && <WorkshopPrint order={order} type={printDoc} onClose={() => setPrintDoc(null)} />}
     </>
   );

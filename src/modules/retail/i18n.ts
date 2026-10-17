@@ -1,3 +1,4 @@
+import { formatMoney } from "../../money";
 import { useI18n } from "../../i18n";
 import type { ProductCategory, ProductUnit, OrderStatus, MovementReason } from "../../../shared/retail";
 
@@ -197,11 +198,12 @@ const TEXTS: Record<string, Record<string, string>> = {
 };
 
 export function useRetailI18n() {
-  const { lang, money, appText } = useI18n();
+  const { lang, appText } = useI18n();
   const dict = TEXTS[lang] ?? TEXTS.de;
 
   const r = (key: string) => dict[key] ?? TEXTS.de[key] ?? key;
-  const euro = (cents: number) => money(cents / 100);
+  // Mit Cent und in der Währung der Firma (vorher gerundet auf ganze Euro: 14,90 € wurde 15 €)
+  const euro = (cents: number) => formatMoney(cents, lang);
   const day = (d: string) => new Date(d).toLocaleDateString(lang);
 
   return { r, euro, day, appText, lang };

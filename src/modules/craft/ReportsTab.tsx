@@ -7,7 +7,6 @@ import {
   CheckCircle2,
   Clock,
   Banknote,
-  CreditCard,
   Trash2,
   X,
   Search,
@@ -15,11 +14,11 @@ import {
   User,
   Car,
   Wrench,
-  Receipt,
 } from "lucide-react";
 import { api } from "../../api";
 import { Field } from "../../components";
 import { Dialog } from "../../pos/ui";
+import { ModuleCheckout } from "../../pos/ModuleCheckout";
 import type {
   CraftProject,
   CraftReport,
@@ -32,12 +31,13 @@ import { CraftPrint } from "./CraftPrint";
 import { currency as companyCurrency, currencySymbol } from "../../money";
 
 interface ReportsTabProps {
+  isManager: boolean;
   reports: CraftReport[];
   projects: CraftProject[];
   onRefresh: () => void;
 }
 
-export function ReportsTab({ reports, projects, onRefresh }: ReportsTabProps) {
+export function ReportsTab({ reports, projects, onRefresh, isManager }: ReportsTabProps) {
   const [filterStatus, setFilterStatus] = useState<string>("alle");
   const [search, setSearch] = useState("");
   const [signingReport, setSigningReport] = useState<CraftReport | null>(null);
@@ -109,20 +109,8 @@ export function ReportsTab({ reports, projects, onRefresh }: ReportsTabProps) {
     }
   };
 
-  const handleCheckout = async (reportId: string, paymentMethod: "bar" | "karte" | "rechnung") => {
-    setIsBusy(true);
-    try {
-      await api(`/craft/reports/${reportId}/checkout`, {
-        method: "POST",
-        body: { paymentMethod },
-      });
-      onRefresh();
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsBusy(false);
-    }
-  };
+  // Bezahlt wird über die Kasse (Beleg mit Nummer, Tagesabschluss, Storno)
+  const [paying, setPaying] = useState<string | null>(null);
 
   const handleDelete = async (id: string) => {
     if (!confirm("Arbeitsbericht wirklich löschen?")) return;
@@ -309,26 +297,22 @@ export function ReportsTab({ reports, projects, onRefresh }: ReportsTabProps) {
                     >
                       <Printer size={17} />
                     </button>
-                    <button
-                      onClick={() => handleDelete(report.id)}
-                      className="icon-button danger"
-                      title="Löschen"
-                      aria-label="Löschen"
-                    >
-                      <Trash2 size={17} />
-                    </button>
+                    {isManager && (
+                      <button
+                        onClick={() => handleDelete(report.id)}
+                        className="icon-button danger"
+                        title="Löschen"
+                        aria-label="Löschen"
+                      >
+                        <Trash2 size={17} />
+                      </button>
+                    )}
                   </div>
 
                   {isSigned && (
                     <div className="row gap craft-pay">
-                      <button onClick={() => handleCheckout(report.id, "bar")} disabled={isBusy} className="button small-button">
-                        <Banknote size={15} /> Bar
-                      </button>
-                      <button onClick={() => handleCheckout(report.id, "karte")} disabled={isBusy} className="button small-button">
-                        <CreditCard size={15} /> Karte
-                      </button>
-                      <button onClick={() => handleCheckout(report.id, "rechnung")} disabled={isBusy} className="button small-button">
-                        <Receipt size={15} /> Rechnung
+                      <button onClick={() => setPaying(report.id)} disabled={isBusy} className="button small-button primary">
+                        <Banknote size={15} /> Bezahlen
                       </button>
                     </div>
                   )}
@@ -482,6 +466,18 @@ export function ReportsTab({ reports, projects, onRefresh }: ReportsTabProps) {
             </div>
           </form>
         </Dialog>
+      )}
+      {paying && (
+        <ModuleCheckout
+          source="craft"
+          kind="report"
+          refId={paying}
+          onClose={() => setPaying(null)}
+          onPaid={() => {
+            setPaying(null);
+            onRefresh();
+          }}
+        />
       )}
     </div>
   );

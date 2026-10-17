@@ -11,6 +11,8 @@ import {
   type SalonSettings,
   type SalonStaff,
 } from "../../shared/salon";
+import type { PosArticle, PosLine } from "../../shared/pos";
+import type { PosModule } from "../pos/store";
 
 export class SalonError extends Error {
   constructor(public code: string) {
@@ -600,9 +602,10 @@ export class SalonStore {
     let clientId = input.clientId || "";
     let clientName = input.clientName || "Kunde";
     if (!clientId && clientName) {
+      // Leere Telefonnummer darf keinen fremden Kunden treffen
       const existingClient = this.sql.all<any>(
-        `SELECT id, name FROM salon_clients WHERE name = ? OR phone = ?`,
-        [clientName, input.clientPhone || ""]
+        `SELECT id, name FROM salon_clients WHERE name = ? OR (phone <> '' AND phone = ?)`,
+        [clientName, (input.clientPhone || "").trim()]
       )[0];
       if (existingClient) {
         clientId = existingClient.id;
@@ -741,12 +744,64 @@ export class SalonStore {
     };
   }
 
+  /**
+   * Online-Termin eines Kunden. Preis, Dauer und Stylist kommen aus der eigenen Datenbank,
+   * nicht aus dem Browser; die Zeit muss ein freier Slot sein.
+   */
+  bookOnline(
+    input: { serviceIds: string[]; staffId: string; day: string; startTime: string; name: string; phone: string; email: string; notes: string },
+    today: string,
+    now: string,
+    lastDay: string,
+  ): SalonAppointment {
+    return this.transaction(() => {
+      const settings = this.getSettings();
+      if (!settings.onlineBookingEnabled) throw new SalonError("bookingDisabled");
+      const services = [...new Set(input.serviceIds)].map((id) => this.getService(id));
+      if (!services.length || services.some((srv) => !srv || !srv.active)) throw new SalonError("serviceNotFound");
+      const chosen = services as SalonService[];
+      if (input.day < today || input.day > lastDay) throw new SalonError("dayNotAllowed");
+      const duration = chosen.reduce((sum, srv) => sum + srv.durationMinutes, 0);
+      const free = this.getFreeSlots(input.day, duration, input.staffId, input.day === today ? now : undefined);
+      const slot = free.find((f) => f.time === input.startTime && f.staffId === input.staffId);
+      if (!slot) throw new SalonError("slotTaken");
+
+      // Kunde nur über Telefon oder E-Mail wiedererkennen, nie über den Namen allein
+      const known = this.sql.all<any>(
+        `SELECT id FROM salon_clients WHERE (phone <> '' AND phone = ?) OR (email <> '' AND lower(email) = lower(?)) LIMIT 1`,
+        [input.phone, input.email]
+      )[0];
+      const clientId = known ? known.id : this.saveClient({ name: input.name, phone: input.phone, email: input.email }).id;
+
+      return this.saveAppointment({
+        clientId,
+        clientName: input.name,
+        clientPhone: input.phone,
+        clientEmail: input.email,
+        staffId: slot.staffId,
+        staffName: slot.staffName,
+        serviceIds: chosen.map((srv) => srv.id),
+        serviceNames: chosen.map((srv) => srv.name),
+        day: input.day,
+        startTime: input.startTime,
+        durationMinutes: duration,
+        totalCents: chosen.reduce((sum, srv) => sum + srv.priceCents, 0),
+        status: "booked",
+        notes: input.notes,
+        source: "online",
+        paid: false,
+      });
+    }) as SalonAppointment;
+  }
+
   // ==========================================
   // FREE SLOTS SEARCH (FOR ONLINE & DESK BOOKING)
   // ==========================================
 
-  getFreeSlots(day: string, durationMinutes: number, staffId?: string): { time: string; staffId: string; staffName: string }[] {
+  /** notBefore („HH:MM“): heute keine Zeiten anbieten, die schon vorbei sind. */
+  getFreeSlots(day: string, durationMinutes: number, staffId?: string, notBefore?: string): { time: string; staffId: string; staffName: string }[] {
     const settings = this.getSettings();
+    if (!Number.isFinite(durationMinutes) || durationMinutes < 5) return [];
     const dateObj = new Date(day + "T00:00:00Z");
     let dayOfWeek = dateObj.getUTCDay(); // 0=So, 1=Mo
     if (dayOfWeek === 0) dayOfWeek = 7;
@@ -759,7 +814,8 @@ export class SalonStore {
     const targetStaff = staffId ? allStaff.filter((s) => s.id === staffId) : allStaff;
 
     const appointments = this.listAppointments({ day });
-    const interval = settings.slotIntervalMinutes || 15;
+    const interval = Math.max(5, settings.slotIntervalMinutes || 15);
+    const earliest = notBefore ? timeToMinutes(notBefore) : -1;
     const startM = timeToMinutes(settings.openTime || "09:00");
     const endM = timeToMinutes(settings.closeTime || "18:00");
 
@@ -770,6 +826,7 @@ export class SalonStore {
       const staffEnd = Math.min(endM, timeToMinutes(staff.workEnd));
 
       for (let m = staffStart; m + durationMinutes <= staffEnd; m += interval) {
+        if (m <= earliest) continue;
         const slotStart = `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
         const slotEnd = addMinutesToTime(slotStart, durationMinutes);
 
@@ -815,7 +872,7 @@ export class SalonStore {
 
   saveSettings(input: Partial<SalonSettings>): SalonSettings {
     const current = this.getSettings();
-    const merged = { ...current, ...input };
+    const merged = sanitizeSettings({ ...current, ...input }, current);
 
     const entries = [
       ["salonName", merged.salonName],
@@ -837,6 +894,76 @@ export class SalonStore {
     }
 
     return this.getSettings();
+  }
+
+  // ==========================================
+  // KASSE: Termine und Dienstleistungen werden in der Kasse der Plattform abgerechnet
+  // ==========================================
+
+  posModule(): PosModule {
+    const today = () => new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Berlin" });
+    const payable = (a: SalonAppointment) => !a.paid && a.status !== "canceled" && a.status !== "no_show";
+    const appointmentArticle = (a: SalonAppointment): PosArticle => ({
+      source: "salon", kind: "appointment", refId: a.id, name: `${a.startTime} ${a.clientName}`, detail: [a.serviceNames.join(", "), a.staffName].filter(Boolean).join(" · "),
+      priceCents: a.totalCents, vatRate: 0, single: true, group: "@salon.appointment",
+    });
+    const serviceArticle = (srv: SalonService): PosArticle => ({
+      source: "salon", kind: "service", refId: srv.id, name: srv.name, detail: `${srv.durationMinutes} min`, priceCents: srv.priceCents, vatRate: srv.vatRate, group: "@salon.service",
+    });
+    // Offene Termine von heute und den letzten Tagen (jemand hat vergessen abzurechnen)
+    const open = () =>
+      this.sql
+        .all<any>(`SELECT * FROM salon_appointments WHERE paid = 0 AND status NOT IN ('canceled', 'no_show') AND day <= ? AND day >= date(?, '-7 days') ORDER BY day DESC, start_time`, [today(), today()])
+        .map(this.mapAppointment);
+    return {
+      articles: (query) => {
+        const q = query.trim().toLowerCase();
+        return [
+          ...open().filter((a) => a.clientName.toLowerCase().includes(q)).map(appointmentArticle),
+          ...this.listServices().filter((srv) => srv.name.toLowerCase().includes(q)).map(serviceArticle),
+        ];
+      },
+      catalog: () => [...open().filter((a) => a.day === today()).map(appointmentArticle), ...this.listServices().map(serviceArticle)],
+      scan: (code) => {
+        const a = this.getAppointment(code);
+        return a && payable(a) ? [appointmentArticle(a)] : [];
+      },
+      prepare: (line) => {
+        if (line.kind === "service") {
+          const srv = line.refId ? this.getService(line.refId) : null;
+          if (!srv) throw new SalonError("notFound");
+          return { lines: [{ ...line, name: line.name || srv.name, kind: "service", vatRate: srv.vatRate }] };
+        }
+        const a = line.refId ? this.getAppointment(line.refId) : null;
+        if (!a) throw new SalonError("notFound");
+        if (!payable(a)) throw new SalonError("notPayable");
+        // Preise und Steuersätze der Dienstleistungen; gibt es eine nicht mehr, gilt der Betrag des Termins
+        const services = a.serviceIds.map((id) => this.getService(id));
+        const lines: PosLine[] = services.every((srv) => srv)
+          ? (services as SalonService[]).map((srv) => ({ source: "salon", kind: "appointment:service", refId: a.id, name: srv.name, qty: 1, unitCents: srv.priceCents, vatRate: srv.vatRate }))
+          : [{ source: "salon", kind: "appointment:service", refId: a.id, name: a.serviceNames.join(", ") || "Termin", qty: 1, unitCents: a.totalCents, vatRate: services.find((srv) => srv)?.vatRate ?? 19 }];
+        const client = a.clientId ? this.getClient(a.clientId) : null;
+        return {
+          lines,
+          refs: [{ source: "salon", kind: "appointment", refId: a.id, label: `${a.day} ${a.startTime} · ${a.clientName}` }],
+          customer: { id: client?.id ?? null, name: a.clientName, address: "", phone: a.clientPhone, email: a.clientEmail },
+        };
+      },
+      booked: (receipt, _lines, refs) => {
+        for (const ref of refs) {
+          if (ref.kind !== "appointment") continue;
+          const a = this.getAppointment(ref.refId);
+          if (!a || !payable(a)) throw new SalonError("notPayable");
+          this.sql.run(`UPDATE salon_appointments SET paid = 1, status = 'completed', billed_invoice_id = ?, updated_at = ? WHERE id = ?`, [receipt?.number ?? null, new Date().toISOString(), a.id]);
+        }
+      },
+      canceled: (original) => {
+        for (const ref of original.refs) {
+          if (ref.source !== "salon" || ref.kind !== "appointment") continue;
+          this.sql.run(`UPDATE salon_appointments SET paid = 0, billed_invoice_id = NULL, updated_at = ? WHERE id = ? AND billed_invoice_id = ?`, [new Date().toISOString(), ref.refId, original.number]);
+        }
+      },
+    };
   }
 
   // ==========================================
@@ -934,4 +1061,29 @@ export class SalonStore {
       source: "online",
     });
   }
+}
+
+const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/** Einstellungen prüfen: ein Terminabstand von 0 oder weniger würde die Suche nach freien Zeiten endlos laufen lassen. */
+function sanitizeSettings(input: SalonSettings, current: SalonSettings): SalonSettings {
+  const num = (v: unknown, min: number, max: number, fallback: number) => {
+    const n = Math.round(Number(v));
+    return Number.isFinite(n) && n >= min && n <= max ? n : fallback;
+  };
+  const interval = [5, 10, 15, 20, 30, 60].includes(Number(input.slotIntervalMinutes)) ? Number(input.slotIntervalMinutes) : current.slotIntervalMinutes;
+  const days = Array.isArray(input.openDays) ? [...new Set(input.openDays.map(Number).filter((d) => Number.isInteger(d) && d >= 1 && d <= 7))].sort() : current.openDays;
+  const openTime = TIME.test(String(input.openTime)) ? String(input.openTime) : current.openTime;
+  const closeTime = TIME.test(String(input.closeTime)) && String(input.closeTime) > openTime ? String(input.closeTime) : current.closeTime;
+  return {
+    salonName: String(input.salonName ?? "").trim().slice(0, 120) || current.salonName,
+    slotIntervalMinutes: [5, 10, 15, 20, 30, 60].includes(interval) ? interval : 15,
+    openDays: days,
+    openTime,
+    closeTime,
+    onlineBookingEnabled: input.onlineBookingEnabled === true,
+    bookingAdvanceDays: num(input.bookingAdvanceDays, 1, 365, current.bookingAdvanceDays),
+    cancellationHours: num(input.cancellationHours, 0, 168, current.cancellationHours),
+    noticeText: String(input.noticeText ?? "").slice(0, 500),
+  };
 }

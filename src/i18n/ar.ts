@@ -695,7 +695,7 @@ export const ar: Dict = {
     toPos: "إلى الصندوق",
     noData: "لا شيء بعد",
     noGroup: "بدون مجموعة",
-    moduleGroups: { repair: "الإصلاحات", part: "قطع الغيار", used: "أجهزة مستعملة", other: "أخرى" },
+    moduleGroups: { appointment: "المواعيد", service: "الخدمات", product: "المنتجات", order: "الطلبات", menu: "طعام ومشروبات", report: "تقارير العمل", repair: "الإصلاحات", part: "قطع الغيار", used: "أجهزة مستعملة", other: "أخرى" },
     chart: { hour: "المبيعات حسب الساعة", day: "المبيعات يوميًا", month: "المبيعات شهريًا" },
   },
   legal: {

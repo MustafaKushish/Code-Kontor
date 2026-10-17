@@ -1,4 +1,5 @@
 import { Hono, type Context } from "hono";
+import { createMiddleware } from "hono/factory";
 import type { Env } from "../index";
 import { tenantStub, type ModuleResult } from "../tenant";
 import type { RetailStore } from "./store";
@@ -43,6 +44,12 @@ async function readBody(c: Ctx): Promise<Record<string, unknown>> {
   }
 }
 
+/** Preise, Stammdaten, Einstellungen und Löschen nur für Inhaber und Admins; Mitarbeiter arbeiten nur damit. */
+const managers = createMiddleware<RetailEnv>(async (c, next) => {
+  if (c.get("user").role === "staff") return fail(c, "forbidden", 403);
+  await next();
+});
+
 export const retailRoutes = new Hono<RetailEnv>();
 
 // Prüfung: Modul „einzelhandel“ muss installiert sein
@@ -79,14 +86,14 @@ retailRoutes.get("/products/barcode/:ean", async (c) => {
   return c.json({ product: res.value });
 });
 
-retailRoutes.post("/products", async (c) => {
+retailRoutes.post("/products", managers, async (c) => {
   const body = await readBody(c);
   const res = await store(c.env, c.get("user").tenantId).saveProduct(body);
   if (!res.ok) return moduleError(c, res.code);
   return c.json({ product: res.value });
 });
 
-retailRoutes.delete("/products/:id", async (c) => {
+retailRoutes.delete("/products/:id", managers, async (c) => {
   const res = await store(c.env, c.get("user").tenantId).deleteProduct(c.req.param("id"));
   if (!res.ok) return moduleError(c, res.code);
   return c.json({ ok: true });
@@ -113,14 +120,14 @@ retailRoutes.get("/suppliers", async (c) => {
   return c.json({ suppliers: res.value });
 });
 
-retailRoutes.post("/suppliers", async (c) => {
+retailRoutes.post("/suppliers", managers, async (c) => {
   const body = await readBody(c);
   const res = await store(c.env, c.get("user").tenantId).saveSupplier(body);
   if (!res.ok) return moduleError(c, res.code);
   return c.json({ supplier: res.value });
 });
 
-retailRoutes.delete("/suppliers/:id", async (c) => {
+retailRoutes.delete("/suppliers/:id", managers, async (c) => {
   const res = await store(c.env, c.get("user").tenantId).deleteSupplier(c.req.param("id"));
   if (!res.ok) return moduleError(c, res.code);
   return c.json({ ok: true });
@@ -159,7 +166,7 @@ retailRoutes.post("/orders/:id/receive", async (c) => {
   return c.json({ order: res.value });
 });
 
-retailRoutes.delete("/orders/:id", async (c) => {
+retailRoutes.delete("/orders/:id", managers, async (c) => {
   const res = await store(c.env, c.get("user").tenantId).deleteOrder(c.req.param("id"));
   if (!res.ok) return moduleError(c, res.code);
   return c.json({ ok: true });
@@ -176,29 +183,6 @@ retailRoutes.get("/stock/movements", async (c) => {
   return c.json({ movements: res.value });
 });
 
-// ---------- KASSENVERKAUF & DIREKTABRECHNUNG ----------
-
-retailRoutes.post("/checkout", async (c) => {
-  const body = await readBody(c);
-  const items = Array.isArray(body.items) ? (body.items as { productId: string; qty: number; priceCents: number }[]) : [];
-  const payMethod = String(body.payMethod || "bar");
-  const user = c.get("user");
-  const s = store(c.env, user.tenantId);
-
-  // Für jedes verkaufte Produkt den Bestand reduzieren
-  for (const item of items) {
-    if (item.productId && item.qty > 0) {
-      await s.adjustStock(item.productId, -item.qty, "sale", `Kassenverkauf (${payMethod})`, user.name);
-    }
-  }
-
-  return c.json({
-    ok: true,
-    receiptNumber: `R-${Date.now().toString().slice(-6)}`,
-    timestamp: new Date().toISOString(),
-  });
-});
-
 // ---------- EINSTELLUNGEN ----------
 
 retailRoutes.get("/settings", async (c) => {
@@ -207,7 +191,7 @@ retailRoutes.get("/settings", async (c) => {
   return c.json({ settings: res.value });
 });
 
-retailRoutes.post("/settings", async (c) => {
+retailRoutes.post("/settings", managers, async (c) => {
   const body = await readBody(c);
   const res = await store(c.env, c.get("user").tenantId).saveSettings(body as any);
   if (!res.ok) return moduleError(c, res.code);

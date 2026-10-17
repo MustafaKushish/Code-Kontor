@@ -20,12 +20,13 @@ import type {
 } from "../../../shared/craft";
 
 interface MeasurementsTabProps {
+  isManager: boolean;
   measurements: CraftMeasurement[];
   projects: CraftProject[];
   onRefresh: () => void;
 }
 
-export function MeasurementsTab({ measurements, projects, onRefresh }: MeasurementsTabProps) {
+export function MeasurementsTab({ measurements, projects, onRefresh, isManager }: MeasurementsTabProps) {
   const [selectedProjectId, setSelectedProjectId] = useState<string>("alle");
   const [search, setSearch] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -207,14 +208,16 @@ export function MeasurementsTab({ measurements, projects, onRefresh }: Measureme
                       <span className="craft-result">
                         {m.result} {m.unit}
                       </span>
-                      <button
-                        onClick={() => handleDelete(m.id)}
-                        className="icon-button danger"
-                        title="Löschen"
-                        aria-label="Löschen"
-                      >
-                        <Trash2 size={17} />
-                      </button>
+                      {isManager && (
+                        <button
+                          onClick={() => handleDelete(m.id)}
+                          className="icon-button danger"
+                          title="Löschen"
+                          aria-label="Löschen"
+                        >
+                          <Trash2 size={17} />
+                        </button>
+                      )}
                     </div>
                   );
                 })}

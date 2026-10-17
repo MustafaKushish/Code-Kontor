@@ -1,4 +1,5 @@
 import { Hono, type Context } from "hono";
+import { createMiddleware } from "hono/factory";
 import type { Env } from "../index";
 import { tenantStub, type ModuleResult } from "../tenant";
 import type { OfficeStore } from "./store";
@@ -43,6 +44,12 @@ async function readBody(c: Ctx): Promise<Record<string, unknown>> {
   }
 }
 
+/** Preise, Stammdaten, Einstellungen und Löschen nur für Inhaber und Admins; Mitarbeiter arbeiten nur damit. */
+const managers = createMiddleware<OfficeEnv>(async (c, next) => {
+  if (c.get("user").role === "staff") return fail(c, "forbidden", 403);
+  await next();
+});
+
 export const officeRoutes = new Hono<OfficeEnv>();
 
 // Überprüfen, ob das Modul „buero“ installiert ist
@@ -70,14 +77,14 @@ officeRoutes.get("/clients/:id", async (c) => {
   return c.json({ client: res.value });
 });
 
-officeRoutes.post("/clients", async (c) => {
+officeRoutes.post("/clients", managers, async (c) => {
   const body = await readBody(c);
   const res = await store(c.env, c.get("user").tenantId).saveClient(body);
   if (!res.ok) return moduleError(c, res.code);
   return c.json({ client: res.value }, 201);
 });
 
-officeRoutes.delete("/clients/:id", async (c) => {
+officeRoutes.delete("/clients/:id", managers, async (c) => {
   const id = c.req.param("id");
   const res = await store(c.env, c.get("user").tenantId).deleteClient(id);
   if (!res.ok) return moduleError(c, res.code);
@@ -102,14 +109,14 @@ officeRoutes.get("/projects/:id", async (c) => {
   return c.json({ project: res.value });
 });
 
-officeRoutes.post("/projects", async (c) => {
+officeRoutes.post("/projects", managers, async (c) => {
   const body = await readBody(c);
   const res = await store(c.env, c.get("user").tenantId).saveProject(body);
   if (!res.ok) return moduleError(c, res.code);
   return c.json({ project: res.value }, 201);
 });
 
-officeRoutes.delete("/projects/:id", async (c) => {
+officeRoutes.delete("/projects/:id", managers, async (c) => {
   const id = c.req.param("id");
   const res = await store(c.env, c.get("user").tenantId).deleteProject(id);
   if (!res.ok) return moduleError(c, res.code);
@@ -196,14 +203,14 @@ officeRoutes.get("/expenses", async (c) => {
   return c.json({ expenses: res.value });
 });
 
-officeRoutes.post("/expenses", async (c) => {
+officeRoutes.post("/expenses", managers, async (c) => {
   const body = await readBody(c);
   const res = await store(c.env, c.get("user").tenantId).saveExpense(body);
   if (!res.ok) return moduleError(c, res.code);
   return c.json({ expense: res.value }, 201);
 });
 
-officeRoutes.delete("/expenses/:id", async (c) => {
+officeRoutes.delete("/expenses/:id", managers, async (c) => {
   const id = c.req.param("id");
   const res = await store(c.env, c.get("user").tenantId).deleteExpense(id);
   if (!res.ok) return moduleError(c, res.code);
@@ -228,21 +235,21 @@ officeRoutes.get("/quotes/:id", async (c) => {
   return c.json({ quote: res.value });
 });
 
-officeRoutes.post("/quotes", async (c) => {
+officeRoutes.post("/quotes", managers, async (c) => {
   const body = await readBody(c);
   const res = await store(c.env, c.get("user").tenantId).saveQuote(body);
   if (!res.ok) return moduleError(c, res.code);
   return c.json({ quote: res.value }, 201);
 });
 
-officeRoutes.post("/quotes/:id/convert", async (c) => {
+officeRoutes.post("/quotes/:id/convert", managers, async (c) => {
   const id = c.req.param("id");
   const res = await store(c.env, c.get("user").tenantId).convertQuoteToInvoice(id);
   if (!res.ok) return moduleError(c, res.code);
   return c.json({ invoice: res.value }, 201);
 });
 
-officeRoutes.delete("/quotes/:id", async (c) => {
+officeRoutes.delete("/quotes/:id", managers, async (c) => {
   const id = c.req.param("id");
   const res = await store(c.env, c.get("user").tenantId).deleteQuote(id);
   if (!res.ok) return moduleError(c, res.code);
@@ -267,14 +274,14 @@ officeRoutes.get("/invoices/:id", async (c) => {
   return c.json({ invoice: res.value });
 });
 
-officeRoutes.post("/invoices", async (c) => {
+officeRoutes.post("/invoices", managers, async (c) => {
   const body = await readBody(c);
   const res = await store(c.env, c.get("user").tenantId).saveInvoice(body);
   if (!res.ok) return moduleError(c, res.code);
   return c.json({ invoice: res.value }, 201);
 });
 
-officeRoutes.post("/invoices/:id/pay", async (c) => {
+officeRoutes.post("/invoices/:id/pay", managers, async (c) => {
   const id = c.req.param("id");
   const body = await readBody(c);
   const res = await store(c.env, c.get("user").tenantId).markInvoicePaid(id, typeof body.method === "string" ? body.method : "Überweisung");
@@ -282,7 +289,7 @@ officeRoutes.post("/invoices/:id/pay", async (c) => {
   return c.json({ invoice: res.value });
 });
 
-officeRoutes.delete("/invoices/:id", async (c) => {
+officeRoutes.delete("/invoices/:id", managers, async (c) => {
   const id = c.req.param("id");
   const res = await store(c.env, c.get("user").tenantId).deleteInvoice(id);
   if (!res.ok) return moduleError(c, res.code);
@@ -298,7 +305,7 @@ officeRoutes.get("/dunning", async (c) => {
   return c.json({ dunning: res.value });
 });
 
-officeRoutes.post("/dunning", async (c) => {
+officeRoutes.post("/dunning", managers, async (c) => {
   const body = await readBody(c);
   const invoiceId = String(body.invoiceId || "");
   const level = Number(body.level) as 1 | 2 | 3;
@@ -317,21 +324,21 @@ officeRoutes.get("/recurring", async (c) => {
   return c.json({ recurring: res.value });
 });
 
-officeRoutes.post("/recurring", async (c) => {
+officeRoutes.post("/recurring", managers, async (c) => {
   const body = await readBody(c);
   const res = await store(c.env, c.get("user").tenantId).saveRecurring(body);
   if (!res.ok) return moduleError(c, res.code);
   return c.json({ recurring: res.value }, 201);
 });
 
-officeRoutes.post("/recurring/:id/trigger", async (c) => {
+officeRoutes.post("/recurring/:id/trigger", managers, async (c) => {
   const id = c.req.param("id");
   const res = await store(c.env, c.get("user").tenantId).triggerRecurring(id);
   if (!res.ok) return moduleError(c, res.code);
   return c.json({ invoice: res.value }, 201);
 });
 
-officeRoutes.delete("/recurring/:id", async (c) => {
+officeRoutes.delete("/recurring/:id", managers, async (c) => {
   const id = c.req.param("id");
   const res = await store(c.env, c.get("user").tenantId).deleteRecurring(id);
   if (!res.ok) return moduleError(c, res.code);
@@ -340,7 +347,7 @@ officeRoutes.delete("/recurring/:id", async (c) => {
 
 // ---------- DATEV Export ----------
 
-officeRoutes.get("/export/datev", async (c) => {
+officeRoutes.get("/export/datev", managers, async (c) => {
   const res = await store(c.env, c.get("user").tenantId).exportDatevCsv();
   if (!res.ok) return moduleError(c, res.code);
 
@@ -362,7 +369,7 @@ officeRoutes.get("/settings", async (c) => {
   return c.json({ settings: res.value });
 });
 
-officeRoutes.put("/settings", async (c) => {
+officeRoutes.put("/settings", managers, async (c) => {
   const body = (await readBody(c)) as unknown as Parameters<OfficeStore["saveSettings"]>[0];
   const res = await store(c.env, c.get("user").tenantId).saveSettings(body);
   if (!res.ok) return moduleError(c, res.code);

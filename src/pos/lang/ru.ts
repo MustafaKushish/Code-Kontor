@@ -298,8 +298,10 @@ export const ru: PosDict = {
   },
   moduleGroups: {
     repairs: { part: "Запчасти", accessory: "Аксессуары", used: "Б/у устройства", order: "Готово к выдаче" },
+    salon: { appointment: "Записи", service: "Услуги" }, retail: { product: "Товары" }, workshop: { order: "Заказы мастерской", part: "Запчасти" }, restaurant: { order: "Открытые заказы", menu: "Еда и напитки" }, craft: { report: "Отчёты о работе" },
   },
   moduleErrors: {
+    alreadyPaid: "Уже оплачено.", notPayable: "Нельзя провести: отменено или уже оплачено.",
     notFound: "Позиции больше нет. Обновите.",
     alreadySold: "Это устройство уже продано.",
     statusNotAllowed: "Заказ не готов к выдаче.",

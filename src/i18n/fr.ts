@@ -695,7 +695,7 @@ export const fr: Dict = {
     toPos: "Aller à la caisse",
     noData: "Rien pour l'instant",
     noGroup: "Sans famille",
-    moduleGroups: { repair: "Réparations", part: "Pièces détachées", used: "Appareils d'occasion", other: "Autres" },
+    moduleGroups: { appointment: "Rendez-vous", service: "Prestations", product: "Articles", order: "Commandes", menu: "Plats et boissons", report: "Rapports de travail", repair: "Réparations", part: "Pièces détachées", used: "Appareils d'occasion", other: "Autres" },
     chart: { hour: "Chiffre d'affaires par heure", day: "Chiffre d'affaires par jour", month: "Chiffre d'affaires par mois" },
   },
   legal: {

@@ -1,7 +1,7 @@
 import {
   DEFAULT_POS_SETTINGS, MAIN_REGISTER, PAY_METHODS, POS_APP_ID, addVat, computeTotals, emptyByMethod, receiptNumber, sanitizePosSettings, settlePayments,
   type CashMove, type CashMoveKind, type CashState, type Closing, type PayMethod, type Payment, type PosArticle, type PosCustomer, type PosLine,
-  type PosItem, type PosRef, type PosRegister, type PosSettings, type PosSource, type Receipt, type ReceiptCompany, type ReceiptKind, type ReceiptRow,
+  type PosItem, type PosRef, type PosRegister, type PosSettings, type PosSource, type Receipt, type Totals, type ReceiptCompany, type ReceiptKind, type ReceiptRow,
 } from "../../shared/pos";
 import { bucketKeys, type InsightBucket, type Range, type SalesStats } from "../../shared/insights";
 
@@ -291,6 +291,23 @@ export class PosStore {
    * Bezahlen: Posten prüfen (Module rechnen selbst), Beleg mit fortlaufender Nummer buchen,
    * Module abschließen lassen. Gibt null zurück, wenn nichts zu zahlen war (z. B. Abholung ohne Kosten).
    */
+  /** Wie checkout, aber ohne zu buchen: was die Systeme aus ihren Posten machen und was zu zahlen ist. */
+  quote(input: PosLine[], ctx: PosContext): { lines: PosLine[]; totals: Totals; depositCents: number; dueCents: number; customer: PosCustomer | null } {
+    const lines: PosLine[] = [];
+    let depositCents = 0;
+    let customer: PosCustomer | null = null;
+    for (const line of input) {
+      const module = this.modules.get(line.source);
+      if (!module) throw new PosError("unknownSource");
+      const prepared = module.prepare(line, ctx);
+      lines.push(...prepared.lines);
+      depositCents += prepared.depositCents ?? 0;
+      customer ??= prepared.customer ?? null;
+    }
+    const totals = computeTotals(lines, this.settings().smallBusiness);
+    return { lines, totals, depositCents, dueCents: totals.grossCents - depositCents, customer };
+  }
+
   checkout(input: { lines: PosLine[]; payments: Payment[]; customer: PosCustomer | null; note?: string }, ctx: PosContext): Receipt | null {
     if (!input.lines.length) throw new PosError("emptyCart");
     return this.transaction(() => {
@@ -594,8 +611,10 @@ function moduleGroup(l: PosLine): string {
   if (l.source === "repairs") {
     if (l.kind.startsWith("order")) return "@repairs.repair";
     if (l.kind === "used" || l.kind === "part") return `@repairs.${l.kind}`;
+    return "@repairs.other";
   }
-  return `@${l.source}.other`;
+  // Andere Systeme: Art des Postens vor dem Doppelpunkt, z. B. „appointment:service“ → „@salon.appointment“
+  return `@${l.source}.${l.kind.split(":")[0] || "other"}`;
 }
 
 /** Tag nach deutscher Ortszeit, damit ein Verkauf um 0:30 Uhr zum richtigen Tag gehört. */

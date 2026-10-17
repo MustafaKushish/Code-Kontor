@@ -298,8 +298,10 @@ export const de = {
   },
   moduleGroups: {
     repairs: { part: "Ersatzteile", accessory: "Zubehör", used: "Gebrauchtgeräte", order: "Abholbereit" },
+    salon: { appointment: "Termine", service: "Dienstleistungen" }, retail: { product: "Artikel" }, workshop: { order: "Werkstattaufträge", part: "Ersatzteile" }, restaurant: { order: "Offene Bestellungen", menu: "Speisen & Getränke" }, craft: { report: "Arbeitsberichte" },
   },
   moduleErrors: {
+    alreadyPaid: "Das ist schon bezahlt.", notPayable: "Das kann nicht abgerechnet werden: storniert oder schon bezahlt.",
     notFound: "Ein Posten ist nicht mehr da. Lade neu.",
     alreadySold: "Dieses Gerät ist schon verkauft.",
     statusNotAllowed: "Der Auftrag ist nicht abholbereit.",

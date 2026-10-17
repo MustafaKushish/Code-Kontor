@@ -35,6 +35,7 @@ interface MembersTabProps {
   onOpenContractPrint: (member: FitnessMember, plan?: FitnessPlan) => void;
   onOpenCardPrint: (member: FitnessMember, plan?: FitnessPlan) => void;
   onRefreshStats: () => void;
+  isManager: boolean;
 }
 
 export function MembersTab({
@@ -45,6 +46,7 @@ export function MembersTab({
   onOpenContractPrint,
   onOpenCardPrint,
   onRefreshStats,
+  isManager,
 }: MembersTabProps) {
   const [members, setMembers] = useState<FitnessMember[]>([]);
   const [loading, setLoading] = useState(true);
@@ -472,10 +474,12 @@ export function MembersTab({
                 Ausweis drucken
               </button>
             </div>
-            <button type="button" onClick={() => handleDeleteMember(detailedMember.id)} className="button danger block">
-              <Trash2 size={16} />
-              Mitglied löschen
-            </button>
+            {isManager && (
+              <button type="button" onClick={() => handleDeleteMember(detailedMember.id)} className="button danger block">
+                <Trash2 size={16} />
+                Mitglied löschen
+              </button>
+            )}
           </div>
         </Dialog>
       )}

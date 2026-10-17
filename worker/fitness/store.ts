@@ -1,3 +1,4 @@
+import { nextNumber } from "../numbers";
 import type {
   FitnessCheckIn,
   FitnessCheckInResult,
@@ -795,14 +796,8 @@ export class FitnessStore {
     // Automatische Mitgliedsnummer generieren, falls nicht vergeben
     let memberNumber = data.memberNumber;
     if (!memberNumber) {
-      const maxRow = this.sql.exec<{ num: string }>(
-        "SELECT member_number AS num FROM fitness_members WHERE member_number LIKE 'M-%' ORDER BY member_number DESC LIMIT 1"
-      ).toArray();
-      let nextSeq = 1001;
-      if (maxRow.length > 0 && maxRow[0].num) {
-        const parsed = parseInt(maxRow[0].num.replace("M-", ""), 10);
-        if (!isNaN(parsed)) nextSeq = parsed + 1;
-      }
+      // Als Zahl vergleichen: als Text käme „M-9999“ nach „M-10000“
+      const nextSeq = nextNumber(this.sql, "fitness_members", "member_number", "M-", 1001);
       memberNumber = `M-${nextSeq}`;
     }
 

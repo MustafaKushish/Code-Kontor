@@ -1,8 +1,10 @@
 import { Hono, type Context } from "hono";
+import { createMiddleware } from "hono/factory";
 import type { Env } from "../index";
 import { tenantStub, type ModuleResult } from "../tenant";
 import type { RestaurantStore } from "./store";
 import { fail } from "../errors";
+import { publicCompany, publicTenant } from "../public";
 
 interface User {
   id: string;
@@ -42,24 +44,13 @@ async function readBody(c: Ctx): Promise<Record<string, unknown>> {
   }
 }
 
-export const restaurantRoutes = new Hono<RestaurantEnv>();
-
-// Öffentliche Abholanzeige (Kunden-Aufruf-Monitor) ohne Login
-restaurantRoutes.get("/public/:tenantId/pickup-queue", async (c) => {
-  const tenantId = c.req.param("tenantId");
-  const res = await store(c.env, tenantId).getPickupQueue();
-  if (!res.ok) return moduleError(c, res.code);
-
-  const company = await tenantStub(c.env, tenantId).getCompany();
-
-  return c.json({
-    queue: res.value,
-    company: company || {
-      name: "Restaurant & Café",
-      phone: "+49 40 123456",
-    },
-  });
+/** Preise, Stammdaten, Einstellungen und Löschen nur für Inhaber und Admins; Mitarbeiter arbeiten nur damit. */
+const managers = createMiddleware<RestaurantEnv>(async (c, next) => {
+  if (c.get("user").role === "staff") return fail(c, "forbidden", 403);
+  await next();
 });
+
+export const restaurantRoutes = new Hono<RestaurantEnv>();
 
 // App-Buchung prüfen für interne Routen
 restaurantRoutes.use("*", async (c, next) => {
@@ -70,6 +61,9 @@ restaurantRoutes.use("*", async (c, next) => {
   if (!apps.includes("restaurant")) return fail(c, "forbidden", 403);
   await next();
 });
+
+/** Bezahlt wird nur über die Kasse (mit Beleg); Zahlungsfelder aus dem Browser zählen nicht. */
+const unpaid = ({ paymentStatus: _s, paymentMethod: _m, ...rest }: Record<string, unknown>) => rest;
 
 // ---------- STATS ----------
 restaurantRoutes.get("/stats", async (c) => {
@@ -87,7 +81,7 @@ restaurantRoutes.get("/tables", async (c) => {
   return c.json(res.value);
 });
 
-restaurantRoutes.post("/tables", async (c) => {
+restaurantRoutes.post("/tables", managers, async (c) => {
   const user = c.get("user");
   const body = await readBody(c);
   if (!body.tableNumber || !body.name) return fail(c, "checkFields", 400);
@@ -97,7 +91,7 @@ restaurantRoutes.post("/tables", async (c) => {
   return c.json(res.value);
 });
 
-restaurantRoutes.delete("/tables/:id", async (c) => {
+restaurantRoutes.delete("/tables/:id", managers, async (c) => {
   const user = c.get("user");
   const res = await store(c.env, user.tenantId).deleteTable(c.req.param("id"));
   if (!res.ok) return moduleError(c, res.code);
@@ -112,7 +106,7 @@ restaurantRoutes.get("/menu", async (c) => {
   return c.json(res.value);
 });
 
-restaurantRoutes.post("/menu", async (c) => {
+restaurantRoutes.post("/menu", managers, async (c) => {
   const user = c.get("user");
   const body = await readBody(c);
   if (!body.itemNumber || !body.name || typeof body.priceGross !== "number") {
@@ -123,7 +117,7 @@ restaurantRoutes.post("/menu", async (c) => {
   return c.json(res.value);
 });
 
-restaurantRoutes.delete("/menu/:id", async (c) => {
+restaurantRoutes.delete("/menu/:id", managers, async (c) => {
   const user = c.get("user");
   const res = await store(c.env, user.tenantId).deleteMenuItem(c.req.param("id"));
   if (!res.ok) return moduleError(c, res.code);
@@ -151,7 +145,7 @@ restaurantRoutes.post("/orders", async (c) => {
   if (!Array.isArray(body.items) || body.items.length === 0) {
     return fail(c, "checkFields", 400);
   }
-  const res = await store(c.env, user.tenantId).createOrder(body as any);
+  const res = await store(c.env, user.tenantId).createOrder(unpaid(body) as any);
   if (!res.ok) return moduleError(c, res.code);
   return c.json(res.value, 201);
 });
@@ -159,7 +153,7 @@ restaurantRoutes.post("/orders", async (c) => {
 restaurantRoutes.put("/orders/:id", async (c) => {
   const user = c.get("user");
   const body = await readBody(c);
-  const res = await store(c.env, user.tenantId).updateOrder(c.req.param("id"), body as any);
+  const res = await store(c.env, user.tenantId).updateOrder(c.req.param("id"), unpaid(body) as any);
   if (!res.ok) return moduleError(c, res.code);
   return c.json(res.value);
 });
@@ -186,18 +180,29 @@ restaurantRoutes.post("/orders/:id/items/:itemId/status", async (c) => {
   return c.json(res.value);
 });
 
-restaurantRoutes.post("/orders/:id/checkout", async (c) => {
-  const user = c.get("user");
-  const body = await readBody(c);
-  const method = (typeof body.paymentMethod === "string" ? body.paymentMethod : "bar") as any;
-  const res = await store(c.env, user.tenantId).checkoutOrder(c.req.param("id"), method);
-  if (!res.ok) return moduleError(c, res.code);
-  return c.json(res.value);
-});
-
 restaurantRoutes.get("/pickup-queue", async (c) => {
   const user = c.get("user");
   const res = await store(c.env, user.tenantId).getPickupQueue();
   if (!res.ok) return moduleError(c, res.code);
   return c.json(res.value);
+});
+
+// ---------- Abholanzeige für Gäste (ohne Anmeldung) ----------
+// Wird in worker/index.ts vor der Anmeldung eingehängt. Nur Abholnummer und Vorname,
+// keine Tischbestellungen, keine Telefonnummern, keine Beträge.
+
+export const restaurantPublicRoutes = new Hono<{ Bindings: Env }>();
+
+restaurantPublicRoutes.get("/:tenantId/pickup-queue", async (c) => {
+  const tenantId = c.req.param("tenantId");
+  if (!(await publicTenant(c.env, tenantId, "restaurant"))) return fail(c, "linkInvalid", 404);
+  const res = await store(c.env, tenantId).getPickupQueue();
+  if (!res.ok) return fail(c, "linkInvalid", 404);
+  const view = (list: typeof res.value.ready) =>
+    list
+      .filter((o) => o.type !== "tisch")
+      .map((o) => ({ id: o.id, number: o.pickupNumber ? String(o.pickupNumber) : o.orderNumber.replace(/^BON-/, ""), name: (o.customerName ?? "").split(" ")[0] ?? "" }));
+  const { company } = await publicCompany(c.env, tenantId);
+  c.header("Cache-Control", "no-store");
+  return c.json({ company: { name: company.name }, queue: { preparing: view(res.value.preparing), ready: view(res.value.ready) } });
 });

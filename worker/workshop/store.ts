@@ -1,3 +1,6 @@
+import { berlinYear, nextNumber } from "../numbers";
+import type { PosArticle, PosLine } from "../../shared/pos";
+import type { PosModule } from "./../pos/store";
 import type {
   InspectionItem,
   OrderPosition,
@@ -620,7 +623,7 @@ export class WorkshopStore {
         updated_at: string;
         completed_at: string | null;
       }>("SELECT * FROM workshop_orders WHERE id = ?", id)
-      .one();
+      .toArray()[0];
 
     if (!r) throw new WorkshopError("orderNotFound");
     return this.mapOrder(r);
@@ -657,7 +660,7 @@ export class WorkshopStore {
         updated_at: string;
         completed_at: string | null;
       }>("SELECT * FROM workshop_orders WHERE status_token = ?", token)
-      .one();
+      .toArray()[0];
 
     if (!r) throw new WorkshopError("orderNotFound");
     return this.mapOrder(r);
@@ -719,11 +722,12 @@ export class WorkshopStore {
       }
 
       // 2. Auftragsnummer generieren
-      const count = this.sql.exec<{ c: number }>("SELECT COUNT(*) AS c FROM workshop_orders").one().c;
-      const orderNum = `WO-${new Date().getFullYear()}-${String(count + 43).padStart(4, "0")}`;
+      const prefix = `WO-${berlinYear()}-`;
+      const orderNum = `${prefix}${String(nextNumber(this.sql, "workshop_orders", "order_number", prefix)).padStart(4, "0")}`;
 
       const id = crypto.randomUUID();
-      const statusToken = `kfz-${cleanPlate.toLowerCase().replace(/[^a-z0-9]/g, "")}-${crypto.randomUUID().slice(0, 8)}`;
+      // Nicht erratbar: kein Kennzeichen im Link, 32 Zeichen Zufall
+      const statusToken = crypto.randomUUID().replace(/-/g, "");
 
       const positions = data.positions ?? [];
       const totalNet = positions.reduce((s, p) => s + p.quantity * p.unitPriceNet, 0);
@@ -792,14 +796,15 @@ export class WorkshopStore {
          WHERE id = ?`,
         updated.status,
         updated.liftBay,
-        updated.mechanicName,
+        updated.mechanicName ?? "",
         updated.issueDescription,
-        updated.diagnosticNotes,
+        updated.diagnosticNotes ?? "",
         JSON.stringify(updated.positions),
         JSON.stringify(updated.checklist || []),
         updated.estimateStatus,
         updated.totalGross,
-        updated.paymentMethod,
+        // Offene Aufträge haben keine Zahlart; undefined nimmt SQLite nicht an
+        updated.paymentMethod ?? null,
         updated.paymentStatus,
         updated.totalNet,
         updated.totalTax,
@@ -822,6 +827,9 @@ export class WorkshopStore {
   approveEstimateByToken(token: string, approvedPositionIds?: string[]): WorkshopOrder {
     return this.tx(() => {
       const order = this.getOrderByStatusToken(token);
+      // Bezahlte oder schon entschiedene Aufträge ändert der Kunde nicht mehr
+      if (order.status === "abgerechnet" || order.paymentStatus === "bezahlt") throw new WorkshopError("orderClosed");
+      if (order.estimateStatus === "approved" || order.estimateStatus === "rejected") throw new WorkshopError("estimateDecided");
       let positions = order.positions;
 
       if (approvedPositionIds && approvedPositionIds.length > 0) {
@@ -856,28 +864,94 @@ export class WorkshopStore {
     });
   }
 
-  checkoutOrder(id: string, paymentMethod: "bar" | "karte" | "rechnung" | "pos"): WorkshopOrder {
-    return this.tx(() => {
-      const order = this.getOrder(id);
+  // ---------- KASSE: Aufträge und Teile werden in der Kasse der Plattform abgerechnet ----------
 
-      // Bestände gebuchter Ersatzteile reduzieren
-      for (const pos of order.positions) {
-        if (pos.type === "part" && pos.code) {
-          this.sql.exec(
-            "UPDATE workshop_parts SET stock = MAX(0, stock - ?) WHERE part_number = ?",
-            pos.quantity,
-            pos.code,
-          );
-        }
-      }
-
-      return this.updateOrder(id, {
-        status: "abgerechnet",
-        paymentMethod,
-        paymentStatus: "bezahlt",
-        completedAt: new Date().toISOString(),
-      });
+  posModule(): PosModule {
+    const payable = (o: WorkshopOrder) => o.status !== "abgerechnet" && o.paymentStatus !== "bezahlt";
+    // Bei freigegebenem Kostenvoranschlag nur die freigegebenen Positionen
+    const billed = (o: WorkshopOrder) => (o.estimateStatus === "approved" ? o.positions.filter((p) => p.approvedByCustomer) : o.positions);
+    const gross = (net: number, rate: number, discount = 0) => Math.round(net * 100 * (1 - discount / 100) * (1 + rate / 100));
+    const orderArticle = (o: WorkshopOrder): PosArticle => ({
+      source: "workshop", kind: "order", refId: o.id, name: `${o.orderNumber} · ${o.licensePlate}`, detail: o.customerName,
+      priceCents: billed(o).reduce((sum, p) => sum + Math.round(p.quantity * gross(p.unitPriceNet, p.taxRate, p.discountPercent)), 0),
+      vatRate: 0, single: true, group: "@workshop.order", code: o.orderNumber,
     });
+    const partArticle = (p: SparePart): PosArticle => ({
+      source: "workshop", kind: "part", refId: p.id, name: p.name, detail: [p.manufacturer, p.partNumber].filter(Boolean).join(" · "),
+      priceCents: gross(p.salePriceNet, p.taxRate), vatRate: p.taxRate, stock: p.stock, group: "@workshop.part", code: p.partNumber,
+    });
+    const ready = () => this.listOrders().filter((o) => payable(o) && (o.status === "abholbereit" || o.status === "endkontrolle"));
+    const order = (id: string | null) => {
+      const r = id ? this.sql.exec<{ id: string }>("SELECT id FROM workshop_orders WHERE id = ?", id).toArray()[0] : undefined;
+      return r ? this.getOrder(r.id) : null;
+    };
+    const partById = (id: string | null) => (id ? this.listParts().find((p) => p.id === id) ?? null : null);
+    const partByNumber = (code: string) => this.sql.exec<{ id: string }>("SELECT id FROM workshop_parts WHERE part_number = ?", code).toArray()[0]?.id;
+    // Lager: verkaufte Teile und Teile-Positionen eines Auftrags
+    const stock = (lines: PosLine[], sign: 1 | -1) => {
+      for (const l of lines) {
+        if (l.kind === "part" && l.refId && partById(l.refId)) this.adjustPartStock(l.refId, sign * l.qty);
+      }
+    };
+    const orderStock = (o: WorkshopOrder, sign: 1 | -1) => {
+      for (const p of billed(o)) {
+        const id = p.type === "part" && p.code ? partByNumber(p.code) : undefined;
+        if (id) this.adjustPartStock(id, sign * p.quantity);
+      }
+    };
+    return {
+      articles: (query) => {
+        const q = query.trim().toLowerCase();
+        const orders = this.listOrders().filter((o) => payable(o) && [o.orderNumber, o.licensePlate, o.customerName].some((v) => v.toLowerCase().includes(q)));
+        const parts = this.listParts().filter((p) => [p.name, p.partNumber, p.oemNumber ?? ""].some((v) => v.toLowerCase().includes(q)));
+        return [...orders.slice(0, 20).map(orderArticle), ...parts.slice(0, 40).map(partArticle)];
+      },
+      catalog: () => [...ready().map(orderArticle), ...this.listParts().slice(0, 1000).map(partArticle)],
+      scan: (code) => {
+        const o = order(code) ?? this.listOrders().find((x) => x.orderNumber === code.toUpperCase()) ?? null;
+        if (o && payable(o)) return [orderArticle(o)];
+        const id = partByNumber(code);
+        const p = id ? partById(id) : null;
+        return p ? [partArticle(p)] : [];
+      },
+      prepare: (line) => {
+        if (line.kind === "part") {
+          const p = partById(line.refId);
+          if (!p) throw new WorkshopError("notFound");
+          return { lines: [{ ...line, name: line.name || p.name, vatRate: p.taxRate }] };
+        }
+        const o = order(line.refId);
+        if (!o) throw new WorkshopError("notFound");
+        if (!payable(o)) throw new WorkshopError("notPayable");
+        return {
+          lines: billed(o).map((p): PosLine => ({
+            source: "workshop", kind: `order:${p.type}`, refId: o.id, name: p.name, qty: p.quantity,
+            unitCents: gross(p.unitPriceNet, p.taxRate, p.discountPercent), vatRate: p.taxRate,
+          })),
+          refs: [{ source: "workshop", kind: "order", refId: o.id, label: `${o.orderNumber} · ${o.licensePlate}` }],
+          customer: { id: null, name: o.customerName, address: "", phone: o.customerPhone, email: o.customerEmail ?? "" },
+        };
+      },
+      booked: (_receipt, lines, refs) => {
+        stock(lines, -1);
+        for (const ref of refs) {
+          const o = order(ref.refId);
+          if (!o || !payable(o)) throw new WorkshopError("notPayable");
+          orderStock(o, -1);
+          this.updateOrder(o.id, { status: "abgerechnet", paymentMethod: "pos", paymentStatus: "bezahlt", completedAt: new Date().toISOString() });
+        }
+      },
+      canceled: (original) => {
+        stock(original.lines.filter((l) => l.source === "workshop"), 1);
+        for (const ref of original.refs) {
+          if (ref.source !== "workshop") continue;
+          const o = order(ref.refId);
+          if (!o || o.paymentStatus !== "bezahlt") continue;
+          orderStock(o, 1);
+          this.updateOrder(o.id, { status: "abholbereit", paymentStatus: "offen", completedAt: undefined });
+        }
+      },
+    };
   }
 
   deleteOrder(id: string): { ok: true } {
@@ -955,7 +1029,7 @@ export class WorkshopStore {
         notes: string;
         created_at: string;
       }>("SELECT * FROM workshop_vehicles WHERE id = ?", id)
-      .one();
+      .toArray()[0];
 
     if (!r) throw new WorkshopError("vehicleNotFound");
     return {
@@ -984,6 +1058,8 @@ export class WorkshopStore {
     return this.tx(() => {
       const cleanPlate = data.licensePlate.trim().toUpperCase();
       let id = data.id;
+      // Kennzeichen sind eindeutig; sonst scheitert das Speichern mit einem Datenbankfehler
+      if (this.sql.exec("SELECT 1 FROM workshop_vehicles WHERE license_plate = ? AND id <> ?", cleanPlate, id ?? "").toArray().length) throw new WorkshopError("plateTaken");
 
       if (id) {
         this.sql.exec(
@@ -1087,6 +1163,7 @@ export class WorkshopStore {
   savePart(data: Partial<SparePart> & { partNumber: string; name: string }): SparePart {
     return this.tx(() => {
       let id = data.id;
+      if (this.sql.exec("SELECT 1 FROM workshop_parts WHERE part_number = ? AND id <> ?", data.partNumber, id ?? "").toArray().length) throw new WorkshopError("partNumberTaken");
       if (id) {
         this.sql.exec(
           `UPDATE workshop_parts SET

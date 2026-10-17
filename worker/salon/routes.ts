@@ -1,8 +1,11 @@
 import { Hono, type Context } from "hono";
+import { createMiddleware } from "hono/factory";
 import type { Env } from "../index";
 import { tenantStub, type ModuleResult } from "../tenant";
 import type { SalonStore } from "./store";
 import { fail } from "../errors";
+import { isLocked, recordFailure } from "../throttle";
+import { addDays, berlinTime, berlinToday, isDay, publicCompany, publicTenant } from "../public";
 import { SALON_APP_ID } from "../../shared/salon";
 
 interface User {
@@ -43,14 +46,16 @@ async function readBody(c: Ctx): Promise<Record<string, unknown>> {
   }
 }
 
+/** Preise, Stammdaten, Einstellungen und Löschen nur für Inhaber und Admins; Mitarbeiter arbeiten nur damit. */
+const managers = createMiddleware<SalonEnv>(async (c, next) => {
+  if (c.get("user").role === "staff") return fail(c, "forbidden", 403);
+  await next();
+});
+
 export const salonRoutes = new Hono<SalonEnv>();
 
 // Überprüfen, ob das Modul „friseur“ gebucht ist
 salonRoutes.use("*", async (c, next) => {
-  // Öffentliche Buchung hat keinen User-Context
-  if (c.req.path.startsWith("/api/salon/public")) {
-    return next();
-  }
   const user = c.get("user");
   const apps = await tenantStub(c.env, user.tenantId).installedApps();
   if (!apps.includes(SALON_APP_ID)) return fail(c, "forbidden", 403);
@@ -68,14 +73,14 @@ salonRoutes.get("/services", async (c) => {
   return c.json({ services: res.value });
 });
 
-salonRoutes.post("/services", async (c) => {
+salonRoutes.post("/services", managers, async (c) => {
   const body = await readBody(c);
   const res = await store(c.env, c.get("user").tenantId).saveService(body);
   if (!res.ok) return moduleError(c, res.code);
   return c.json({ service: res.value });
 });
 
-salonRoutes.delete("/services/:id", async (c) => {
+salonRoutes.delete("/services/:id", managers, async (c) => {
   const res = await store(c.env, c.get("user").tenantId).deleteService(c.req.param("id"));
   if (!res.ok) return moduleError(c, res.code);
   return c.json({ ok: true });
@@ -89,14 +94,14 @@ salonRoutes.get("/staff", async (c) => {
   return c.json({ staff: res.value });
 });
 
-salonRoutes.post("/staff", async (c) => {
+salonRoutes.post("/staff", managers, async (c) => {
   const body = await readBody(c);
   const res = await store(c.env, c.get("user").tenantId).saveStaff(body);
   if (!res.ok) return moduleError(c, res.code);
   return c.json({ staff: res.value });
 });
 
-salonRoutes.delete("/staff/:id", async (c) => {
+salonRoutes.delete("/staff/:id", managers, async (c) => {
   const res = await store(c.env, c.get("user").tenantId).deleteStaff(c.req.param("id"));
   if (!res.ok) return moduleError(c, res.code);
   return c.json({ ok: true });
@@ -125,7 +130,7 @@ salonRoutes.post("/clients", async (c) => {
   return c.json({ client: res.value });
 });
 
-salonRoutes.delete("/clients/:id", async (c) => {
+salonRoutes.delete("/clients/:id", managers, async (c) => {
   const res = await store(c.env, c.get("user").tenantId).deleteClient(c.req.param("id"));
   if (!res.ok) return moduleError(c, res.code);
   return c.json({ ok: true });
@@ -179,7 +184,7 @@ salonRoutes.get("/appointments/:id", async (c) => {
 
 salonRoutes.post("/appointments", async (c) => {
   const body = await readBody(c);
-  const res = await store(c.env, c.get("user").tenantId).saveAppointment(body);
+  const res = await store(c.env, c.get("user").tenantId).saveAppointment({ ...body, paid: undefined }); // bezahlt nur über die Kasse
   if (!res.ok) return moduleError(c, res.code);
   return c.json({ appointment: res.value });
 });
@@ -195,7 +200,7 @@ salonRoutes.post("/appointments/:id/status", async (c) => {
   return c.json({ appointment: res.value });
 });
 
-salonRoutes.delete("/appointments/:id", async (c) => {
+salonRoutes.delete("/appointments/:id", managers, async (c) => {
   const res = await store(c.env, c.get("user").tenantId).deleteAppointment(c.req.param("id"));
   if (!res.ok) return moduleError(c, res.code);
   return c.json({ ok: true });
@@ -212,21 +217,6 @@ salonRoutes.get("/slots", async (c) => {
   return c.json({ slots: res.value });
 });
 
-// ---------- CHECKOUT / BEZAHLUNG ----------
-
-salonRoutes.post("/appointments/:id/checkout", async (c) => {
-  const id = c.req.param("id");
-  const res = await store(c.env, c.get("user").tenantId).getAppointment(id);
-  if (!res.ok || !res.value) return fail(c, "notFound", 404);
-  const app = res.value;
-
-  // Markiere als bezahlt und abgeschlossen
-  await store(c.env, c.get("user").tenantId).updateAppointmentStatus(id, "completed");
-  await store(c.env, c.get("user").tenantId).saveAppointment({ ...app, status: "completed", paid: true });
-
-  return c.json({ ok: true, appointmentId: id });
-});
-
 // ---------- EINSTELLUNGEN ----------
 
 salonRoutes.get("/settings", async (c) => {
@@ -235,56 +225,95 @@ salonRoutes.get("/settings", async (c) => {
   return c.json({ settings: res.value });
 });
 
-salonRoutes.post("/settings", async (c) => {
+salonRoutes.post("/settings", managers, async (c) => {
   const body = await readBody(c);
   const res = await store(c.env, c.get("user").tenantId).saveSettings(body);
   if (!res.ok) return moduleError(c, res.code);
   return c.json({ settings: res.value });
 });
 
-// ---------- ÖFFENTLICHE ONLINE-TERMINBUCHUNG FÜR KUNDEN ----------
+// ---------- Online-Termine für Kunden (ohne Anmeldung) ----------
+// Wird in worker/index.ts vor der Anmeldung eingehängt. Gibt nur heraus, was Kunden sehen sollen:
+// keine Telefonnummern oder E-Mails des Teams, keine Preise vom Browser.
 
-salonRoutes.get("/public/:tenantId/info", async (c) => {
+export const salonPublicRoutes = new Hono<{ Bindings: Env }>();
+
+async function bookingOpen(env: Env, tenantId: string) {
+  if (!(await publicTenant(env, tenantId, SALON_APP_ID))) return null;
+  const settings = await store(env, tenantId).getSettings();
+  return settings.ok && settings.value.onlineBookingEnabled ? settings.value : null;
+}
+
+salonPublicRoutes.get("/:tenantId/info", async (c) => {
   const tenantId = c.req.param("tenantId");
+  const settings = await bookingOpen(c.env, tenantId);
+  if (!settings) return fail(c, "linkInvalid", 404);
   const s = store(c.env, tenantId);
-  const [settingsRes, servicesRes, staffRes] = await Promise.all([
-    s.getSettings(),
-    s.listServices(),
-    s.listStaff(),
-  ]);
-
-  if (!settingsRes.ok || !servicesRes.ok || !staffRes.ok) {
-    return fail(c, "notFound", 404);
-  }
-
+  const [services, staff] = await Promise.all([s.listServices(), s.listStaff()]);
+  if (!services.ok || !staff.ok) return fail(c, "linkInvalid", 404);
+  c.header("Cache-Control", "no-store");
   return c.json({
-    settings: settingsRes.value,
-    services: servicesRes.value,
-    staff: staffRes.value,
+    ...(await publicCompany(c.env, tenantId)),
+    today: berlinToday(),
+    lastDay: addDays(berlinToday(), settings.bookingAdvanceDays),
+    settings: {
+      salonName: settings.salonName, openDays: settings.openDays, openTime: settings.openTime, closeTime: settings.closeTime,
+      bookingAdvanceDays: settings.bookingAdvanceDays, cancellationHours: settings.cancellationHours, noticeText: settings.noticeText,
+    },
+    services: services.value.map(({ id, name, category, description, durationMinutes, priceCents }) => ({ id, name, category, description, durationMinutes, priceCents })),
+    staff: staff.value.map(({ id, name, title, colorHex }) => ({ id, name, title, colorHex })),
   });
 });
 
-salonRoutes.get("/public/:tenantId/slots", async (c) => {
+salonPublicRoutes.get("/:tenantId/slots", async (c) => {
   const tenantId = c.req.param("tenantId");
+  const settings = await bookingOpen(c.env, tenantId);
+  if (!settings) return fail(c, "linkInvalid", 404);
   const day = c.req.query("day");
-  const duration = parseInt(c.req.query("duration") || "45", 10);
+  const duration = Number(c.req.query("duration"));
   const staffId = c.req.query("staffId") || undefined;
-  if (!day) return c.json({ code: "salon.dayRequired", error: "dayRequired" }, 400);
-
-  const res = await store(c.env, tenantId).getFreeSlots(day, duration, staffId);
-  if (!res.ok) return moduleError(c, res.code);
+  const today = berlinToday();
+  if (!isDay(day) || !Number.isInteger(duration) || duration < 5 || duration > 12 * 60) return fail(c, "checkFields", 400);
+  if (day < today || day > addDays(today, settings.bookingAdvanceDays)) return c.json({ slots: [] });
+  const res = await store(c.env, tenantId).getFreeSlots(day, duration, staffId, day === today ? berlinTime() : undefined);
+  if (!res.ok) return fail(c, "linkInvalid", 404);
+  c.header("Cache-Control", "no-store");
   return c.json({ slots: res.value });
 });
 
-salonRoutes.post("/public/:tenantId/book", async (c) => {
+salonPublicRoutes.post("/:tenantId/book", async (c) => {
   const tenantId = c.req.param("tenantId");
-  const body = await readBody(c);
+  const settings = await bookingOpen(c.env, tenantId);
+  if (!settings) return fail(c, "linkInvalid", 404);
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  // Unsichtbares Feld: nur Bots füllen es aus
+  if (typeof body.website === "string" && body.website) return c.json({ ok: true });
+  const ip = c.req.header("CF-Connecting-IP");
+  const keys = [{ key: `salon-booking:${tenantId}`, limit: 60 }, ...(ip ? [{ key: `salon-booking-ip:${ip}`, limit: 5 }] : [])];
+  if (await isLocked(c.env.PLATFORM_DB, keys)) return fail(c, "tooManyAttempts", 429);
 
-  const res = await store(c.env, tenantId).saveAppointment({
-    ...body,
-    source: "online",
-    status: "booked",
-  });
-  if (!res.ok) return moduleError(c, res.code);
-  return c.json({ appointment: res.value });
+  const text = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+  const input = {
+    serviceIds: Array.isArray(body.serviceIds) ? body.serviceIds.filter((id): id is string => typeof id === "string").slice(0, 10) : [],
+    staffId: text(body.staffId, 64),
+    day: text(body.day, 10),
+    startTime: text(body.startTime, 5),
+    name: text(body.clientName, 120),
+    phone: text(body.clientPhone, 40),
+    email: text(body.clientEmail, 200).toLowerCase(),
+    notes: text(body.notes, 500),
+  };
+  const errors: Record<string, string> = {};
+  if (!input.name) errors.clientName = "required";
+  if (input.phone.replace(/\D/g, "").length < 5) errors.clientPhone = "invalid";
+  if (input.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email)) errors.clientEmail = "invalid";
+  if (!isDay(input.day) || !/^\d{2}:\d{2}$/.test(input.startTime) || !input.staffId || !input.serviceIds.length) errors.slot = "required";
+  if (Object.keys(errors).length) return fail(c, "checkFields", 400, { errors });
+
+  const today = berlinToday();
+  const res = await store(c.env, tenantId).bookOnline(input, today, berlinTime(), addDays(today, settings.bookingAdvanceDays));
+  if (!res.ok) return c.json({ code: `salon.${res.code}`, error: res.code }, res.code === "slotTaken" ? 409 : 400);
+  await recordFailure(c.env.PLATFORM_DB, keys);
+  const a = res.value;
+  return c.json({ ok: true, appointment: { day: a.day, startTime: a.startTime, endTime: a.endTime, staffName: a.staffName, serviceNames: a.serviceNames, totalCents: a.totalCents, durationMinutes: a.durationMinutes } });
 });

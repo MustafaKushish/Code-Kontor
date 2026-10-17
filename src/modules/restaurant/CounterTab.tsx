@@ -6,7 +6,6 @@ import {
   Minus,
   Trash2,
   Banknote,
-  CreditCard,
   Printer,
   Sparkles,
   ShoppingBag,
@@ -26,6 +25,7 @@ import type {
   RestaurantOrder,
 } from "../../../shared/restaurant";
 import { Dialog } from "../../pos/ui";
+import { ModuleCheckout } from "../../pos/ModuleCheckout";
 import { RestaurantPrint } from "./RestaurantPrint";
 import { currency as companyCurrency } from "../../money";
 
@@ -138,42 +138,38 @@ export function CounterTab({ menu, onRefresh }: CounterTabProps) {
     .filter((i) => i.taxRate === 19)
     .reduce((sum, item) => sum + (item.unitPriceGross * item.quantity * 19) / 119, 0);
 
-  const handleCheckout = async (paymentMethod: "bar" | "karte" | "offen") => {
+  // Die Bestellung geht sofort an die Küche; bezahlt wird über die Kasse (Beleg mit Nummer).
+  const [paying, setPaying] = useState<RestaurantOrder | null>(null);
+  const handleCheckout = async (pay: boolean) => {
     if (cart.length === 0) return;
     setIsBusy(true);
     try {
-      // 1. Create order
-      const orderData = {
-        type: orderType,
-        customerName: customerName.trim() || undefined,
-        customerPhone: customerPhone.trim() || undefined,
-        guestCount: 1,
-        notes: orderNotes.trim() || undefined,
-        items: cart,
-      };
-
-      const createRes = await api<RestaurantOrder>("/restaurant/orders", {
+      const created = await api<RestaurantOrder>("/restaurant/orders", {
         method: "POST",
-        body: orderData,
+        body: {
+          type: orderType,
+          customerName: customerName.trim() || undefined,
+          customerPhone: customerPhone.trim() || undefined,
+          guestCount: 1,
+          notes: orderNotes.trim() || undefined,
+          items: cart,
+        },
       });
-
-      // 2. If immediate payment, execute checkout
-      let finalOrder = createRes;
-      if (paymentMethod !== "offen") {
-        finalOrder = await api<RestaurantOrder>(`/restaurant/orders/${createRes.id}/checkout`, {
-          method: "POST",
-          body: { paymentMethod },
-        });
-      }
-
-      setCompletedOrder(finalOrder);
       clearCart();
       onRefresh();
+      if (pay) setPaying(created);
+      else setCompletedOrder(created);
     } catch (err) {
       console.error(err);
     } finally {
       setIsBusy(false);
     }
+  };
+
+  const afterPayment = async (order: RestaurantOrder) => {
+    setPaying(null);
+    setCompletedOrder(await api<RestaurantOrder>(`/restaurant/orders/${order.id}`).catch(() => order));
+    onRefresh();
   };
 
   return (
@@ -369,27 +365,15 @@ export function CounterTab({ menu, onRefresh }: CounterTabProps) {
         </div>
 
         <div className="restaurant-actions">
-          <button
-            onClick={() => handleCheckout("bar")}
-            disabled={isBusy || cart.length === 0}
-            className="button primary"
-          >
+          <button onClick={() => handleCheckout(true)} disabled={isBusy || cart.length === 0} className="button primary">
             <Banknote size={18} />
-            Bar kassieren
-          </button>
-          <button
-            onClick={() => handleCheckout("karte")}
-            disabled={isBusy || cart.length === 0}
-            className="button primary"
-          >
-            <CreditCard size={18} />
-            Kartenzahlung
+            Bezahlen
           </button>
         </div>
 
         {orderType === "abholung" && (
           <button
-            onClick={() => handleCheckout("offen")}
+            onClick={() => handleCheckout(false)}
             disabled={isBusy || cart.length === 0}
             className="button block restaurant-wrap"
           >
@@ -434,6 +418,17 @@ export function CounterTab({ menu, onRefresh }: CounterTabProps) {
             </button>
           </div>
         </Dialog>
+      )}
+
+      {paying && (
+        <ModuleCheckout
+          source="restaurant"
+          kind="order"
+          refId={paying.id}
+          title={paying.pickupNumber ? `${paying.orderNumber} · #${paying.pickupNumber}` : paying.orderNumber}
+          onClose={() => afterPayment(paying)}
+          onPaid={() => afterPayment(paying)}
+        />
       )}
 
       {printType && completedOrder && (

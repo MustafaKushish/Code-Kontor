@@ -24,6 +24,7 @@ interface OrdersTabProps {
   parts: SparePart[];
   tenantId: string;
   hasPos: boolean;
+  isManager: boolean;
   onRefresh: () => void;
   onOrdersChanged: (orders: WorkshopOrder[]) => void;
 }
@@ -43,6 +44,7 @@ export function OrdersTab({
   parts,
   tenantId,
   hasPos,
+  isManager,
   onRefresh,
   onOrdersChanged,
 }: OrdersTabProps) {
@@ -216,6 +218,7 @@ export function OrdersTab({
           parts={parts}
           tenantId={tenantId}
           hasPos={hasPos}
+          isManager={isManager}
           onClose={() => setSelectedOrder(null)}
           onUpdated={handleOrderUpdated}
           onDeleted={handleOrderDeleted}

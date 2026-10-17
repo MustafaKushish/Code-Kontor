@@ -4,9 +4,8 @@ import { tenantStub, type ModuleResult } from "../tenant";
 import { fail } from "../errors";
 import { decryptField } from "../crypto";
 import { defaultTaxSettings } from "../../shared/countries";
-import { REPAIR_APP_ID } from "../../shared/repairs";
 import {
-  POS_APP_ID, cleanBarcode, sanitizeCustomer, sanitizeItem, sanitizeLine, sanitizePayments, sanitizePosSettings, sanitizeRegisterName,
+  POS_APP_ID, cleanBarcode, installedSources, sanitizeCustomer, sanitizeItem, sanitizeLine, sanitizePayments, sanitizePosSettings, sanitizeRegisterName,
   type PosLine, type PosSource, type ReceiptCompany,
 } from "../../shared/pos";
 import { berlinDay, type Actor, type PosContext, type PosStore } from "./store";
@@ -84,14 +83,13 @@ function audit(c: Ctx, action: string, detail: Record<string, unknown>) {
 
 /** Welche Module ihre Posten an die Kasse geben dürfen: nur installierte. */
 async function sources(env: Env, tenantId: string): Promise<PosSource[]> {
-  const installed = await tenantStub(env, tenantId).installedApps();
-  return installed.includes(REPAIR_APP_ID) ? ["repairs"] : [];
+  return installedSources(await tenantStub(env, tenantId).installedApps());
 }
 
 export const posRoutes = new Hono<PosEnv>();
 
 // Ohne Kassen-Modul nur das, was Branchen-Systeme für ihre eigenen Vorgänge brauchen
-const WITHOUT_MODULE = [/^GET \/api\/pos\/settings$/, /^GET \/api\/pos\/receipts\/[^/]+$/, /^POST \/api\/pos\/checkout$/];
+const WITHOUT_MODULE = [/^GET \/api\/pos\/settings$/, /^GET \/api\/pos\/receipts\/[^/]+$/, /^POST \/api\/pos\/(checkout|quote)$/];
 
 posRoutes.use("*", async (c, next) => {
   if (WITHOUT_MODULE.some((r) => r.test(`${c.req.method} ${c.req.path}`))) return next();
@@ -195,6 +193,20 @@ posRoutes.delete("/registers/:id", async (c) => {
 });
 
 // ---------- Verkaufen ----------
+
+/** Posten der Systeme vor dem Bezahlen aufbereiten: Positionen und Betrag, wie die Kasse sie buchen würde. */
+posRoutes.post("/quote", async (c) => {
+  const body = await readBody(c);
+  const tenantId = c.get("user").tenantId;
+  const raw = Array.isArray(body.lines) ? body.lines.slice(0, 50) : [];
+  const lines = raw.map((l) => sanitizeLine(l));
+  if (!lines.length || lines.some((l) => !l || l.source === "pos")) return fail(c, "checkFields", 400);
+  const allowed = await sources(c.env, tenantId);
+  if ((lines as PosLine[]).some((l) => !allowed.includes(l.source))) return fail(c, "unknownApp", 404);
+  const result = await store(c.env, tenantId).quote(lines as PosLine[], await posContext(c.env, tenantId, actor(c)));
+  if (!result.ok) return posError(c, result.code);
+  return c.json(result.value);
+});
 
 posRoutes.post("/checkout", async (c) => {
   const body = await readBody(c);
