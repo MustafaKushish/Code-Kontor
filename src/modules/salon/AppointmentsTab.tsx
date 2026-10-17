@@ -13,7 +13,7 @@ export function AppointmentsTab({
   onNavigateToCheckout?: (app: SalonAppointment) => void;
   onOpenNewAppointment?: () => void;
 }) {
-  const { s, euro, day: formatDay } = useSalonI18n();
+  const { s, euro, day: formatDay, errorText } = useSalonI18n();
   const [appointments, setAppointments] = useState<SalonAppointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -45,8 +45,8 @@ export function AppointmentsTab({
         body: { status },
       });
       await loadData();
-    } catch (err: any) {
-      setErrorMessage(err?.message || "Fehler beim Aktualisieren des Terminstatus");
+    } catch (err) {
+      setErrorMessage(errorText(err));
     }
   };
 
@@ -56,8 +56,8 @@ export function AppointmentsTab({
       await api(`/salon/appointments/${appId}`, { method: "DELETE" });
       setDeleteConfirmId(null);
       await loadData();
-    } catch (err: any) {
-      setErrorMessage(err?.message || "Fehler beim Löschen des Termins");
+    } catch (err) {
+      setErrorMessage(errorText(err));
     }
   };
 
@@ -91,20 +91,20 @@ export function AppointmentsTab({
         <div className="tile stat-tile">
           <span className="stat-icon"><Calendar size={18} /></span>
           <strong>{todayApps.length}</strong>
-          <small>Heutige Termine</small>
-          <small>{inProgressApps.length} aktuell auf dem Stuhl</small>
+          <small>{s("appointments.todayCount")}</small>
+          <small>{s("appointments.inChair", { n: inProgressApps.length })}</small>
         </div>
         <div className="tile stat-tile">
           <span className="stat-icon"><Sparkles size={18} /></span>
           <strong>{euro(completedTodayCents)}</strong>
-          <small>Tagesumsatz (Abgeschlossen)</small>
-          <small>Termine heute</small>
+          <small>{s("appointments.revenueToday")}</small>
+          <small>{s("appointments.revenueTodaySub")}</small>
         </div>
         <div className="tile stat-tile">
           <span className="stat-icon"><Clock size={18} /></span>
           <strong>{appointments.length}</strong>
-          <small>Gesamttermine</small>
-          <small>Alle erfassten Buchungen</small>
+          <small>{s("appointments.total")}</small>
+          <small>{s("appointments.totalSub")}</small>
         </div>
       </div>
 
@@ -115,7 +115,7 @@ export function AppointmentsTab({
         <div className="salon-toolbar">
           <label className="search">
             <Search size={18} />
-            <input type="search" placeholder="Termine durchsuchen..." aria-label="Termine durchsuchen..." value={search} onChange={(e) => setSearch(e.target.value)} />
+            <input type="search" placeholder={s("appointments.search")} aria-label={s("appointments.search")} value={search} onChange={(e) => setSearch(e.target.value)} />
           </label>
           {onOpenNewAppointment && (
             <button className="button primary" onClick={onOpenNewAppointment}>
@@ -132,7 +132,7 @@ export function AppointmentsTab({
               className={statusFilter === st ? "chip active" : "chip"}
               onClick={() => setStatusFilter(st)}
             >
-              {st === "all" ? "Alle Status" : s(`status.${st}`)}
+              {st === "all" ? s("appointments.allStatus") : s(`status.${st}`)}
             </button>
           ))}
         </div>
@@ -140,12 +140,12 @@ export function AppointmentsTab({
 
       {/* Liste */}
       {loading ? (
-        <p className="muted">Termine werden geladen...</p>
+        <p className="muted">{s("appointments.loading")}</p>
       ) : (
         <section className="card list-card">
           {filteredAppointments.length === 0 && (
             <p className="empty muted">
-              <strong>Keine Termine gefunden</strong> · Wählen Sie einen anderen Filter oder legen Sie einen neuen Termin an.
+              <strong>{s("appointments.emptyTitle")}</strong> · {s("appointments.emptyHint")}
             </p>
           )}
           {filteredAppointments.map((app) => (
@@ -157,7 +157,7 @@ export function AppointmentsTab({
               <span className="list-main">
                 <strong>{app.clientName}{app.clientPhone ? ` · ${app.clientPhone}` : ""}</strong>
                 <small className="muted">
-                  {app.staffName} · {app.serviceNames.join(", ")} · {app.durationMinutes} Min ({app.startTime} - {app.endTime})
+                  {app.staffName} · {app.serviceNames.join(", ")} · {s("appointments.durationRange", { n: app.durationMinutes, from: app.startTime, to: app.endTime })}
                 </small>
                 {app.notes && <small className="muted">{app.notes}</small>}
               </span>
@@ -166,8 +166,8 @@ export function AppointmentsTab({
                 <strong>{euro(app.totalCents)}</strong>
                 <span className="salon-row-actions">
                   {app.status === "booked" || app.status === "confirmed" ? (
-                    <button className="button small-button" onClick={() => handleUpdateStatus(app.id, "in_progress")} title="Behandlung starten">
-                      <Play size={14} /> Start
+                    <button className="button small-button" onClick={() => handleUpdateStatus(app.id, "in_progress")} title={s("appointments.startTitle")}>
+                      <Play size={14} /> {s("appointments.start")}
                     </button>
                   ) : null}
 
@@ -178,24 +178,24 @@ export function AppointmentsTab({
                         if (onNavigateToCheckout) onNavigateToCheckout(app);
                         else handleUpdateStatus(app.id, "completed");
                       }}
-                      title="Abrechnen & abschließen"
+                      title={s("appointments.checkoutTitle")}
                     >
-                      <Sparkles size={14} /> Kasse
+                      <Sparkles size={14} /> {s("appointments.pos")}
                     </button>
                   ) : null}
 
                   {isManager && (
                     deleteConfirmId === app.id ? (
                       <>
-                        <button className="button danger small-button" onClick={() => handleDelete(app.id)} title="Unwiderruflich löschen">
-                          Löschen
+                        <button className="button danger small-button" onClick={() => handleDelete(app.id)} title={s("actions.deleteForever")}>
+                          {s("actions.delete")}
                         </button>
                         <button className="button small-button" onClick={() => setDeleteConfirmId(null)}>
-                          Abbr.
+                          {s("actions.cancelShort")}
                         </button>
                       </>
                     ) : (
-                      <button className="icon-button danger" onClick={() => setDeleteConfirmId(app.id)} title="Termin löschen" aria-label="Termin löschen">
+                      <button className="icon-button danger" onClick={() => setDeleteConfirmId(app.id)} title={s("appointments.deleteTitle")} aria-label={s("appointments.deleteTitle")}>
                         <Trash2 size={16} />
                       </button>
                     )

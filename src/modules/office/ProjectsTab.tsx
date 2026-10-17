@@ -17,7 +17,7 @@ export function ProjectsTab({
   onNavigateToTime?: (projectId: string) => void;
   onNavigateToExpenses?: (projectId: string) => void;
 }) {
-  const { o, euro, day, officeError } = useOfficeI18n();
+  const { o, euro, num, day, officeError } = useOfficeI18n();
   const [projects, setProjects] = useState<OfficeProject[]>([]);
   const [clients, setClients] = useState<OfficeClient[]>([]);
   const [loading, setLoading] = useState(true);
@@ -209,19 +209,19 @@ export function ProjectsTab({
       <div className="office-stats">
         <div className="tile stat-tile">
           <span className="stat-icon"><FolderKanban size={18} /></span>
-          <strong>{activeCount}</strong><small>Aktive Projekte</small>
+          <strong>{activeCount}</strong><small>{o("projects.statActive")}</small>
         </div>
         <div className="tile stat-tile">
           <span className="stat-icon"><CheckCircle2 size={18} /></span>
-          <strong>{completedCount}</strong><small>Abgeschlossen</small>
+          <strong>{completedCount}</strong><small>{o("projects.status.completed")}</small>
         </div>
         <div className="tile stat-tile">
           <span className="stat-icon"><Clock size={18} /></span>
-          <strong>{(totalLoggedMinutes / 60).toFixed(1)} Std</strong><small>Geleistete Stunden</small>
+          <strong>{o("common.hoursShort", { hours: num(totalLoggedMinutes / 60, 1) })}</strong><small>{o("projects.statHours")}</small>
         </div>
         <div className="tile stat-tile">
           <span className="stat-icon"><Wallet size={18} /></span>
-          <strong>{euro(totalLoggedCents)}</strong><small>Erfasster Honorarwert</small>
+          <strong>{euro(totalLoggedCents)}</strong><small>{o("projects.statValue")}</small>
         </div>
       </div>
 
@@ -252,8 +252,8 @@ export function ProjectsTab({
             />
           </label>
           {clients.length > 0 && (
-            <select value={clientFilter} onChange={(e) => setClientFilter(e.target.value)} aria-label="Kunde">
-              <option value="all">Alle Kunden ({clients.length})</option>
+            <select value={clientFilter} onChange={(e) => setClientFilter(e.target.value)} aria-label={o("common.client")}>
+              <option value="all">{o("common.allClientsCount", { n: clients.length })}</option>
               {clients.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
@@ -270,12 +270,12 @@ export function ProjectsTab({
       </div>
 
       {loading ? (
-        <p className="muted">Laden...</p>
+        <p className="muted">{o("common.loading")}</p>
       ) : filteredProjects.length === 0 ? (
         <section className="card list-card">
           <p className="empty muted">
             {o("projects.noProjects")}
-            {clients.length === 0 && <><br /><small>Tipp: Legen Sie zuerst einen Kunden im Reiter „Kunden“ an.</small></>}
+            {clients.length === 0 && <><br /><small>{o("projects.tipNoClients")}</small></>}
           </p>
         </section>
       ) : (
@@ -301,17 +301,17 @@ export function ProjectsTab({
                 <div className="office-tasks">
                   <span className="office-icon-line">
                     <ListTodo size={15} />
-                    <span><strong>{p.tasksCompleted || 0} von {p.tasksCount || 0}</strong> Aufgaben erledigt</span>
+                    <span><strong>{o("projects.tasksProgress", { done: p.tasksCompleted || 0, total: p.tasksCount || 0 })}</strong> {o("projects.tasksDone")}</span>
                   </span>
-                  <button className="button small-button" onClick={() => openTasksModal(p)} title="Aufgaben & Meilensteine verwalten">
-                    Aufgaben anzeigen
+                  <button className="button small-button" onClick={() => openTasksModal(p)} title={o("projects.manageTasks")}>
+                    {o("projects.showTasks")}
                   </button>
                 </div>
 
                 <div className="stack-sm">
                   <div className="office-facts">
-                    <span>Budget: <strong>{p.budgetCents > 0 ? euro(p.budgetCents) : "Kein Limit"}</strong></span>
-                    <span>Erfasst: <strong>{euro(p.totalLoggedCents)}</strong> ({(p.totalMinutesLogged / 60).toFixed(1)}h)</span>
+                    <span>{o("projects.budget")}: <strong>{p.budgetCents > 0 ? euro(p.budgetCents) : o("projects.noLimit")}</strong></span>
+                    <span>{o("projects.logged")}: <strong>{euro(p.totalLoggedCents)}</strong> ({o("common.hoursH", { hours: num(p.totalMinutesLogged / 60, 1) })})</span>
                   </div>
                   {p.budgetCents > 0 && (
                     <div className={`office-progress ${isOver ? "over" : ""}`}>
@@ -321,20 +321,20 @@ export function ProjectsTab({
                 </div>
 
                 <div className="office-facts foot">
-                  <span>Satz: <strong>{euro(p.hourlyRateCents)}/h</strong></span>
-                  {p.totalExpensesCents > 0 && <span>Auslagen: <strong>{euro(p.totalExpensesCents)}</strong></span>}
-                  {p.dueDate ? <span>Fällig: <strong>{day(p.dueDate)}</strong></span> : <span>Start: {day(p.startDate)}</span>}
+                  <span>{o("common.rate")}: <strong>{o("common.perHour", { amount: euro(p.hourlyRateCents) })}</strong></span>
+                  {p.totalExpensesCents > 0 && <span>{o("projects.expenses")}: <strong>{euro(p.totalExpensesCents)}</strong></span>}
+                  {p.dueDate ? <span>{o("projects.due")}: <strong>{day(p.dueDate)}</strong></span> : <span>{o("projects.start")}: {day(p.startDate)}</span>}
                 </div>
 
                 <div className="row wrap gap end">
                   {onNavigateToExpenses && (
-                    <button className="button small-button" onClick={() => onNavigateToExpenses(p.id)} title="Auslagen für dieses Projekt">
-                      <Receipt size={15} /> Auslagen
+                    <button className="button small-button" onClick={() => onNavigateToExpenses(p.id)} title={o("projects.expensesHint")}>
+                      <Receipt size={15} /> {o("projects.expenses")}
                     </button>
                   )}
                   {onNavigateToTime && (
-                    <button className="button small-button" onClick={() => onNavigateToTime(p.id)} title="Zeiten für dieses Projekt erfassen">
-                      <Clock size={15} /> Zeit erfassen
+                    <button className="button small-button" onClick={() => onNavigateToTime(p.id)} title={o("projects.logTimeHint")}>
+                      <Clock size={15} /> {o("time.logTime")}
                     </button>
                   )}
                   {isManager && (
@@ -356,23 +356,23 @@ export function ProjectsTab({
 
       {/* Dialog: Aufgaben & Meilensteine */}
       {tasksModalProject && (
-        <Dialog title="Aufgaben & Meilensteine" onClose={() => setTasksModalProject(null)} wide>
+        <Dialog title={o("tasks.title")} onClose={() => setTasksModalProject(null)} wide>
           <div className="stack office-dialog">
-            <p className="muted">Projekt: {tasksModalProject.name}</p>
+            <p className="muted">{o("projects.projectLine", { name: tasksModalProject.name })}</p>
 
             <form onSubmit={handleAddTask} className="office-panel">
-              <strong>Neue Aufgabe hinzufügen</strong>
+              <strong>{o("tasks.newTaskHeading")}</strong>
               <div className="office-add four">
-                <Field label="Aufgabentitel" required>
+                <Field label={o("tasks.taskTitle")} required>
                   <input
                     type="text"
                     required
-                    placeholder="z.B. Design-Entwurf Freigabe..."
+                    placeholder={o("tasks.taskTitlePlaceholder")}
                     value={newTaskTitle}
                     onChange={(e) => setNewTaskTitle(e.target.value)}
                   />
                 </Field>
-                <Field label="Schätzung (h)">
+                <Field label={o("tasks.estimate")}>
                   <input
                     type="number"
                     step="0.5"
@@ -382,22 +382,22 @@ export function ProjectsTab({
                     onChange={(e) => setNewTaskHours(e.target.value)}
                   />
                 </Field>
-                <Field label="Zuständig">
+                <Field label={o("tasks.responsibleField")}>
                   <input
                     type="text"
-                    placeholder="Name"
+                    placeholder={o("tasks.assigneePlaceholder")}
                     value={newTaskAssignee}
                     onChange={(e) => setNewTaskAssignee(e.target.value)}
                   />
                 </Field>
                 <button type="submit" className="button primary">
-                  <Plus size={17} /> Hinzufügen
+                  <Plus size={17} /> {o("tasks.add")}
                 </button>
               </div>
             </form>
 
             {projectTasks.length === 0 ? (
-              <p className="empty muted">Noch keine Aufgaben angelegt.</p>
+              <p className="empty muted">{o("tasks.noTasksYet")}</p>
             ) : (
               <div className="office-sublist">
                 {projectTasks.map((task) => (
@@ -415,8 +415,8 @@ export function ProjectsTab({
                       <strong>{task.title}</strong>
                       {(task.assigneeName || task.estimatedMinutes > 0) && (
                         <small className="muted">
-                          {task.assigneeName && <span>Verantwortlich: {task.assigneeName} · </span>}
-                          {task.estimatedMinutes > 0 && <span>Geschätzt: {(task.estimatedMinutes / 60).toFixed(1)}h</span>}
+                          {task.assigneeName && <span>{o("tasks.responsibleLine", { name: task.assigneeName })} · </span>}
+                          {task.estimatedMinutes > 0 && <span>{o("tasks.estimatedLine", { hours: num(task.estimatedMinutes / 60, 1) })}</span>}
                         </small>
                       )}
                     </span>
@@ -424,8 +424,8 @@ export function ProjectsTab({
                       type="button"
                       className="icon-button danger"
                       onClick={() => handleDeleteTask(task.id)}
-                      title="Aufgabe löschen"
-                      aria-label="Aufgabe löschen"
+                      title={o("tasks.deleteTask")}
+                      aria-label={o("tasks.deleteTask")}
                     >
                       <Trash2 size={16} />
                     </button>
@@ -442,7 +442,7 @@ export function ProjectsTab({
         <Dialog title={o("common.confirmDelete")} onClose={() => setDeleteConfirmId(null)}>
           <div className="stack office-dialog">
             <p className="muted">
-              Möchten Sie dieses Projekt wirklich löschen? Alle zugehörigen Aufgaben, Auslagen und Zeiteinträge dieses Projekts werden dabei ebenfalls entfernt.
+              {o("projects.deleteText")}
             </p>
             <div className="row wrap gap end">
               <button className="button" onClick={() => setDeleteConfirmId(null)}>{o("common.cancel")}</button>
@@ -454,7 +454,7 @@ export function ProjectsTab({
 
       {/* Dialog: Projekt anlegen / bearbeiten */}
       {modalOpen && (
-        <Dialog title={editingProject ? "Projekt bearbeiten" : o("projects.newProject")} onClose={() => setModalOpen(false)} wide>
+        <Dialog title={editingProject ? o("projects.editProject") : o("projects.newProject")} onClose={() => setModalOpen(false)} wide>
           <form onSubmit={handleSave} className="stack office-dialog">
             {errorMsg && <p className="error" role="alert">{errorMsg}</p>}
             <div className="grid form-grid">
@@ -462,7 +462,7 @@ export function ProjectsTab({
                 <input
                   type="text"
                   required
-                  placeholder="z.B. Website Relaunch & SEO Betreuung"
+                  placeholder={o("projects.namePlaceholder")}
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                 />
@@ -488,7 +488,7 @@ export function ProjectsTab({
                   type="number"
                   step="0.01"
                   min="0"
-                  placeholder="0.00 = kein Limit"
+                  placeholder={o("projects.budgetPlaceholder")}
                   value={(form.budgetCents / 100) || ""}
                   onChange={(e) => setForm({ ...form, budgetCents: Math.round(parseFloat(e.target.value || "0") * 100) })}
                 />
@@ -498,7 +498,7 @@ export function ProjectsTab({
                   type="number"
                   step="0.01"
                   min="0"
-                  placeholder="z.B. 95.00"
+                  placeholder={o("projects.ratePlaceholder")}
                   value={(form.hourlyRateCents / 100) || ""}
                   onChange={(e) => setForm({ ...form, hourlyRateCents: Math.round(parseFloat(e.target.value || "0") * 100) })}
                 />
@@ -512,7 +512,7 @@ export function ProjectsTab({
               <Field label={o("projects.fields.description")} wide>
                 <textarea
                   rows={3}
-                  placeholder="Projektumfang, Meilensteine, Ansprechpartner..."
+                  placeholder={o("projects.descriptionPlaceholder")}
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
                 />

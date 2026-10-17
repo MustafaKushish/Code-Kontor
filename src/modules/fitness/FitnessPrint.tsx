@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Printer, X, Dumbbell, ShieldCheck, QrCode, CheckCircle2 } from "lucide-react";
 import type { FitnessMember, FitnessPlan } from "../../../shared/fitness";
-import { currency as companyCurrency } from "../../money";
+import { useFitnessI18n } from "./i18n";
 
 interface FitnessPrintProps {
   member: FitnessMember;
@@ -19,8 +19,8 @@ export function FitnessPrint({
   type,
   onClose,
 }: FitnessPrintProps) {
-  const fmtEuro = (amount: number) =>
-    new Intl.NumberFormat("de-DE", { style: "currency", currency: companyCurrency() }).format(amount);
+  const { t, money, day, statusLabel, lang } = useFitnessI18n();
+  const fmtEuro = money;
 
   const handlePrint = () => {
     window.print();
@@ -37,16 +37,16 @@ export function FitnessPrint({
       {/* Toolbar - Screen only */}
       <div className="print-toolbar fitness-print-toolbar">
         <span className="fitness-print-title">
-          {type === "contract" ? "Mitgliedsvertrag & SEPA-Mandat" : "Mitgliedsausweis (Druckansicht)"} · {member.firstName}{" "}
+          {type === "contract" ? t("print.contractTitle") : t("print.cardTitle")} · {member.firstName}{" "}
           {member.lastName} · {member.memberNumber}
         </span>
         <button onClick={handlePrint} className="button primary">
           <Printer size={18} />
-          Drucken
+          {t("print.print")}
         </button>
-        <button onClick={onClose} className="button" title="Schließen">
+        <button onClick={onClose} className="button" title={t("print.close")}>
           <X size={18} />
-          Schließen
+          {t("print.close")}
         </button>
       </div>
 
@@ -60,80 +60,80 @@ export function FitnessPrint({
                 <Dumbbell size={20} />
                 <span>{companyName}</span>
               </strong>
-              <p className="fitness-print-sub">Sport- & Fitnesszentrum · Premium Training & Health Club · Deutschland</p>
+              <p className="fitness-print-sub">{t("print.subBrand")}</p>
             </div>
             <div className="print-meta">
-              <strong>Mitglieds-Nr.: {member.memberNumber}</strong>
-              <span>Vertragsbeginn: {member.joinDate}</span>
-              <span>Ausstellungsdatum: {new Date().toLocaleDateString("de-DE")}</span>
+              <strong>{t("print.memberNo", { n: member.memberNumber })}</strong>
+              <span>{t("print.contractStart", { date: day(member.joinDate) })}</span>
+              <span>{t("print.issued", { date: day(new Date().toISOString()) })}</span>
             </div>
           </header>
 
           <div className="fitness-print-center">
-            <h1>Mitgliedschaftsvereinbarung</h1>
-            <p className="fitness-print-sub">gemäß den allgemeinen Studio-Geschäftsbedingungen und Hausordnung</p>
+            <h1>{t("print.agreement")}</h1>
+            <p className="fitness-print-sub">{t("print.agreementSub")}</p>
           </div>
 
           {/* Vertragspartner & Mitgliedsdaten */}
           <div className="print-grid">
             <section className="fitness-print-box">
-              <h2>1. Mitgliedsdaten</h2>
+              <h2>{t("print.memberData")}</h2>
               <p className="plain">
                 <strong className="big">
                   {member.firstName} {member.lastName}
                 </strong>
               </p>
-              <p className="plain">Geburtsdatum: {member.birthDate || "–"}</p>
-              <p className="plain">E-Mail: {member.email}</p>
-              <p className="plain">Telefon: {member.phone || "–"}</p>
+              <p className="plain">{t("print.birthDate", { date: member.birthDate ? day(member.birthDate) : "–" })}</p>
+              <p className="plain">{t("print.email", { email: member.email })}</p>
+              <p className="plain">{t("print.phone", { phone: member.phone || "–" })}</p>
               {member.emergencyContact && (
                 <p className="plain fitness-print-sub">
-                  <strong>Notfallkontakt:</strong> {member.emergencyContact}
+                  <strong>{t("print.emergency")}</strong> {member.emergencyContact}
                 </p>
               )}
             </section>
 
             <section className="fitness-print-box">
-              <h2>2. Gewählter Tarif & Konditionen</h2>
+              <h2>{t("print.planTerms")}</h2>
               <p className="plain">
                 <strong className="big">{member.planName}</strong>
               </p>
               <p>
-                <span>Monatlicher Beitrag:</span>
+                <span>{t("print.monthlyFee")}</span>
                 <strong>{fmtEuro(member.monthlyFee)}</strong>
               </p>
               {plan?.admissionFee ? (
                 <p className="fitness-print-sub">
-                  <span>Einmalige Aufnahmegebühr:</span>
+                  <span>{t("print.admissionFee")}</span>
                   <span>{fmtEuro(plan.admissionFee)}</span>
                 </p>
               ) : null}
               <p className="fitness-print-sub">
-                <span>Mindestvertragslaufzeit:</span>
-                <span>{plan?.durationMonths || 12} Monate</span>
+                <span>{t("print.minTerm")}</span>
+                <span>{t("print.months", { n: plan?.durationMonths || 12 })}</span>
               </p>
               <p className="fitness-print-sub">
-                <span>Gültig bis:</span>
-                <span>{member.validUntil || "Unbefristet"}</span>
+                <span>{t("print.validUntil")}</span>
+                <span>{member.validUntil ? day(member.validUntil) : t("common.unlimited")}</span>
               </p>
             </section>
           </div>
 
           {/* Inklusivleistungen */}
           <section>
-            <h2>3. Vereinbarte Inklusivleistungen</h2>
+            <h2>{t("print.includes")}</h2>
             <div className="fitness-print-includes">
               <span>
                 <CheckCircle2 size={14} />
-                Cardio- & Kraftbereich
+                {t("print.inclGym")}
               </span>
               <span className={plan?.includesCourses ? "" : "off"}>
                 <CheckCircle2 size={14} />
-                Gruppenkurse & Yoga
+                {t("print.inclCourses")}
               </span>
               <span className={plan?.includesSauna ? "" : "off"}>
                 <CheckCircle2 size={14} />
-                Sauna & Wellness
+                {t("print.inclSauna")}
               </span>
             </div>
           </section>
@@ -141,19 +141,18 @@ export function FitnessPrint({
           {/* SEPA-Lastschriftmandat */}
           <section className="fitness-print-box">
             <h2>
-              <ShieldCheck size={12} /> 4. SEPA-Lastschriftmandat für wiederkehrende Zahlungen
+              <ShieldCheck size={12} /> {t("print.sepaTitle")}
             </h2>
             <p className="plain fitness-print-sub">
-              Ich ermächtige {companyName}, Zahlungen von meinem Konto mittels Lastschrift einzuziehen.
-              Zugleich weise ich mein Kreditinstitut an, die von {companyName} auf mein Konto gezogenen Lastschriften einzulösen.
+              {t("print.sepaText", { company: companyName })}
             </p>
             <div className="fitness-print-sepa">
               <div>
-                <small>IBAN des Mitglieds:</small>
+                <small>{t("print.iban")}</small>
                 <strong>{member.iban || "DE__ ____ ____ ____ ____ __"}</strong>
               </div>
               <div>
-                <small>Gläubiger-Identifikationsnummer / Mandat:</small>
+                <small>{t("print.creditorId")}</small>
                 <strong>DE98ZZZ00002148911 / {member.memberNumber}</strong>
               </div>
             </div>
@@ -161,26 +160,25 @@ export function FitnessPrint({
 
           {/* Hausordnung & Auszüge */}
           <div className="print-terms">
-            <strong>Auszug aus der Hausordnung:</strong>
-            {"\n"}§ 1 Der Zutritt ist nur mit gültigem Mitgliedsausweis oder Check-In per QR-Code / Thekenscan gestattet.
-            Bei Verlust des Ausweises ist das Studio unverzüglich zu benachrichtigen.
-            {"\n"}§ 2 Aus hygienischen Gründen ist im gesamten Trainingsbereich das Tragen sauberer Sportschuhe und die Benutzung eines Handtuchs Pflicht.
-            {"\n"}§ 3 Die Kündigung bedarf der Textform und ist mit einer Frist von einem Monat zum Ende der regulären Vertragslaufzeit einzureichen.
+            <strong>{t("print.rulesTitle")}</strong>
+            {"\n"}{t("print.rule1")}
+            {"\n"}{t("print.rule2")}
+            {"\n"}{t("print.rule3")}
           </div>
 
           {/* Unterschriftenblock */}
           <div className="print-sign">
             <div>
               <span />
-              <strong>Ort, Datum</strong>
+              <strong>{t("print.placeDate")}</strong>
               <br />
-              Unterschrift des Studioleiters / Vertreters
+              {t("print.signStudio")}
             </div>
             <div>
               <span />
-              <strong>Ort, Datum</strong>
+              <strong>{t("print.placeDate")}</strong>
               <br />
-              Unterschrift des Mitglieds (bei Minderjährigen Erziehungsberechtigter)
+              {t("print.signMember")}
             </div>
           </div>
         </article>
@@ -188,9 +186,9 @@ export function FitnessPrint({
         /* --- MITGLIEDSAUSWEIS --- */
         <article className="print-sheet fitness-print">
           <div className="fitness-print-center">
-            <h1>Mitgliedsausweis & Theken-Barcode</h1>
+            <h1>{t("print.cardHeading")}</h1>
             <p className="fitness-print-sub">
-              Kann als Scheckkarte oder Anhänger ausgedruckt werden. Unterstützt alle Barcode- und QR-Scanner am Empfangstresen.
+              {t("print.cardSub")}
             </p>
           </div>
 
@@ -203,13 +201,13 @@ export function FitnessPrint({
                     <Dumbbell size={14} />
                     <span>{companyName}</span>
                   </div>
-                  <span className="label">Member Pass</span>
+                  <span className="label">{t("print.memberPass")}</span>
                 </div>
-                <span className="status">{member.status.toUpperCase()}</span>
+                <span className="status">{statusLabel(member.status).toLocaleUpperCase(lang)}</span>
               </div>
 
               <div>
-                <span className="label">Mitglied</span>
+                <span className="label">{t("print.member")}</span>
                 <div className="name">
                   {member.firstName} {member.lastName}
                 </div>
@@ -217,7 +215,7 @@ export function FitnessPrint({
               </div>
 
               <div className="fitness-idcard-foot">
-                <span>Gültig ab: {member.joinDate}</span>
+                <span>{t("print.validFrom", { date: day(member.joinDate) })}</span>
                 <strong>{member.memberNumber}</strong>
               </div>
             </div>
@@ -225,8 +223,8 @@ export function FitnessPrint({
             {/* Rückseite Ausweis mit Barcode & QR */}
             <div className="fitness-idcard">
               <div className="fitness-idcard-top">
-                <span className="label">Theken-Check-In</span>
-                <span className="label">Notfall: {member.emergencyContact || "112"}</span>
+                <span className="label">{t("print.deskCheckIn")}</span>
+                <span className="label">{t("print.emergencyShort", { contact: member.emergencyContact || "112" })}</span>
               </div>
 
               {/* Strichcode-Simulation */}
@@ -240,7 +238,7 @@ export function FitnessPrint({
               </div>
 
               <div className="fitness-idcard-foot">
-                <span>Bei Auffinden bitte im Studio abgeben.</span>
+                <span>{t("print.found")}</span>
                 <QrCode size={14} />
               </div>
             </div>

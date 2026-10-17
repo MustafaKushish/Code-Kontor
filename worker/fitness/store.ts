@@ -501,7 +501,7 @@ export class FitnessStore {
     if (memberRows.length === 0) {
       const byName = this.sql.exec<(typeof memberRows)[number]>("SELECT * FROM fitness_members WHERE upper(last_name) = upper(?) LIMIT 2", query.trim()).toArray();
       if (byName.length > 1) {
-        return { success: false, message: `Mehrere Mitglieder heißen „${query}“. Bitte Mitgliedsnummer scannen.`, alertLevel: "warning" };
+        return { success: false, message: `Mehrere Mitglieder heißen „${query}“. Bitte Mitgliedsnummer scannen.`, code: "ambiguous", vars: { query }, alertLevel: "warning" };
       }
       memberRows.push(...byName);
     }
@@ -510,6 +510,8 @@ export class FitnessStore {
       return {
         success: false,
         message: `Kein Mitglied mit Nummer oder Kennung „${query}“ gefunden.`,
+        code: "notFound",
+        vars: { query },
         alertLevel: "error",
       };
     }
@@ -543,6 +545,8 @@ export class FitnessStore {
         success: false,
         member,
         message: `Zugang verwehrt! Mitgliedschaft ist gesperrt. ${member.notes ? `Hinweis: ${member.notes}` : "Bitte an die Kasse verweisen."}`,
+        code: member.notes ? "blockedNote" : "blocked",
+        vars: { note: member.notes ?? "" },
         alertLevel: "error",
       };
     }
@@ -553,6 +557,8 @@ export class FitnessStore {
         success: false,
         member,
         message: `Mitgliedschaft ist derzeit stillgelegt / pausiert. ${member.notes ? `Hinweis: ${member.notes}` : "Reaktivierung am Empfang erforderlich."}`,
+        code: member.notes ? "pausedNote" : "paused",
+        vars: { note: member.notes ?? "" },
         alertLevel: "warning",
       };
     }
@@ -563,6 +569,7 @@ export class FitnessStore {
         success: false,
         member,
         message: "Mitgliedschaft ist abgelaufen / gekündigt. Kein Einlass möglich.",
+        code: "cancelled",
         alertLevel: "error",
       };
     }
@@ -570,7 +577,7 @@ export class FitnessStore {
     // 4. Vertrag abgelaufen? (Gültig bis einschließlich dem Tag)
     const today = berlinDayOf(new Date().toISOString());
     if (member.validUntil && member.validUntil.slice(0, 10) < today) {
-      return { success: false, member, message: `Mitgliedschaft ist am ${member.validUntil.slice(0, 10)} abgelaufen. Bitte an der Kasse verlängern.`, alertLevel: "error" };
+      return { success: false, member, message: `Mitgliedschaft ist am ${member.validUntil.slice(0, 10)} abgelaufen. Bitte an der Kasse verlängern.`, code: "expired", vars: { date: member.validUntil.slice(0, 10) }, alertLevel: "error" };
     }
 
     // Vergessenes Auschecken von früheren Tagen schließen, sonst sperrt es den nächsten Besuch
@@ -581,13 +588,14 @@ export class FitnessStore {
     // Schon drin (z. B. doppelt gescannt): keine zweite Einheit abziehen
     const alreadyIn = this.sql.exec<{ id: string }>("SELECT id FROM fitness_checkins WHERE member_id = ? AND status = 'anwesend'", member.id).toArray();
     if (alreadyIn.length > 0) {
-      return { success: true, member, message: `${member.firstName} ${member.lastName} ist bereits im Studio eingecheckt.`, alertLevel: "warning" };
+      return { success: true, member, message: `${member.firstName} ${member.lastName} ist bereits im Studio eingecheckt.`, code: "alreadyIn", vars: { name: `${member.firstName} ${member.lastName}` }, alertLevel: "warning" };
     }
 
     // 5. Prüfung 10er-Karte: verbleibende Einheiten
     let remaining = member.remainingUnits;
     let alertLevel: "success" | "warning" = "success";
     let message = `Willkommen, ${member.firstName}! Check-In erfolgreich gebucht (${member.planName}).`;
+    let code = "welcome";
 
     if (remaining !== undefined) {
       if (remaining <= 0) {
@@ -595,6 +603,7 @@ export class FitnessStore {
           success: false,
           member,
           message: "10er-Karte aufgebraucht (0 Einheiten verbleibend). Bitte neue Karte an der Kasse buchen.",
+          code: "passEmpty",
           alertLevel: "error",
           remainingUnits: 0,
         };
@@ -607,8 +616,10 @@ export class FitnessStore {
       if (remaining <= 1) {
         alertLevel = "warning";
         message = `Willkommen, ${member.firstName}! Check-In erfasst. Achtung: Nur noch ${remaining} Einheit auf der 10er-Karte!`;
+        code = "welcomeLow";
       } else {
         message = `Willkommen, ${member.firstName}! Check-In erfasst (Noch ${remaining} Einheiten verfügbar).`;
+        code = "welcomeUnits";
       }
     }
 
@@ -646,6 +657,8 @@ export class FitnessStore {
       member,
       checkIn,
       message,
+      code,
+      vars: { name: member.firstName, plan: member.planName, n: remaining ?? 0 },
       alertLevel,
       remainingUnits: remaining,
     };

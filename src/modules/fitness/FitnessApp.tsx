@@ -14,9 +14,10 @@ import { ClassesTab } from "./ClassesTab";
 import { PlansTab } from "./PlansTab";
 import { FitnessPrint } from "./FitnessPrint";
 import "./fitness.css";
-import { currency as companyCurrency } from "../../money";
+import { useFitnessI18n } from "./i18n";
 
 export default function FitnessApp({ me, path }: { me: Me; path: string }) {
+  const { t, money } = useFitnessI18n();
   const isManager = me.user.role !== "staff";
   const app = findApp("fitness")!;
   const [activeTab, setActiveTab] = useState<"checkin" | "members" | "classes" | "plans">("checkin");
@@ -43,8 +44,7 @@ export default function FitnessApp({ me, path }: { me: Me; path: string }) {
   // Gesteuertes Auswählen eines Mitglieds (z.B. nach Klick auf Akte)
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
 
-  const fmtEuro = (amount: number) =>
-    new Intl.NumberFormat("de-DE", { style: "currency", currency: companyCurrency() }).format(amount);
+  const fmtEuro = money;
 
   const loadData = useCallback(async (silent = false) => {
     if (!silent) setRefreshing(true);
@@ -78,11 +78,11 @@ export default function FitnessApp({ me, path }: { me: Me; path: string }) {
   );
 
   const tabs = [
-    { id: "checkin" as const, label: "Theken-Check-In", icon: UserCheck },
-    { id: "members" as const, label: `Mitgliederkartei (${stats.totalMembersCount})`, icon: Users },
-    { id: "classes" as const, label: "Wochenkursplan", icon: Calendar },
+    { id: "checkin" as const, label: t("tabs.checkin"), icon: UserCheck },
+    { id: "members" as const, label: t("tabs.members", { n: stats.totalMembersCount }), icon: Users },
+    { id: "classes" as const, label: t("tabs.classes"), icon: Calendar },
     // Tarife pflegen nur Inhaber und Admins (prüft auch der Server)
-    ...(isManager ? [{ id: "plans" as const, label: "Tarife & 10er-Karten", icon: CreditCard }] : []),
+    ...(isManager ? [{ id: "plans" as const, label: t("tabs.plans"), icon: CreditCard }] : []),
   ];
 
   return (
@@ -92,13 +92,13 @@ export default function FitnessApp({ me, path }: { me: Me; path: string }) {
         <AppIcon app={app} size="lg" />
         <div>
           <h1 className="display">
-            Fitnessstudio & Kurse <span className="pill pos">Live</span>
+            {t("app.title")} <span className="pill pos">{t("app.live")}</span>
           </h1>
-          <p className="muted">Empfangstresen, Barcode-Check-In, Studioauslastung, Mitgliederkartei und Kursplan</p>
+          <p className="muted">{t("app.subtitle")}</p>
         </div>
         <div className="row gap push-end">
-          <button className="button" onClick={() => loadData()} disabled={refreshing} title="Daten aktualisieren">
-            <RefreshCw size={18} className={refreshing ? "spin" : ""} /> Aktualisieren
+          <button className="button" onClick={() => loadData()} disabled={refreshing} title={t("app.refreshTitle")}>
+            <RefreshCw size={18} className={refreshing ? "spin" : ""} /> {t("app.refresh")}
           </button>
         </div>
       </header>
@@ -117,22 +117,22 @@ export default function FitnessApp({ me, path }: { me: Me; path: string }) {
         <div className="tile stat-tile">
           <span className="stat-icon"><Activity size={18} /></span>
           <strong>{stats.checkedInNowCount}<span className="unit">/ {stats.maxCapacity} ({occupancyPercent}%)</span></strong>
-          <small>Studioauslastung</small>
+          <small>{t("stats.occupancy")}</small>
         </div>
         <div className="tile stat-tile">
           <span className="stat-icon"><Users size={18} /></span>
-          <strong>{stats.activeMembersCount}<span className="unit">von {stats.totalMembersCount}</span></strong>
-          <small>Aktive Mitglieder</small>
+          <strong>{stats.activeMembersCount}<span className="unit">{t("stats.ofTotal", { n: stats.totalMembersCount })}</span></strong>
+          <small>{t("stats.activeMembers")}</small>
         </div>
         <div className="tile stat-tile">
           <span className="stat-icon"><TrendingUp size={18} /></span>
           <strong>{fmtEuro(stats.monthlyRevenueGross)}</strong>
-          <small>Beiträge / Monat</small>
+          <small>{t("stats.revenue")}</small>
         </div>
         <div className="tile stat-tile">
           <span className="stat-icon"><Calendar size={18} /></span>
-          <strong>{stats.classesTodayCount}<span className="unit">Einheiten geplant</span></strong>
-          <small>Kurse heute</small>
+          <strong>{stats.classesTodayCount}<span className="unit">{t("stats.unitsPlanned")}</span></strong>
+          <small>{t("stats.classesToday")}</small>
         </div>
       </div>
 

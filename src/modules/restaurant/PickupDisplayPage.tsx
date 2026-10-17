@@ -4,18 +4,20 @@ import { Utensils, Clock, CheckCircle2, Maximize, Minimize } from "lucide-react"
 /** Was die Anzeige vom Server bekommt: nur Nummer und Vorname. */
 interface Called { id: string; number: string; name: string }
 import "./restaurant.css";
+import { useRestaurantI18n } from "./i18n";
 
 interface PickupDisplayProps {
   tenantId: string;
 }
 
 export default function PickupDisplayPage({ tenantId }: PickupDisplayProps) {
+  const { t, time } = useRestaurantI18n();
   const [queue, setQueue] = useState<{ preparing: Called[]; ready: Called[] }>({
     preparing: [],
     ready: [],
   });
-  const [companyName, setCompanyName] = useState("Restaurant & Café");
-  const [currentTime, setCurrentTime] = useState(new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }));
+  const [companyName, setCompanyName] = useState("");
+  const [now, setNow] = useState(() => new Date());
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   const fetchQueue = async () => {
@@ -35,7 +37,7 @@ export default function PickupDisplayPage({ tenantId }: PickupDisplayProps) {
     fetchQueue();
     const interval = setInterval(fetchQueue, 4000);
     const clock = setInterval(() => {
-      setCurrentTime(new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }));
+      setNow(new Date());
     }, 1000);
 
     return () => {
@@ -60,14 +62,14 @@ export default function PickupDisplayPage({ tenantId }: PickupDisplayProps) {
         <div className="restaurant-display-brand">
           <span className="restaurant-display-logo"><Utensils size={24} /></span>
           <div>
-            <h1 className="display">{companyName}</h1>
-            <p className="muted">Bestell- und Abholaufruf</p>
+            <h1 className="display">{companyName || t("app.defaultName")}</h1>
+            <p className="muted">{t("display.subtitle")}</p>
           </div>
         </div>
 
         <div className="row gap">
-          <span className="restaurant-display-clock">{currentTime}</span>
-          <button onClick={toggleFullscreen} className="icon-button" title="Vollbild" aria-label="Vollbild">
+          <span className="restaurant-display-clock">{time(now)}</span>
+          <button onClick={toggleFullscreen} className="icon-button" title={t("display.fullscreen")} aria-label={t("display.fullscreen")}>
             {isFullscreen ? <Minimize size={22} /> : <Maximize size={22} />}
           </button>
         </div>
@@ -78,14 +80,14 @@ export default function PickupDisplayPage({ tenantId }: PickupDisplayProps) {
           <div className="restaurant-display-head">
             <h2>
               <Clock size={30} aria-hidden />
-              In Zubereitung
+              {t("display.preparing")}
             </h2>
-            <span className="muted">{queue.preparing.length} Bestellungen</span>
+            <span className="muted">{t("display.orders", { n: queue.preparing.length })}</span>
           </div>
 
           <div className="restaurant-display-grid">
             {queue.preparing.length === 0 ? (
-              <p className="muted restaurant-display-empty">Aktuell keine Bestellungen in Arbeit</p>
+              <p className="muted restaurant-display-empty">{t("display.noneInProgress")}</p>
             ) : (
               queue.preparing.map((order) => (
                 <div key={order.id} className="restaurant-display-number">
@@ -101,14 +103,14 @@ export default function PickupDisplayPage({ tenantId }: PickupDisplayProps) {
           <div className="restaurant-display-head">
             <h2>
               <CheckCircle2 size={30} aria-hidden />
-              Bereit zur Abholung
+              {t("display.ready")}
             </h2>
-            <span className="restaurant-display-call">Bitte am Schalter melden!</span>
+            <span className="restaurant-display-call">{t("display.callout")}</span>
           </div>
 
           <div className="restaurant-display-grid">
             {queue.ready.length === 0 ? (
-              <p className="muted restaurant-display-empty">Noch keine fertigen Bestellungen</p>
+              <p className="muted restaurant-display-empty">{t("display.noneReady")}</p>
             ) : (
               queue.ready.map((order) => (
                 <div key={order.id} className="restaurant-display-number">
@@ -122,7 +124,7 @@ export default function PickupDisplayPage({ tenantId }: PickupDisplayProps) {
       </main>
 
       <footer className="muted restaurant-display-foot">
-        Bestellnummer auf dem Kassenbon oder Abholschein vergleichen · Bei Fragen gerne an unser Schalterteam wenden
+        {t("display.footer")}
       </footer>
     </div>
   );

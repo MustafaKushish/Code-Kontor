@@ -1,6 +1,7 @@
 import { useRef, useEffect, useState } from "react";
 import { Eraser, Check, PenTool } from "lucide-react";
 import { Dialog } from "../../pos/ui";
+import { useCraftI18n } from "./i18n";
 
 interface SignaturePadProps {
   onSave: (dataUrl: string) => void;
@@ -9,6 +10,7 @@ interface SignaturePadProps {
 }
 
 export function SignaturePad({ onSave, onCancel, customerName }: SignaturePadProps) {
+  const { t } = useCraftI18n();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasDrawn, setHasDrawn] = useState(false);
@@ -100,17 +102,16 @@ export function SignaturePad({ onSave, onCancel, customerName }: SignaturePadPro
   };
 
   return (
-    <Dialog title="Digitale Kundenunterschrift" onClose={onCancel}>
+    <Dialog title={t("signature.title")} onClose={onCancel}>
       <div className="stack craft-sign">
         {customerName && (
           <p className="craft-pill-icon">
-            <PenTool size={16} aria-hidden /> <strong>Bauherr: {customerName}</strong>
+            <PenTool size={16} aria-hidden /> <strong>{t("signature.client", { name: customerName })}</strong>
           </p>
         )}
 
         <p className="muted small">
-          Bitte unterschreiben Sie hier mit dem Finger oder Stylus zur Bestätigung der ausgeführten
-          Handwerkerleistungen und Arbeitszeiten:
+          {t("signature.instructions")}
         </p>
 
         <div className="craft-sign-pad">
@@ -126,7 +127,7 @@ export function SignaturePad({ onSave, onCancel, customerName }: SignaturePadPro
           />
 
           {!hasDrawn && (
-            <span className="craft-sign-hint">Hier unterschreiben (Touch / Stift / Maus)</span>
+            <span className="craft-sign-hint">{t("signature.hint")}</span>
           )}
 
           <span className="craft-sign-line" aria-hidden />
@@ -139,10 +140,10 @@ export function SignaturePad({ onSave, onCancel, customerName }: SignaturePadPro
             disabled={!hasDrawn}
             className="button"
           >
-            <Eraser size={18} /> Löschen
+            <Eraser size={18} /> {t("signature.clear")}
           </button>
           <button type="button" onClick={onCancel} className="button push-end">
-            Abbrechen
+            {t("common.cancel")}
           </button>
           <button
             type="button"
@@ -150,7 +151,7 @@ export function SignaturePad({ onSave, onCancel, customerName }: SignaturePadPro
             disabled={!hasDrawn}
             className="button primary"
           >
-            <Check size={18} /> Unterschrift speichern
+            <Check size={18} /> {t("signature.save")}
           </button>
         </div>
       </div>

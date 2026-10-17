@@ -6,7 +6,7 @@ import type { SalonSettings } from "../../../shared/salon";
 import { useSalonI18n } from "./i18n";
 
 export function SettingsTab() {
-  const { s } = useSalonI18n();
+  const { s, errorText } = useSalonI18n();
   const [settings, setSettings] = useState<SalonSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
@@ -46,12 +46,12 @@ export function SettingsTab() {
       setSettings(res.settings);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
-    } catch (err: any) {
-      setErrorMsg(err?.message || "Fehler beim Speichern der Einstellungen");
+    } catch (err) {
+      setErrorMsg(errorText(err));
     }
   };
 
-  if (loading || !settings) return <p className="muted">Lade Einstellungen...</p>;
+  if (loading || !settings) return <p className="muted">{s("settings.loading")}</p>;
 
   const publicBookingUrl = typeof window !== "undefined"
     ? `${window.location.origin}/termin/salon/${tenantId}`
@@ -78,7 +78,7 @@ export function SettingsTab() {
           <Globe size={20} /> {s("settings.onlineBooking")}
         </h2>
         <p className="small muted">
-          Teilen Sie diesen Link auf Ihrer Website, Instagram oder Google Maps, damit Kunden Termine rund um die Uhr selbstständig buchen können.
+          {s("settings.shareHint")}
         </p>
         <div className="salon-toolbar">
           <label className="search">
@@ -87,41 +87,41 @@ export function SettingsTab() {
           </label>
           <button className="button primary" onClick={copyLink}>
             {copied ? <Check size={17} /> : <Copy size={17} />}
-            {copied ? "Kopiert!" : "Link kopieren"}
+            {copied ? s("settings.copied") : s("settings.copyLink")}
           </button>
         </div>
       </section>
 
       {/* Salon Einstellungen Formular */}
       <form onSubmit={handleSave} className="card stack">
-        <h2 className="card-title"><Clock size={20} /> {s("settings.hours")} & Terminregeln</h2>
+        <h2 className="card-title"><Clock size={20} /> {s("settings.hoursAndRules")}</h2>
 
         <label className="check">
           <input type="checkbox" checked={settings.onlineBookingEnabled} onChange={(e) => setSettings({ ...settings, onlineBookingEnabled: e.target.checked })} />
-          <span className="stack-sm"><span>Online-Terminbuchung erlauben</span><small className="muted">Kunden buchen über den Link oben freie Zeiten selbst.</small></span>
+          <span className="stack-sm"><span>{s("settings.allowOnline")}</span><small className="muted">{s("settings.allowOnlineHint")}</small></span>
         </label>
 
         <div className="grid form-grid">
-          <Field label="Salonname / Studio" wide>
+          <Field label={s("settings.salonName")} wide>
             <input type="text" required value={settings.salonName} onChange={(e) => setSettings({ ...settings, salonName: e.target.value })} />
           </Field>
 
-          <Field label="Öffnung morgens">
+          <Field label={s("settings.openTime")}>
             <input type="time" required value={settings.openTime} onChange={(e) => setSettings({ ...settings, openTime: e.target.value })} />
           </Field>
-          <Field label="Schließung abends">
+          <Field label={s("settings.closeTime")}>
             <input type="time" required value={settings.closeTime} onChange={(e) => setSettings({ ...settings, closeTime: e.target.value })} />
           </Field>
 
-          <Field label="Terminraster (Minuten)">
+          <Field label={s("settings.slotInterval")}>
             <select value={settings.slotIntervalMinutes} onChange={(e) => setSettings({ ...settings, slotIntervalMinutes: Number(e.target.value) || 15 })}>
-              <option value="15">15 Minuten (Empfohlen)</option>
-              <option value="30">30 Minuten</option>
-              <option value="60">60 Minuten</option>
+              <option value="15">{s("settings.slot15")}</option>
+              <option value="30">{s("settings.slot30")}</option>
+              <option value="60">{s("settings.slot60")}</option>
             </select>
           </Field>
 
-          <Field label="Buchbar im Voraus (Tage)">
+          <Field label={s("settings.advanceDays")}>
             <input
               type="number"
               min="7"
@@ -131,17 +131,10 @@ export function SettingsTab() {
             />
           </Field>
 
-          <Field label="Geöffnete Wochentage" wide>
+          <Field label={s("settings.openDays")} wide>
             <div className="chips wrap">
-              {[
-                { d: 1, label: "Montag" },
-                { d: 2, label: "Dienstag" },
-                { d: 3, label: "Mittwoch" },
-                { d: 4, label: "Donnerstag" },
-                { d: 5, label: "Freitag" },
-                { d: 6, label: "Samstag" },
-                { d: 7, label: "Sonntag" },
-              ].map(({ d, label }) => {
+              {[1, 2, 3, 4, 5, 6, 7].map((d) => {
+                const label = s(`weekdays.${d}`);
                 const active = settings.openDays.includes(d);
                 return (
                   <button
@@ -163,10 +156,10 @@ export function SettingsTab() {
             </div>
           </Field>
 
-          <Field label="Hinweis für Kunden bei der Buchung" wide>
+          <Field label={s("settings.notice")} wide>
             <input
               type="text"
-              placeholder="z.B. Bitte 5 Minuten vor dem Termin erscheinen. Kostenfreie Stornierung bis 24h vorher."
+              placeholder={s("settings.noticePlaceholder")}
               value={settings.noticeText}
               onChange={(e) => setSettings({ ...settings, noticeText: e.target.value })}
             />

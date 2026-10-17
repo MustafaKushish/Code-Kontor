@@ -7,7 +7,7 @@ import { useSalonI18n } from "./i18n";
 import { Dialog } from "../../pos/ui";
 
 export function StaffTab({ isManager }: { isManager: boolean }) {
-  const { s } = useSalonI18n();
+  const { s, errorText } = useSalonI18n();
   const [staff, setStaff] = useState<SalonStaff[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -45,11 +45,11 @@ export function StaffTab({ isManager }: { isManager: boolean }) {
     setEditingStaff(null);
     setForm({
       name: "",
-      title: "Stylist",
+      title: s("staff.defaultTitle"),
       email: "",
       phone: "",
       colorHex: "#e11d48",
-      specialtiesText: "Haarschnitt, Styling",
+      specialtiesText: s("staff.defaultSpecialties"),
       workStart: "09:00",
       workEnd: "18:00",
       workingDays: [1, 2, 3, 4, 5, 6],
@@ -95,8 +95,8 @@ export function StaffTab({ isManager }: { isManager: boolean }) {
       });
       setModalOpen(false);
       await loadStaff();
-    } catch (err: any) {
-      setErrorMsg(err?.message || "Fehler beim Speichern");
+    } catch (err) {
+      setErrorMsg(errorText(err));
     }
   };
 
@@ -109,27 +109,17 @@ export function StaffTab({ isManager }: { isManager: boolean }) {
       await api(`/salon/staff/${id}`, { method: "DELETE" });
       setDeleteConfirmId(null);
       await loadStaff();
-    } catch (err: any) {
-      setStaffError(err?.message || "Fehler beim Deaktivieren des Mitarbeiters");
+    } catch (err) {
+      setStaffError(errorText(err));
     }
-  };
-
-  const DAY_LABELS: Record<number, string> = {
-    1: "Mo",
-    2: "Di",
-    3: "Mi",
-    4: "Do",
-    5: "Fr",
-    6: "Sa",
-    7: "So",
   };
 
   return (
     <div className="stack">
       <div className="section-head">
         <div className="stack-sm">
-          <h2>Salon-Team & Stylisten</h2>
-          <p className="small muted">Arbeitszeiten, Kalenderfarben und Spezialisierungen verwalten.</p>
+          <h2>{s("staff.title")}</h2>
+          <p className="small muted">{s("staff.subtitle")}</p>
         </div>
 
         {isManager && (
@@ -142,7 +132,7 @@ export function StaffTab({ isManager }: { isManager: boolean }) {
       {staffError && <p className="error" role="alert">{staffError}</p>}
 
       {loading ? (
-        <p className="muted">Lade Stylisten...</p>
+        <p className="muted">{s("staff.loading")}</p>
       ) : staff.length === 0 ? (
         <section className="card list-card">
           <p className="empty muted">{s("staff.noStaff")}</p>
@@ -157,7 +147,7 @@ export function StaffTab({ isManager }: { isManager: boolean }) {
                   <strong>{st.name}</strong>
                   <small className="muted">{st.title}</small>
                 </span>
-                <span className="salon-dot" style={st.colorHex ? { background: st.colorHex } : undefined} title="Farbe im Kalender" />
+                <span className="salon-dot" style={st.colorHex ? { background: st.colorHex } : undefined} title={s("staff.calendarColor")} />
               </div>
 
               {/* Spezialisierungen */}
@@ -171,9 +161,9 @@ export function StaffTab({ isManager }: { isManager: boolean }) {
 
               {/* Arbeitszeiten & Tage */}
               <div className="salon-meta">
-                <span><Clock size={14} /> Arbeitszeit: <strong>{st.workStart} - {st.workEnd} Uhr</strong></span>
+                <span><Clock size={14} /> {s("staff.workingHoursLabel")} <strong>{s("staff.workingHoursValue", { from: st.workStart, to: st.workEnd })}</strong></span>
                 <span>
-                  <Calendar size={14} /> Arbeitstage: <strong>{st.workingDays.map((d) => DAY_LABELS[d] || d).join(", ")}</strong>
+                  <Calendar size={14} /> {s("staff.workingDaysLabel")} <strong>{st.workingDays.map((d) => (d >= 1 && d <= 7 ? s(`weekdaysShort.${d}`) : d)).join(", ")}</strong>
                 </span>
               </div>
 
@@ -184,11 +174,11 @@ export function StaffTab({ isManager }: { isManager: boolean }) {
                   </button>
                   {deleteConfirmId === st.id ? (
                     <span className="row gap">
-                      <button className="button danger small-button" onClick={() => handleDelete(st.id)} title="Unwiderruflich deaktivieren">
-                        Deaktivieren
+                      <button className="button danger small-button" onClick={() => handleDelete(st.id)} title={s("actions.deactivateForever")}>
+                        {s("actions.deactivate")}
                       </button>
                       <button className="button small-button" onClick={() => setDeleteConfirmId(null)}>
-                        Abbr.
+                        {s("actions.cancelShort")}
                       </button>
                     </span>
                   ) : (
@@ -205,42 +195,36 @@ export function StaffTab({ isManager }: { isManager: boolean }) {
 
       {/* Dialog: Stylist anlegen / bearbeiten */}
       {modalOpen && (
-        <Dialog title={editingStaff ? "Stylist bearbeiten" : s("actions.newStaff")} onClose={() => setModalOpen(false)} wide>
+        <Dialog title={editingStaff ? s("staff.edit") : s("actions.newStaff")} onClose={() => setModalOpen(false)} wide>
           <form onSubmit={handleSave} className="salon-dialog stack">
             {errorMsg && <p className="error" role="alert">{errorMsg}</p>}
 
             <div className="grid form-grid">
-              <Field label="Name des Mitarbeiters" required wide>
-                <input type="text" required placeholder="z.B. Elena Schmidt" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <Field label={s("staff.name")} required wide>
+                <input type="text" required placeholder={s("staff.namePlaceholder")} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
               </Field>
 
-              <Field label="Titel / Rolle">
-                <input type="text" placeholder="z.B. Master Stylist, Barbier, Colorist" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+              <Field label={s("staff.role")}>
+                <input type="text" placeholder={s("staff.rolePlaceholder")} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
               </Field>
-              <Field label="Farbe im Kalender">
+              <Field label={s("staff.calendarColor")}>
                 <div className="salon-color">
-                  <input type="color" value={form.colorHex} onChange={(e) => setForm({ ...form, colorHex: e.target.value })} aria-label="Farbe im Kalender" />
+                  <input type="color" value={form.colorHex} onChange={(e) => setForm({ ...form, colorHex: e.target.value })} aria-label={s("staff.calendarColor")} />
                   <input type="text" value={form.colorHex} onChange={(e) => setForm({ ...form, colorHex: e.target.value })} />
                 </div>
               </Field>
 
-              <Field label="Arbeitsbeginn">
+              <Field label={s("staff.workStart")}>
                 <input type="time" value={form.workStart} onChange={(e) => setForm({ ...form, workStart: e.target.value })} />
               </Field>
-              <Field label="Arbeitsende">
+              <Field label={s("staff.workEnd")}>
                 <input type="time" value={form.workEnd} onChange={(e) => setForm({ ...form, workEnd: e.target.value })} />
               </Field>
 
-              <Field label="Arbeitstage" wide>
+              <Field label={s("staff.workingDays")} wide>
                 <div className="chips wrap">
-                  {[
-                    { d: 1, label: "Montag" },
-                    { d: 2, label: "Dienstag" },
-                    { d: 3, label: "Mittwoch" },
-                    { d: 4, label: "Donnerstag" },
-                    { d: 5, label: "Freitag" },
-                    { d: 6, label: "Samstag" },
-                  ].map(({ d, label }) => {
+                  {[1, 2, 3, 4, 5, 6].map((d) => {
+                    const label = s(`weekdays.${d}`);
                     const active = form.workingDays.includes(d);
                     return (
                       <button
@@ -262,10 +246,10 @@ export function StaffTab({ isManager }: { isManager: boolean }) {
                 </div>
               </Field>
 
-              <Field label="Spezialisierungen (durch Komma getrennt)" wide>
+              <Field label={s("staff.specialtiesLabel")} wide>
                 <input
                   type="text"
-                  placeholder="z.B. Balayage, Fade Cut, Brautfrisur, Bartpflege"
+                  placeholder={s("staff.specialtiesPlaceholder")}
                   value={form.specialtiesText}
                   onChange={(e) => setForm({ ...form, specialtiesText: e.target.value })}
                 />

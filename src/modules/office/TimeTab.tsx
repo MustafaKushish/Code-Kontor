@@ -6,7 +6,7 @@ import { Dialog } from "../../pos/ui";
 import type { OfficeClient, OfficeProject, OfficeTimeEntry, LineItem, OfficeTask, RoleRate, OfficeSettings } from "../../../shared/office";
 import { useOfficeI18n } from "./i18n";
 import { TimesheetPrint } from "./TimesheetPrint";
-import { currencySymbol, standardVat } from "../../money";
+import { standardVat } from "../../money";
 
 export function TimeTab({
   me,
@@ -17,7 +17,7 @@ export function TimeTab({
   initialProjectId?: string;
   onNavigateToNewInvoiceWithItems?: (clientId: string, projectId: string | null, items: LineItem[]) => void;
 }) {
-  const { o, euro, day, officeError } = useOfficeI18n();
+  const { o, euro, cur, num, day, officeError } = useOfficeI18n();
   const [times, setTimes] = useState<OfficeTimeEntry[]>([]);
   const [projects, setProjects] = useState<OfficeProject[]>([]);
   const [clients, setClients] = useState<OfficeClient[]>([]);
@@ -120,7 +120,7 @@ export function TimeTab({
 
   const handleStopAndSaveTimer = async () => {
     if (timerSeconds < 60) {
-      if (!confirm("Weniger als 1 Minute vergangen. Trotzdem speichern (1 Min)?")) {
+      if (!confirm(o("time.shortConfirm"))) {
         setTimerRunning(false);
         setTimerSeconds(0);
         return;
@@ -135,7 +135,7 @@ export function TimeTab({
           projectId: timerProjectId,
           day: new Date().toISOString().slice(0, 10),
           minutes,
-          description: timerDescription || "Projektarbeit",
+          description: timerDescription || o("time.defaultDescription"),
           billable: true,
         },
       });
@@ -159,7 +159,7 @@ export function TimeTab({
         minutes = Math.round((parseFloat(form.hoursInput) || 0) * 60);
       }
       if (minutes <= 0) {
-        setErrorMsg("Bitte eine gültige Dauer angeben.");
+        setErrorMsg(o("errors.durationInvalid"));
         return;
       }
 
@@ -222,8 +222,8 @@ export function TimeTab({
     const entries = unbilledEntries.filter((t) => t.clientId === firstClient);
     const items: LineItem[] = entries.map((entry) => ({
       id: crypto.randomUUID(),
-      title: `${entry.projectName || "Projektarbeit"}: ${entry.description || "Dienstleistung"}`,
-      description: `Leistungsdatum: ${day(entry.day)} (${(entry.minutes / 60).toFixed(2)} Std)`,
+      title: o("time.invoiceItemTitle", { project: entry.projectName || o("time.defaultDescription"), description: entry.description || o("time.serviceFallback") }),
+      description: o("time.invoiceItemDescription", { date: day(entry.day), hours: num(entry.minutes / 60, 2) }),
       qty: parseFloat((entry.minutes / 60).toFixed(2)),
       unit: "Std",
       unitCents: entry.hourlyRateCents,
@@ -243,19 +243,19 @@ export function TimeTab({
       <section className="card office-timer">
         <div className="row gap">
           <span className={`office-timer-clock ${timerRunning ? "running" : ""}`}>{formatTimerDisplay(timerSeconds)}</span>
-          {timerRunning && <span className="pill success">Läuft...</span>}
+          {timerRunning && <span className="pill success">{o("time.timerRunning")}</span>}
         </div>
 
         <div className="office-timer-inputs">
           <select value={timerProjectId} onChange={(e) => setTimerProjectId(e.target.value)} disabled={timerRunning} aria-label={o("time.fields.project")}>
-            {projects.length === 0 && <option value="">Keine Projekte vorhanden</option>}
+            {projects.length === 0 && <option value="">{o("time.noProjects")}</option>}
             {projects.map((p) => (
               <option key={p.id} value={p.id}>{p.name} ({p.clientName})</option>
             ))}
           </select>
           <input
             type="text"
-            placeholder="Was tun Sie gerade?"
+            placeholder={o("time.timerPlaceholder")}
             aria-label={o("time.fields.description")}
             value={timerDescription}
             onChange={(e) => setTimerDescription(e.target.value)}
@@ -265,16 +265,16 @@ export function TimeTab({
         <div className="row wrap gap">
           {!timerRunning ? (
             <button className="button primary" onClick={handleStartTimer} disabled={projects.length === 0}>
-              <Play size={18} /> {timerSeconds > 0 ? "Fortsetzen" : o("time.timerStart")}
+              <Play size={18} /> {timerSeconds > 0 ? o("time.timerResume") : o("time.timerStart")}
             </button>
           ) : (
             <button className="button" onClick={handlePauseTimer}>
-              <Pause size={18} /> Pausieren
+              <Pause size={18} /> {o("time.timerPause")}
             </button>
           )}
           {timerSeconds > 0 && (
             <button className="button success-button" onClick={handleStopAndSaveTimer}>
-              <Square size={17} /> {o("time.timerStop")} & Buchen
+              <Square size={17} /> {o("time.timerStopBook")}
             </button>
           )}
         </div>
@@ -284,25 +284,25 @@ export function TimeTab({
       <div className="office-stats">
         <div className="tile stat-tile">
           <span className="stat-icon"><Wallet size={18} /></span>
-          <strong>{euro(unbilledCents)}</strong><small>{o("time.unbilled")} · {(unbilledMinutes / 60).toFixed(1)} Stunden</small>
+          <strong>{euro(unbilledCents)}</strong><small>{o("time.unbilled")} · {o("time.unbilledHours", { hours: num(unbilledMinutes / 60, 1) })}</small>
         </div>
         <div className="tile stat-tile">
           <span className="stat-icon"><Clock size={18} /></span>
-          <strong>{(totalMonthMinutes / 60).toFixed(1)} Std</strong><small>Erfasste Stunden (Filter)</small>
+          <strong>{o("common.hoursShort", { hours: num(totalMonthMinutes / 60, 1) })}</strong><small>{o("time.statLogged")}</small>
         </div>
         <div className="tile stat-tile">
           <span className="stat-icon"><Hourglass size={18} /></span>
-          <strong>{unbilledEntries.length}</strong><small>Offene Zeiteinträge</small>
+          <strong>{unbilledEntries.length}</strong><small>{o("time.statOpenEntries")}</small>
         </div>
       </div>
 
       <div className="toolbar">
         <div className="chips" role="tablist">
           {[
-            { id: "all", label: "Alle Einträge" },
-            { id: "unbilled", label: "Offen zur Abrechnung" },
-            { id: "billed", label: "Bereits abgerechnet" },
-            { id: "nonbillable", label: "Nicht abrechenbar" },
+            { id: "all", label: o("time.filterAll") },
+            { id: "unbilled", label: o("time.filterUnbilled") },
+            { id: "billed", label: o("time.filterBilled") },
+            { id: "nonbillable", label: o("time.filterNonBillable") },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -319,7 +319,7 @@ export function TimeTab({
         <div className="row wrap gap office-filters">
           {projects.length > 0 && (
             <select value={selectedProjectId} onChange={(e) => setSelectedProjectId(e.target.value)} aria-label={o("time.fields.project")}>
-              <option value="all">Alle Projekte</option>
+              <option value="all">{o("common.allProjects")}</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
@@ -330,13 +330,13 @@ export function TimeTab({
               className="button"
               onClick={() => setShowTimesheet(true)}
               disabled={filteredTimes.length === 0}
-              title="Druckbaren Leistungsnachweis / Timesheet erstellen"
+              title={o("time.timesheetHint")}
             >
-              <Printer size={18} /> Leistungsnachweis
+              <Printer size={18} /> {o("time.timesheetButton")}
             </button>
             {unbilledEntries.length > 0 && onNavigateToNewInvoiceWithItems && (
-              <button className="button" onClick={handleInvoiceUnbilled} title="Rechnung aus offenen Zeiten generieren">
-                <Receipt size={18} /> In Rechnung stellen
+              <button className="button" onClick={handleInvoiceUnbilled} title={o("time.invoiceHint")}>
+                <Receipt size={18} /> {o("time.invoiceButton")}
               </button>
             )}
             <button className="button primary" onClick={() => setModalOpen(true)}>
@@ -347,7 +347,7 @@ export function TimeTab({
       </div>
 
       {loading ? (
-        <p className="muted">Laden...</p>
+        <p className="muted">{o("common.loading")}</p>
       ) : (
         <section className="card list-card">
           {filteredTimes.length === 0 && <p className="empty muted">{o("time.noEntries")}</p>}
@@ -358,17 +358,17 @@ export function TimeTab({
                 <span className="office-date">{day(t.day)}</span>
                 <span className="list-main">
                   <strong>{t.description || "—"}</strong>
-                  <small className="muted">{t.projectName} · {t.clientName} · {t.userName || "Mitarbeiter"}</small>
+                  <small className="muted">{t.projectName} · {t.clientName} · {t.userName || o("time.staffFallback")}</small>
                 </span>
                 <span className="office-row-meta">
                   <strong>{t.billable ? euro(feeCents) : "—"}</strong>
-                  <small className="muted">{(t.minutes / 60).toFixed(2)}h · {t.minutes} Min · {euro(t.hourlyRateCents)}</small>
+                  <small className="muted">{o("time.rowMeta", { hours: num(t.minutes / 60, 2), minutes: t.minutes, rate: euro(t.hourlyRateCents) })}</small>
                   {t.billedInvoiceId ? (
-                    <span className="pill success">Abgerechnet</span>
+                    <span className="pill success">{o("time.billed")}</span>
                   ) : t.billable ? (
-                    <span className="pill warn">Offen</span>
+                    <span className="pill warn">{o("time.pillOpen")}</span>
                   ) : (
-                    <span className="pill">Intern</span>
+                    <span className="pill">{o("time.pillInternal")}</span>
                   )}
                 </span>
                 {!t.billedInvoiceId ? (
@@ -412,18 +412,18 @@ export function TimeTab({
               </Field>
 
               {projectTasks.length > 0 && (
-                <Field label="Aufgabe / Meilenstein (optional)" wide>
+                <Field label={o("time.taskField")} wide>
                   <select value={form.taskId} onChange={(e) => setForm({ ...form, taskId: e.target.value })}>
-                    <option value="">Keine Aufgabe zuordnen (Allgemein)</option>
+                    <option value="">{o("time.noTask")}</option>
                     {projectTasks.map((t) => (
-                      <option key={t.id} value={t.id}>{t.title} {t.completed ? "✓ (Erledigt)" : ""}</option>
+                      <option key={t.id} value={t.id}>{t.title} {t.completed ? o("time.taskDone") : ""}</option>
                     ))}
                   </select>
                 </Field>
               )}
 
               {roleRates.length > 0 && (
-                <Field label="Rolle / Tätigkeitsstufe">
+                <Field label={o("time.roleField")}>
                   <select
                     value={form.roleName}
                     onChange={(e) => {
@@ -436,15 +436,15 @@ export function TimeTab({
                       });
                     }}
                   >
-                    <option value="">Standard-Stundensatz des Projekts</option>
+                    <option value="">{o("time.roleDefault")}</option>
                     {roleRates.map((r) => (
-                      <option key={r.id} value={r.name}>{r.name} ({euro(r.hourlyRateCents)}/Std)</option>
+                      <option key={r.id} value={r.name}>{o("time.roleOption", { name: r.name, rate: euro(r.hourlyRateCents) })}</option>
                     ))}
                   </select>
                 </Field>
               )}
 
-              <Field label={`Stundensatz (${currencySymbol("de-DE")}/Std)`} wide={roleRates.length === 0}>
+              <Field label={o("time.rateField", { currency: cur() })} wide={roleRates.length === 0}>
                 <input
                   type="number"
                   step="0.01"
@@ -457,7 +457,7 @@ export function TimeTab({
               <Field label={o("time.fields.date")} required>
                 <input type="date" required value={form.day} onChange={(e) => setForm({ ...form, day: e.target.value })} />
               </Field>
-              <Field label="Dauer in Stunden (z.B. 1.5 oder 2:15)" required>
+              <Field label={o("time.durationField")} required>
                 <input
                   type="text"
                   required
@@ -470,7 +470,7 @@ export function TimeTab({
               <Field label={o("time.fields.description")} wide>
                 <textarea
                   rows={2}
-                  placeholder="z.B. Frontend-Komponenten implementiert, Abstimmung mit Kunde..."
+                  placeholder={o("time.descriptionPlaceholder")}
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
                 />
@@ -479,7 +479,7 @@ export function TimeTab({
 
             <label className="check">
               <input type="checkbox" checked={form.billable} onChange={(e) => setForm({ ...form, billable: e.target.checked })} />
-              <span>{o("time.billable")} (wird in Rechnungen zur Abrechnung vorgeschlagen)</span>
+              <span>{o("time.billable")} {o("time.billableHint")}</span>
             </label>
 
             <div className="row wrap gap end">

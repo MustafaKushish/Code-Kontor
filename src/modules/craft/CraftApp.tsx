@@ -12,7 +12,6 @@ import {
 } from "lucide-react";
 import { api, type Me } from "../../api";
 import { AppIcon } from "../../components";
-import { useI18n } from "../../i18n";
 import { findApp } from "../../../shared/apps";
 import type {
   CraftMeasurement,
@@ -26,12 +25,12 @@ import { MeasurementsTab } from "./MeasurementsTab";
 import { ReportsTab } from "./ReportsTab";
 import { SiteDiaryTab } from "./SiteDiaryTab";
 import "./craft.css";
-import { currency as companyCurrency } from "../../money";
+import { useCraftI18n } from "./i18n";
 
 export default function CraftApp({ me, path }: { me: Me; path: string }) {
   // Löschen nur für Inhaber und Admins (prüft auch der Server)
   const isManager = me.user.role !== "staff";
-  const { appText } = useI18n();
+  const { appText, t, money } = useCraftI18n();
   const app = findApp("handwerk")!;
   const [activeTab, setActiveTab] = useState<"projects" | "measurements" | "reports" | "diary">("projects");
   const [stats, setStats] = useState<CraftStats>({
@@ -48,9 +47,6 @@ export default function CraftApp({ me, path }: { me: Me; path: string }) {
   const [diary, setDiary] = useState<CraftSiteDiaryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-
-  const fmtEuro = (amount: number) =>
-    new Intl.NumberFormat("de-DE", { style: "currency", currency: companyCurrency() }).format(amount);
 
   const loadData = useCallback(async (silent = false) => {
     if (!silent) setRefreshing(true);
@@ -86,16 +82,16 @@ export default function CraftApp({ me, path }: { me: Me; path: string }) {
     return (
       <div className="craft craft-loading muted">
         <HardHat size={36} aria-hidden />
-        <p>Handwerk & Baustelle wird geladen...</p>
+        <p>{t("app.loading")}</p>
       </div>
     );
   }
 
   const tabs = [
-    { id: "projects" as const, label: "Baustellen & Bauvorhaben", icon: FolderKanban, count: stats.activeProjectsCount },
-    { id: "measurements" as const, label: "Mobiles Raumaufmaß", icon: Ruler, count: measurements.length },
-    { id: "reports" as const, label: "Arbeitsberichte & Signatur", icon: FileText, count: stats.pendingSignaturesCount },
-    { id: "diary" as const, label: "Bautagebuch", icon: BookOpen, count: diary.length },
+    { id: "projects" as const, label: t("tabs.projects"), icon: FolderKanban, count: stats.activeProjectsCount },
+    { id: "measurements" as const, label: t("tabs.measurements"), icon: Ruler, count: measurements.length },
+    { id: "reports" as const, label: t("tabs.reports"), icon: FileText, count: stats.pendingSignaturesCount },
+    { id: "diary" as const, label: t("tabs.diary"), icon: BookOpen, count: diary.length },
   ];
 
   return (
@@ -105,17 +101,17 @@ export default function CraftApp({ me, path }: { me: Me; path: string }) {
         <div>
           <h1 className="display">{appText(app.id).name}</h1>
           <p className="muted">
-            Baustellenakte, mobiles Aufmaß, Rapportzettel mit Touch-Kundenunterschrift & § 35a Abrechnung
+            {t("app.subtitle")}
           </p>
         </div>
         <div className="row gap push-end craft-head-actions">
-          <span className="pill">Meisterbetrieb</span>
+          <span className="pill">{t("app.badge")}</span>
           <button
             className="icon-button"
             onClick={() => loadData()}
             disabled={refreshing}
-            title="Daten neu laden"
-            aria-label="Daten neu laden"
+            title={t("app.refresh")}
+            aria-label={t("app.refresh")}
           >
             <RefreshCw size={18} className={refreshing ? "craft-spin" : undefined} />
           </button>
@@ -126,27 +122,27 @@ export default function CraftApp({ me, path }: { me: Me; path: string }) {
         <div className="tile stat-tile">
           <span className="stat-icon"><FolderKanban size={18} /></span>
           <strong>{stats.activeProjectsCount}</strong>
-          <small>Aktive Baustellen · {stats.totalProjectsCount} gesamt</small>
+          <small>{t("stats.activeProjects", { total: stats.totalProjectsCount })}</small>
         </div>
         <div className="tile stat-tile">
           <span className="stat-icon"><PenTool size={18} /></span>
           <strong>{stats.pendingSignaturesCount}</strong>
-          <small>Ausstehende Signatur · Rapporte</small>
+          <small>{t("stats.pendingSignatures")}</small>
         </div>
         <div className="tile stat-tile">
           <span className="stat-icon"><FileText size={18} /></span>
           <strong>{stats.openReportsCount}</strong>
-          <small>Offene Abrechnung · abnahmebereit</small>
+          <small>{t("stats.openBilling")}</small>
         </div>
         <div className="tile stat-tile">
           <span className="stat-icon"><Clock size={18} /></span>
           <strong>{stats.totalWageHoursMonth}</strong>
-          <small>Monteurstunden · Std. erfasst</small>
+          <small>{t("stats.wageHours")}</small>
         </div>
         <div className="tile stat-tile craft-stat-wide">
           <span className="stat-icon"><TrendingUp size={18} /></span>
-          <strong>{fmtEuro(stats.revenueThisMonthGross)}</strong>
-          <small>Rapport-Volumen</small>
+          <strong>{money(stats.revenueThisMonthGross)}</strong>
+          <small>{t("stats.revenue")}</small>
         </div>
       </div>
 

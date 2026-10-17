@@ -21,6 +21,7 @@ import type {
   RestaurantOrder,
 } from "../../../shared/restaurant";
 import { RestaurantPrint } from "./RestaurantPrint";
+import { useRestaurantI18n } from "./i18n";
 
 interface KitchenTabProps {
   orders: RestaurantOrder[];
@@ -28,6 +29,7 @@ interface KitchenTabProps {
 }
 
 export function KitchenTab({ orders, onRefresh }: KitchenTabProps) {
+  const { t, course, itemStatus } = useRestaurantI18n();
   const [stationFilter, setStationFilter] = useState<PrintDestination | "alle">("alle");
   const [showCompleted, setShowCompleted] = useState(false);
   const [activePrintOrder, setActivePrintOrder] = useState<RestaurantOrder | null>(null);
@@ -110,9 +112,9 @@ export function KitchenTab({ orders, onRefresh }: KitchenTabProps) {
   };
 
   const stations = [
-    { id: "alle" as const, label: "Alle Stationen", icon: null },
-    { id: "kueche" as const, label: "Warme Küche", icon: Flame },
-    { id: "bar" as const, label: "Schanktresen / Bar", icon: Coffee },
+    { id: "alle" as const, label: t("kitchen.allStations"), icon: null },
+    { id: "kueche" as const, label: t("kitchen.hotKitchen"), icon: Flame },
+    { id: "bar" as const, label: t("kitchen.bar"), icon: Coffee },
   ];
 
   return (
@@ -140,9 +142,9 @@ export function KitchenTab({ orders, onRefresh }: KitchenTabProps) {
               checked={showCompleted}
               onChange={(e) => setShowCompleted(e.target.checked)}
             />
-            <span>Auch servierte Bons zeigen</span>
+            <span>{t("kitchen.showServed")}</span>
           </label>
-          <button onClick={onRefresh} className="icon-button" title="Aktualisieren" aria-label="Aktualisieren">
+          <button onClick={onRefresh} className="icon-button" title={t("common.refresh")} aria-label={t("common.refresh")}>
             <RefreshCw size={18} />
           </button>
         </div>
@@ -152,9 +154,9 @@ export function KitchenTab({ orders, onRefresh }: KitchenTabProps) {
         {kdsOrders.length === 0 ? (
           <div className="card restaurant-empty wide-card">
             <span className="restaurant-success-icon"><CheckCircle2 size={30} /></span>
-            <strong>Alle Bons sind abgearbeitet!</strong>
+            <strong>{t("kitchen.emptyTitle")}</strong>
             <p className="muted small">
-              Sobald Bestellungen am Kundenschalter, Tisch oder Abholschalter eingehen, erscheinen sie hier.
+              {t("kitchen.emptyHint")}
             </p>
           </div>
         ) : (
@@ -179,11 +181,11 @@ export function KitchenTab({ orders, onRefresh }: KitchenTabProps) {
                   <span className="list-main">
                     <span className="restaurant-ticket-title">
                       {order.type === "tisch" ? (
-                        <strong>{order.tableName || `Tisch ${order.tableId}`}</strong>
+                        <strong>{order.tableName || t("kitchen.table", { id: order.tableId ?? "" })}</strong>
                       ) : order.type === "abholung" ? (
-                        <strong className="restaurant-accent">Abholung #{order.pickupNumber || "?"}</strong>
+                        <strong className="restaurant-accent">{t("kitchen.pickup", { n: order.pickupNumber || "?" })}</strong>
                       ) : (
-                        <strong>Theke</strong>
+                        <strong>{t("kitchen.counter")}</strong>
                       )}
                       <small className="muted restaurant-code">({order.orderNumber})</small>
                     </span>
@@ -192,7 +194,7 @@ export function KitchenTab({ orders, onRefresh }: KitchenTabProps) {
 
                   <span className="restaurant-timer">
                     <Clock size={14} aria-hidden />
-                    {elapsed}m
+                    {t("kitchen.minutes", { n: elapsed })}
                   </span>
                 </div>
 
@@ -215,12 +217,12 @@ export function KitchenTab({ orders, onRefresh }: KitchenTabProps) {
                             <strong>{item.quantity}x</strong> <span>{item.name}</span>
                           </span>
                           <small className="muted">
-                            {item.course} · {item.destination === "bar" ? "Bar" : "Küche"}
+                            {course(item.course)} · {item.destination === "bar" ? t("common.bar") : t("common.kitchen")}
                           </small>
                           {item.note && <span className="restaurant-wish">{item.note}</span>}
                         </span>
                         <span className={`pill ${isItemDone ? "pos" : isItemCooking ? "warn" : ""}`}>
-                          {item.status}
+                          {itemStatus(item.status)}
                         </span>
                       </div>
                     );
@@ -231,8 +233,8 @@ export function KitchenTab({ orders, onRefresh }: KitchenTabProps) {
                   <button
                     onClick={() => setActivePrintOrder(order)}
                     className="icon-button"
-                    title="Küchenbon erneut drucken"
-                    aria-label="Küchenbon erneut drucken"
+                    title={t("kitchen.reprint")}
+                    aria-label={t("kitchen.reprint")}
                   >
                     <Printer size={18} />
                   </button>
@@ -243,7 +245,7 @@ export function KitchenTab({ orders, onRefresh }: KitchenTabProps) {
                     className="button primary"
                   >
                     <CheckCircle2 size={18} />
-                    {isReady ? "Bereits fertig" : "Alle fertigstellen"}
+                    {isReady ? t("kitchen.alreadyDone") : t("kitchen.finishAll")}
                   </button>
                 </div>
               </div>

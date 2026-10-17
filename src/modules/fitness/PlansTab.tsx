@@ -4,7 +4,8 @@ import { api } from "../../api";
 import { Field } from "../../components";
 import { Dialog } from "../../pos/ui";
 import type { FitnessPlan } from "../../../shared/fitness";
-import { currency as companyCurrency, currencySymbol } from "../../money";
+import { currencySymbol } from "../../money";
+import { useFitnessI18n } from "./i18n";
 
 interface PlansTabProps {
   plans: FitnessPlan[];
@@ -12,6 +13,7 @@ interface PlansTabProps {
 }
 
 export function PlansTab({ plans, onRefreshPlans }: PlansTabProps) {
+  const { t, money, lang } = useFitnessI18n();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -28,8 +30,8 @@ export function PlansTab({ plans, onRefreshPlans }: PlansTabProps) {
     active: true,
   });
 
-  const fmtEuro = (amount: number) =>
-    new Intl.NumberFormat("de-DE", { style: "currency", currency: companyCurrency() }).format(amount);
+  const fmtEuro = money;
+  const symbol = currencySymbol(lang);
 
   const handleOpenNew = () => {
     setEditingPlanId(null);
@@ -102,12 +104,12 @@ export function PlansTab({ plans, onRefreshPlans }: PlansTabProps) {
       <section className="card">
         <div className="section-head fitness-toolbar">
           <div className="stack-sm">
-            <h2>Tarife & Mitgliedschaftsmodelle</h2>
-            <p className="small muted">Definiere Monatsbeiträge, Laufzeiten und Inklusivleistungen für Neuverträge</p>
+            <h2>{t("plans.title")}</h2>
+            <p className="small muted">{t("plans.subtitle")}</p>
           </div>
           <button onClick={handleOpenNew} className="button primary">
             <Plus size={18} />
-            Tarif anlegen
+            {t("plans.add")}
           </button>
         </div>
       </section>
@@ -123,9 +125,9 @@ export function PlansTab({ plans, onRefreshPlans }: PlansTabProps) {
           >
             <div className="fitness-card-top">
               <span className={plan.isPass10 ? "pill warn" : "pill"}>
-                {plan.isPass10 ? "10er-Karte" : `${plan.durationMonths} Monate Laufzeit`}
+                {plan.isPass10 ? t("common.pass10") : t("plans.duration", { n: plan.durationMonths })}
               </span>
-              <button onClick={() => handleOpenEdit(plan)} className="icon-button" title="Tarif bearbeiten" aria-label="Tarif bearbeiten">
+              <button onClick={() => handleOpenEdit(plan)} className="icon-button" title={t("plans.edit")} aria-label={t("plans.edit")}>
                 <Edit size={16} />
               </button>
             </div>
@@ -134,24 +136,24 @@ export function PlansTab({ plans, onRefreshPlans }: PlansTabProps) {
 
             <div className="fitness-price">
               <strong>{fmtEuro(plan.priceMonthly)}</strong>
-              <span className="small muted">{plan.isPass10 ? "einmalig" : "/ Monat"}</span>
+              <span className="small muted">{plan.isPass10 ? t("plans.oneTime") : t("plans.perMonth")}</span>
             </div>
 
             {plan.admissionFee > 0 && (
-              <p className="small muted">+ {fmtEuro(plan.admissionFee)} einmalige Aufnahmegebühr</p>
+              <p className="small muted">{t("plans.admission", { amount: fmtEuro(plan.admissionFee) })}</p>
             )}
 
             {/* Inklusivleistungen */}
             <ul className="fitness-features">
-              {feature(true, "Cardio- & Kraftgeräte")}
-              {feature(plan.includesCourses, "Alle Gruppenkurse")}
-              {feature(plan.includesSauna, "Sauna & Wellnessbereich")}
-              {feature(plan.includesDrinks, "Mineralgetränke-Flat")}
+              {feature(true, t("plans.featureGym"))}
+              {feature(plan.includesCourses, t("plans.featureCourses"))}
+              {feature(plan.includesSauna, t("plans.featureSauna"))}
+              {feature(plan.includesDrinks, t("plans.featureDrinks"))}
             </ul>
 
             <div className="fitness-plan-foot fitness-card-foot">
-              <span className="muted">Status:</span>
-              <strong className={plan.active ? "success-text" : "muted"}>{plan.active ? "Buchbar" : "Deaktiviert"}</strong>
+              <span className="muted">{t("plans.status")}</span>
+              <strong className={plan.active ? "success-text" : "muted"}>{plan.active ? t("plans.bookable") : t("plans.disabled")}</strong>
             </div>
           </section>
         ))}
@@ -159,19 +161,19 @@ export function PlansTab({ plans, onRefreshPlans }: PlansTabProps) {
 
       {/* --- TARIF ERSTELLEN / BEARBEITEN DIALOG --- */}
       {isFormOpen && (
-        <Dialog title={editingPlanId ? "Tarif bearbeiten" : "Neuen Tarif anlegen"} onClose={() => setIsFormOpen(false)}>
+        <Dialog title={editingPlanId ? t("plans.edit") : t("plans.newTitle")} onClose={() => setIsFormOpen(false)}>
           <form onSubmit={handleSave} className="fitness-dialog">
             <div className="grid form-grid">
-              <Field label="Tarifbezeichnung" required wide>
+              <Field label={t("plans.name")} required wide>
                 <input
                   type="text"
                   required
                   value={formState.name}
                   onChange={(e) => setFormState({ ...formState, name: e.target.value })}
-                  placeholder="z. B. All-Inclusive Premium"
+                  placeholder={t("plans.phName")}
                 />
               </Field>
-              <Field label={formState.isPass10 ? `Preis 10er-Karte (${currencySymbol("de-DE")})` : `Monatsbeitrag (${currencySymbol("de-DE")})`}>
+              <Field label={formState.isPass10 ? t("plans.pricePass", { c: symbol }) : t("plans.priceMonthly", { c: symbol })}>
                 <input
                   type="number"
                   step="0.10"
@@ -182,7 +184,7 @@ export function PlansTab({ plans, onRefreshPlans }: PlansTabProps) {
                   }
                 />
               </Field>
-              <Field label={`Aufnahmegebühr (${currencySymbol("de-DE")})`}>
+              <Field label={t("plans.admissionFee", { c: symbol })}>
                 <input
                   type="number"
                   step="0.10"
@@ -192,7 +194,7 @@ export function PlansTab({ plans, onRefreshPlans }: PlansTabProps) {
                   }
                 />
               </Field>
-              <Field label="Laufzeit (Monate)">
+              <Field label={t("plans.durationMonths")}>
                 <input
                   type="number"
                   min="1"
@@ -209,20 +211,20 @@ export function PlansTab({ plans, onRefreshPlans }: PlansTabProps) {
                   checked={formState.isPass10}
                   onChange={(e) => setFormState({ ...formState, isPass10: e.target.checked })}
                 />
-                <strong>Ist 10er-Karte</strong>
+                <strong>{t("plans.isPass10")}</strong>
               </label>
             </div>
 
             {/* Inklusiv-Schalter */}
             <div className="fitness-checks">
-              <span className="field-label">Inklusivleistungen:</span>
+              <span className="field-label">{t("plans.includes")}</span>
               <label className="check">
                 <input
                   type="checkbox"
                   checked={formState.includesCourses}
                   onChange={(e) => setFormState({ ...formState, includesCourses: e.target.checked })}
                 />
-                <span>Kurse & Yoga inklusive</span>
+                <span>{t("plans.inclCourses")}</span>
               </label>
               <label className="check">
                 <input
@@ -230,7 +232,7 @@ export function PlansTab({ plans, onRefreshPlans }: PlansTabProps) {
                   checked={formState.includesSauna}
                   onChange={(e) => setFormState({ ...formState, includesSauna: e.target.checked })}
                 />
-                <span>Sauna & Wellness inklusive</span>
+                <span>{t("plans.inclSauna")}</span>
               </label>
               <label className="check">
                 <input
@@ -238,16 +240,16 @@ export function PlansTab({ plans, onRefreshPlans }: PlansTabProps) {
                   checked={formState.includesDrinks}
                   onChange={(e) => setFormState({ ...formState, includesDrinks: e.target.checked })}
                 />
-                <span>Getränke-Flat inklusive</span>
+                <span>{t("plans.inclDrinks")}</span>
               </label>
             </div>
 
             <div className="actions-end">
               <button type="button" onClick={() => setIsFormOpen(false)} className="button">
-                Abbrechen
+                {t("common.cancel")}
               </button>
               <button type="submit" disabled={saving} className="button primary">
-                {saving ? "Wird gespeichert..." : "Speichern"}
+                {saving ? t("common.saving") : t("common.save")}
               </button>
             </div>
           </form>

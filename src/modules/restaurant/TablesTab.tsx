@@ -26,7 +26,10 @@ import type {
 } from "../../../shared/restaurant";
 import { Dialog } from "../../pos/ui";
 import { RestaurantPrint } from "./RestaurantPrint";
-import { currency as companyCurrency } from "../../money";
+import { useRestaurantI18n } from "./i18n";
+
+// Gänge so, wie sie an den Server gehen; angezeigt wird der Text der Sprache
+const COURSES: OrderItem["course"][] = ["Sofort", "1. Gang", "2. Gang", "Dessert", "Getränke"];
 
 interface TablesTabProps {
   isManager: boolean;
@@ -37,6 +40,7 @@ interface TablesTabProps {
 }
 
 export function TablesTab({ tables, menu, orders, isManager, onRefresh }: TablesTabProps) {
+  const { t, euro, area, course } = useRestaurantI18n();
   const [selectedArea, setSelectedArea] = useState<TableArea | "alle">("alle");
   const [selectedTable, setSelectedTable] = useState<RestaurantTable | null>(null);
   const [isEditTableModalOpen, setIsEditTableModalOpen] = useState(false);
@@ -57,15 +61,14 @@ export function TablesTab({ tables, menu, orders, isManager, onRefresh }: Tables
   const [isBusy, setIsBusy] = useState(false);
 
   // Format currency
-  const fmtEuro = (amount?: number) =>
-    new Intl.NumberFormat("de-DE", { style: "currency", currency: companyCurrency() }).format(amount || 0);
+  const fmtEuro = euro;
 
   const areas: { id: TableArea | "alle"; label: string }[] = [
-    { id: "alle", label: "Alle Bereiche" },
-    { id: "innen", label: "Innenbereich" },
-    { id: "terrasse", label: "Terrasse" },
-    { id: "bar", label: "Bar & Theke" },
-    { id: "lounge", label: "Lounge" },
+    { id: "alle", label: t("tables.allAreas") },
+    { id: "innen", label: t("areas.inside") },
+    { id: "terrasse", label: t("areas.terrace") },
+    { id: "bar", label: t("areas.bar") },
+    { id: "lounge", label: t("areas.lounge") },
   ];
 
   const filteredTables = tables.filter(
@@ -193,7 +196,7 @@ export function TablesTab({ tables, menu, orders, isManager, onRefresh }: Tables
           className="button primary"
         >
           <Plus size={18} />
-          Neuer Tisch
+          {t("tables.newTable")}
         </button>}
       </div>
 
@@ -222,9 +225,9 @@ export function TablesTab({ tables, menu, orders, isManager, onRefresh }: Tables
 
               <span className="restaurant-table-foot">
                 <span className="stack-sm">
-                  <small className="muted restaurant-area">{table.area}</small>
+                  <small className="muted restaurant-area">{area(table.area)}</small>
                   <span className={`pill ${isBillRequested ? "restaurant-pill-info" : isOccupied ? "warn" : "pos"}`}>
-                    {isBillRequested ? "Rechnung" : isOccupied ? "Belegt" : "Frei"}
+                    {isBillRequested ? t("tableStatus.bill") : isOccupied ? t("tableStatus.occupied") : t("tableStatus.free")}
                   </span>
                 </span>
                 {table.totalGross && table.totalGross > 0 ? (
@@ -241,14 +244,14 @@ export function TablesTab({ tables, menu, orders, isManager, onRefresh }: Tables
           <div className="restaurant-dialog stack">
             <p className="muted restaurant-dialog-sub">
               <UtensilsCrossed size={15} aria-hidden />
-              <span className="restaurant-code">{selectedTable.tableNumber}</span> · {selectedTable.area}
+              <span className="restaurant-code">{selectedTable.tableNumber}</span> · {area(selectedTable.area)}
             </p>
 
             {activeOrder && activeOrder.items.length > 0 ? (
               <div className="stack-sm">
                 <div className="restaurant-split muted small">
-                  <span>Bon #{activeOrder.orderNumber}</span>
-                  <span>{activeOrder.items.length} Positionen</span>
+                  <span>{t("tables.ticket", { n: activeOrder.orderNumber })}</span>
+                  <span>{t("tables.positions", { n: activeOrder.items.length })}</span>
                 </div>
 
                 <div className="restaurant-lines">
@@ -257,16 +260,16 @@ export function TablesTab({ tables, menu, orders, isManager, onRefresh }: Tables
                       <span className="list-main">
                         <span className="restaurant-line-title">
                           <span><strong>{item.quantity}x</strong> {item.name}</span>
-                          <span className={`pill ${item.destination === "bar" ? "restaurant-pill-info" : "warn"}`}>{item.course}</span>
+                          <span className={`pill ${item.destination === "bar" ? "restaurant-pill-info" : "warn"}`}>{course(item.course)}</span>
                         </span>
-                        {item.note && <small className="restaurant-note">Hinweis: {item.note}</small>}
+                        {item.note && <small className="restaurant-note">{t("common.note", { note: item.note })}</small>}
                       </span>
                       <strong className="restaurant-amount">{fmtEuro(item.unitPriceGross * item.quantity)}</strong>
                       <button
                         onClick={() => handleRemoveItem(item.id)}
                         className="icon-button danger"
-                        title="Position entfernen"
-                        aria-label="Position entfernen"
+                        title={t("tables.removeLine")}
+                        aria-label={t("tables.removeLine")}
                       >
                         <X size={16} />
                       </button>
@@ -276,23 +279,23 @@ export function TablesTab({ tables, menu, orders, isManager, onRefresh }: Tables
 
                 <div className="repair-totals">
                   <p className="muted">
-                    <span>Zwischensumme Netto</span>
+                    <span>{t("tables.subtotalNet")}</span>
                     <span>{fmtEuro(activeOrder.totalNet)}</span>
                   </p>
                   {activeOrder.totalTax7 > 0 && (
                     <p className="muted">
-                      <span>MwSt. 7% (Speisen)</span>
+                      <span>{t("tables.tax7")}</span>
                       <span>{fmtEuro(activeOrder.totalTax7)}</span>
                     </p>
                   )}
                   {activeOrder.totalTax19 > 0 && (
                     <p className="muted">
-                      <span>MwSt. 19% (Getränke / Verzehr)</span>
+                      <span>{t("tables.tax19")}</span>
                       <span>{fmtEuro(activeOrder.totalTax19)}</span>
                     </p>
                   )}
                   <p className="grand">
-                    <span>Gesamtsumme Brutto</span>
+                    <span>{t("tables.totalGross")}</span>
                     <strong>{fmtEuro(activeOrder.totalGross)}</strong>
                   </p>
                 </div>
@@ -300,27 +303,25 @@ export function TablesTab({ tables, menu, orders, isManager, onRefresh }: Tables
             ) : (
               <div className="restaurant-empty">
                 <UtensilsCrossed size={28} aria-hidden />
-                <strong>Tisch ist derzeit unbesetzt</strong>
+                <strong>{t("tables.emptyTitle")}</strong>
                 <p className="muted small">
-                  Füge Speisen oder Getränke hinzu, um eine Bestellung zu starten.
+                  {t("tables.emptyHint")}
                 </p>
               </div>
             )}
 
             <div className="stack-sm restaurant-add">
               <div className="section-head">
-                <h3>Positionen zubuchen</h3>
+                <h3>{t("tables.addLines")}</h3>
                 <select
                   value={itemCourse}
                   onChange={(e) => setItemCourse(e.target.value as any)}
                   className="restaurant-course"
-                  aria-label="Gang"
+                  aria-label={t("tables.course")}
                 >
-                  <option value="Sofort">Sofort</option>
-                  <option value="1. Gang">1. Gang</option>
-                  <option value="2. Gang">2. Gang</option>
-                  <option value="Dessert">Dessert</option>
-                  <option value="Getränke">Getränke</option>
+                  {COURSES.map((c) => (
+                    <option key={c} value={c}>{course(c)}</option>
+                  ))}
                 </select>
               </div>
 
@@ -328,16 +329,16 @@ export function TablesTab({ tables, menu, orders, isManager, onRefresh }: Tables
                 <Search size={18} />
                 <input
                   type="text"
-                  placeholder="Speise oder Getränk suchen..."
-                  aria-label="Speise oder Getränk suchen"
+                  placeholder={t("tables.searchMenu")}
+                  aria-label={t("tables.searchMenuLabel")}
                   value={menuSearch}
                   onChange={(e) => setMenuSearch(e.target.value)}
                 />
               </label>
               <input
                 type="text"
-                placeholder="Sonderwunsch (z.B. ohne Zwiebeln, medium)..."
-                aria-label="Sonderwunsch"
+                placeholder={t("tables.notePlaceholder")}
+                aria-label={t("common.specialRequest")}
                 value={itemNote}
                 onChange={(e) => setItemNote(e.target.value)}
               />
@@ -352,7 +353,7 @@ export function TablesTab({ tables, menu, orders, isManager, onRefresh }: Tables
                   >
                     <span className="list-main">
                       <strong>{item.name}</strong>
-                      <small className="muted">{item.destination === "bar" ? "Bar" : "Küche"}</small>
+                      <small className="muted">{item.destination === "bar" ? t("common.bar") : t("common.kitchen")}</small>
                     </span>
                     <strong className="restaurant-amount">{fmtEuro(item.priceGross)}</strong>
                     <Plus size={16} aria-hidden className="muted" />
@@ -369,28 +370,28 @@ export function TablesTab({ tables, menu, orders, isManager, onRefresh }: Tables
                     className="button"
                   >
                     <Printer size={17} />
-                    Küchenbon
+                    {t("common.kitchenTicket")}
                   </button>
                   <button
                     onClick={() => setActivePrintOrder({ order: activeOrder, type: "bar" })}
                     className="button"
                   >
                     <Printer size={17} />
-                    Schankbon
+                    {t("tables.barTicket")}
                   </button>
                   <button
                     onClick={() => setActivePrintOrder({ order: activeOrder, type: "guest" })}
                     className="button"
                   >
                     <Receipt size={17} />
-                    Zwischenbon
+                    {t("tables.interimBill")}
                   </button>
                 </div>
 
                 <div className="restaurant-actions">
                   <button onClick={() => setPaying(activeOrder.id)} disabled={isBusy} className="button primary block">
                     <Banknote size={18} />
-                    Bezahlen
+                    {t("common.pay")}
                   </button>
                 </div>
               </div>
@@ -414,9 +415,9 @@ export function TablesTab({ tables, menu, orders, isManager, onRefresh }: Tables
       )}
 
       {isEditTableModalOpen && (
-        <Dialog title="Tisch anlegen / bearbeiten" onClose={() => setIsEditTableModalOpen(false)}>
+        <Dialog title={t("tables.editTitle")} onClose={() => setIsEditTableModalOpen(false)}>
           <form onSubmit={handleSaveTable} className="restaurant-dialog stack">
-            <Field label="Tischnummer / Kürzel" required hint="z.B. T-01, T-12 oder B-3">
+            <Field label={t("tables.number")} required hint={t("tables.numberHint")}>
               <input
                 type="text"
                 required
@@ -428,32 +429,32 @@ export function TablesTab({ tables, menu, orders, isManager, onRefresh }: Tables
               />
             </Field>
 
-            <Field label="Tischbezeichnung" required hint="z.B. Fensterplatz 1, Ecktisch 4">
+            <Field label={t("tables.name")} required hint={t("tables.nameHint")}>
               <input
                 type="text"
                 required
-                placeholder="Fensterplatz 1"
+                placeholder={t("tables.namePlaceholder")}
                 value={editingTable.name || ""}
                 onChange={(e) => setEditingTable({ ...editingTable, name: e.target.value })}
               />
             </Field>
 
             <div className="grid form-grid">
-              <Field label="Bereich / Zone">
+              <Field label={t("tables.area")}>
                 <select
                   value={editingTable.area || "innen"}
                   onChange={(e) =>
                     setEditingTable({ ...editingTable, area: e.target.value as TableArea })
                   }
                 >
-                  <option value="innen">Innenbereich</option>
-                  <option value="terrasse">Terrasse</option>
-                  <option value="bar">Bar & Theke</option>
-                  <option value="lounge">Lounge</option>
+                  <option value="innen">{t("areas.inside")}</option>
+                  <option value="terrasse">{t("areas.terrace")}</option>
+                  <option value="bar">{t("areas.bar")}</option>
+                  <option value="lounge">{t("areas.lounge")}</option>
                 </select>
               </Field>
 
-              <Field label="Sitzplätze">
+              <Field label={t("tables.seats")}>
                 <input
                   type="number"
                   min="1"
@@ -472,14 +473,14 @@ export function TablesTab({ tables, menu, orders, isManager, onRefresh }: Tables
                 onClick={() => setIsEditTableModalOpen(false)}
                 className="button"
               >
-                Abbrechen
+                {t("common.cancel")}
               </button>
               <button
                 type="submit"
                 disabled={isBusy}
                 className="button primary"
               >
-                Tisch speichern
+                {t("tables.save")}
               </button>
             </div>
           </form>

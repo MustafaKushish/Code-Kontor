@@ -19,6 +19,7 @@ import type {
   CraftMeasurement,
   CraftProject,
 } from "../../../shared/craft";
+import { useCraftI18n } from "./i18n";
 
 interface MeasurementsTabProps {
   isManager: boolean;
@@ -28,6 +29,7 @@ interface MeasurementsTabProps {
 }
 
 export function MeasurementsTab({ measurements, projects, onRefresh, isManager }: MeasurementsTabProps) {
+  const { t, num, categoryLabel, unitLabel } = useCraftI18n();
   const [selectedProjectId, setSelectedProjectId] = useState<string>("alle");
   const [search, setSearch] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -122,8 +124,8 @@ export function MeasurementsTab({ measurements, projects, onRefresh, isManager }
             <Search size={18} />
             <input
               type="search"
-              placeholder="Raum oder Notiz..."
-              aria-label="Raum oder Notiz..."
+              placeholder={t("measurements.searchPlaceholder")}
+              aria-label={t("measurements.searchPlaceholder")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -131,10 +133,10 @@ export function MeasurementsTab({ measurements, projects, onRefresh, isManager }
           <select
             value={selectedProjectId}
             onChange={(e) => setSelectedProjectId(e.target.value)}
-            aria-label="Bauvorhaben:"
-            title="Bauvorhaben:"
+            aria-label={t("common.projectFilter")}
+            title={t("common.projectFilter")}
           >
-            <option value="alle">Alle Baustellen ({projects.length})</option>
+            <option value="alle">{t("common.allSites", { n: projects.length })}</option>
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.projectNumber} · {p.title}
@@ -142,7 +144,7 @@ export function MeasurementsTab({ measurements, projects, onRefresh, isManager }
             ))}
           </select>
           <button onClick={handleOpenAdd} className="button primary">
-            <Plus size={18} /> Aufmaß erfassen
+            <Plus size={18} /> {t("measurements.add")}
           </button>
         </div>
       </div>
@@ -150,9 +152,9 @@ export function MeasurementsTab({ measurements, projects, onRefresh, isManager }
       {Object.keys(groupedByRoom).length === 0 ? (
         <section className="card craft-empty">
           <Ruler size={40} aria-hidden />
-          <strong>Keine Aufmaße vorhanden</strong>
+          <strong>{t("measurements.emptyTitle")}</strong>
           <p className="muted small">
-            Erfasse Längen, Wandflächen, Raummaße oder Stückzahlen vor Ort auf der Baustelle.
+            {t("measurements.emptyText")}
           </p>
         </section>
       ) : (
@@ -175,12 +177,12 @@ export function MeasurementsTab({ measurements, projects, onRefresh, isManager }
                   <div className="row wrap gap">
                     {totalArea > 0 && (
                       <span className="pill warn">
-                        Gesamtfläche: {Math.round(totalArea * 100) / 100} m²
+                        {t("measurements.totalArea", { value: num(Math.round(totalArea * 100) / 100) })}
                       </span>
                     )}
                     {totalLength > 0 && (
                       <span className="pill tone-info">
-                        Gesamtlänge: {Math.round(totalLength * 100) / 100} m
+                        {t("measurements.totalLength", { value: num(Math.round(totalLength * 100) / 100) })}
                       </span>
                     )}
                   </div>
@@ -192,21 +194,21 @@ export function MeasurementsTab({ measurements, projects, onRefresh, isManager }
                     <div key={m.id} className="list-row craft-measure-row">
                       <span className="list-main">
                         <strong>
-                          <span className="pill craft-tag">{m.category}</span>{" "}
+                          <span className="pill craft-tag">{categoryLabel(m.category)}</span>{" "}
                           <span className="craft-number">{proj?.projectNumber}</span>
                           {m.notes && <> · {m.notes}</>}
                         </strong>
-                        <small className="muted craft-mono">Formel: {m.formula || "-"}</small>
+                        <small className="muted craft-mono">{t("measurements.formula", { formula: m.formula || "-" })}</small>
                       </span>
                       <span className="craft-result">
-                        {m.result} {m.unit}
+                        {num(m.result)} {unitLabel(m.unit)}
                       </span>
                       {isManager && (
                         <button
                           onClick={() => handleDelete(m.id)}
                           className="icon-button danger"
-                          title="Löschen"
-                          aria-label="Löschen"
+                          title={t("common.delete")}
+                          aria-label={t("common.delete")}
                         >
                           <Trash2 size={17} />
                         </button>
@@ -221,10 +223,10 @@ export function MeasurementsTab({ measurements, projects, onRefresh, isManager }
       )}
 
       {isModalOpen && (
-        <Dialog title="Aufmaßzeile hinzufügen" onClose={() => setIsModalOpen(false)}>
+        <Dialog title={t("measurements.dialogTitle")} onClose={() => setIsModalOpen(false)}>
           <form onSubmit={handleSave} className="stack">
             <div className="grid form-grid">
-              <Field label="Bauvorhaben / Baustelle" required wide>
+              <Field label={t("common.projectOrSite")} required wide>
                 <select
                   required
                   value={editingMeasurement.projectId || ""}
@@ -238,31 +240,31 @@ export function MeasurementsTab({ measurements, projects, onRefresh, isManager }
                 </select>
               </Field>
 
-              <Field label="Raum / Bauteil" required hint="z.B. Wohnzimmer, Flur EG">
+              <Field label={t("measurements.fieldRoom")} required hint={t("measurements.roomHint")}>
                 <input
                   type="text"
                   required
-                  placeholder="Wohnzimmer EG"
+                  placeholder={t("measurements.roomPlaceholder")}
                   value={editingMeasurement.roomName || ""}
                   onChange={(e) => setEditingMeasurement({ ...editingMeasurement, roomName: e.target.value })}
                 />
               </Field>
 
-              <Field label="Kategorie">
+              <Field label={t("measurements.fieldCategory")}>
                 <select
                   value={editingMeasurement.category || "Fläche"}
                   onChange={(e) => handleCategoryChange(e.target.value as any)}
                 >
-                  <option value="Fläche">Fläche (m²)</option>
-                  <option value="Länge / Umfang">Länge / Umfang (m)</option>
-                  <option value="Volumen">Volumen (m³)</option>
-                  <option value="Stückzahl">Stückzahl (stk)</option>
+                  <option value="Fläche">{t("measurements.categoryOption", { label: t("categories.area"), unit: "m²" })}</option>
+                  <option value="Länge / Umfang">{t("measurements.categoryOption", { label: t("categories.length"), unit: "m" })}</option>
+                  <option value="Volumen">{t("measurements.categoryOption", { label: t("categories.volume"), unit: "m³" })}</option>
+                  <option value="Stückzahl">{t("measurements.categoryOption", { label: t("categories.count"), unit: t("units.pieces") })}</option>
                 </select>
               </Field>
 
               <Field
-                label="Abmessungen / Rechenformel"
-                hint="z.B. 5.40 * 3.80 oder 2 * (4.20 + 3.10)"
+                label={t("measurements.fieldFormula")}
+                hint={t("measurements.formulaHint")}
                 wide
               >
                 <input
@@ -276,17 +278,17 @@ export function MeasurementsTab({ measurements, projects, onRefresh, isManager }
 
               <div className="craft-total wide">
                 <span>
-                  <Calculator size={17} aria-hidden /> Berechnetes Aufmaß:
+                  <Calculator size={17} aria-hidden /> {t("measurements.calculated")}
                 </span>
                 <strong>
-                  {editingMeasurement.result || 0} {editingMeasurement.unit}
+                  {num(editingMeasurement.result || 0)} {unitLabel(editingMeasurement.unit)}
                 </strong>
               </div>
 
-              <Field label="Beschreibung / Bauteil-Hinweis" wide>
+              <Field label={t("measurements.fieldNotes")} wide>
                 <input
                   type="text"
-                  placeholder="z.B. Fliesenwand Duschbereich, Trassenlänge"
+                  placeholder={t("measurements.notesPlaceholder")}
                   value={editingMeasurement.notes || ""}
                   onChange={(e) => setEditingMeasurement({ ...editingMeasurement, notes: e.target.value })}
                 />
@@ -295,14 +297,14 @@ export function MeasurementsTab({ measurements, projects, onRefresh, isManager }
 
             <div className="row gap craft-dialog-actions">
               <button type="button" onClick={() => setIsModalOpen(false)} className="button">
-                Abbrechen
+                {t("common.cancel")}
               </button>
               <button
                 type="submit"
                 disabled={isBusy || !editingMeasurement.roomName}
                 className="button primary"
               >
-                <Check size={18} /> Aufmaß speichern
+                <Check size={18} /> {t("measurements.save")}
               </button>
             </div>
           </form>

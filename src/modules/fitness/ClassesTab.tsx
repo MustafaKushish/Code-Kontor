@@ -8,7 +8,9 @@ import type {
   FitnessMember,
   Weekday,
 } from "../../../shared/fitness";
+import { useFitnessI18n } from "./i18n";
 
+// Werte gehen so an den Server; angezeigt wird die Übersetzung
 const WEEKDAYS: Weekday[] = [
   "Montag",
   "Dienstag",
@@ -25,6 +27,7 @@ interface ClassesTabProps {
 }
 
 export function ClassesTab({ onRefreshStats, isManager }: ClassesTabProps) {
+  const { t, weekday, day: fmtDay } = useFitnessI18n();
   const [classes, setClasses] = useState<FitnessClass[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDay, setSelectedDay] = useState<string>("alle");
@@ -44,7 +47,7 @@ export function ClassesTab({ onRefreshStats, isManager }: ClassesTabProps) {
     weekday: "Montag" as Weekday,
     startTime: "18:00",
     endTime: "19:00",
-    room: "Kursraum 1",
+    room: t("classes.defaultRoom"),
     maxParticipants: 16,
     description: "",
   });
@@ -154,7 +157,7 @@ export function ClassesTab({ onRefreshStats, isManager }: ClassesTabProps) {
   };
 
   const handleDeleteClass = async (id: string) => {
-    if (!confirm("Diesen Kurs wirklich aus dem Kursplan entfernen?")) return;
+    if (!confirm(t("classes.confirmDelete"))) return;
     try {
       await api(`/fitness/classes/${id}`, { method: "DELETE" });
       setClasses((prev) => prev.filter((c) => c.id !== id));
@@ -188,7 +191,7 @@ export function ClassesTab({ onRefreshStats, isManager }: ClassesTabProps) {
       weekday: (selectedDay !== "alle" ? selectedDay : "Montag") as Weekday,
       startTime: "18:00",
       endTime: "19:00",
-      room: "Kursraum 1 (Zen Box)",
+      room: t("classes.defaultRoom"),
       maxParticipants: 16,
       description: "",
     });
@@ -206,7 +209,7 @@ export function ClassesTab({ onRefreshStats, isManager }: ClassesTabProps) {
             onClick={() => setSelectedDay("alle")}
             className={selectedDay === "alle" ? "chip active" : "chip"}
           >
-            Alle Tage
+            {t("classes.allDays")}
           </button>
           {WEEKDAYS.map((day) => (
             <button
@@ -216,7 +219,7 @@ export function ClassesTab({ onRefreshStats, isManager }: ClassesTabProps) {
               onClick={() => setSelectedDay(day)}
               className={selectedDay === day ? "chip active" : "chip"}
             >
-              {day}
+              {weekday(day)}
             </button>
           ))}
         </div>
@@ -224,17 +227,17 @@ export function ClassesTab({ onRefreshStats, isManager }: ClassesTabProps) {
         {isManager && (
           <button onClick={handleOpenNew} className="button primary">
             <Plus size={18} />
-            Kurs anlegen
+            {t("classes.add")}
           </button>
         )}
       </div>
 
       {/* Kursplan Kacheln */}
       {loading ? (
-        <p className="muted">Kursplan wird geladen...</p>
+        <p className="muted">{t("classes.loading")}</p>
       ) : classes.length === 0 ? (
         <section className="card list-card">
-          <p className="empty muted">Für diesen Tag sind derzeit keine Kurse eingetragen.</p>
+          <p className="empty muted">{t("classes.empty")}</p>
         </section>
       ) : (
         <div className="fitness-grid">
@@ -246,13 +249,13 @@ export function ClassesTab({ onRefreshStats, isManager }: ClassesTabProps) {
             return (
               <section key={course.id} className="card fitness-card">
                 <div className="fitness-card-top">
-                  <span className="pill accent-pill">{course.weekday}</span>
+                  <span className="pill accent-pill">{weekday(course.weekday)}</span>
                   {isManager && (
                     <>
-                      <button onClick={() => handleOpenEdit(course)} className="icon-button" title="Bearbeiten" aria-label="Bearbeiten">
+                      <button onClick={() => handleOpenEdit(course)} className="icon-button" title={t("common.edit")} aria-label={t("common.edit")}>
                         <Edit size={16} />
                       </button>
-                      <button onClick={() => handleDeleteClass(course.id)} className="icon-button danger" title="Löschen" aria-label="Löschen">
+                      <button onClick={() => handleDeleteClass(course.id)} className="icon-button danger" title={t("common.delete")} aria-label={t("common.delete")}>
                         <Trash2 size={16} />
                       </button>
                     </>
@@ -267,7 +270,7 @@ export function ClassesTab({ onRefreshStats, isManager }: ClassesTabProps) {
                   <li>
                     <Clock size={15} />
                     <strong>
-                      {course.startTime} – {course.endTime} Uhr
+                      {t("common.timeRange", { start: course.startTime, end: course.endTime })}
                     </strong>
                   </li>
                   <li>
@@ -277,7 +280,7 @@ export function ClassesTab({ onRefreshStats, isManager }: ClassesTabProps) {
                   <li>
                     <User size={15} />
                     <span>
-                      Trainer/in: <strong>{course.coachName}</strong>
+                      {t("classes.coach")} <strong>{course.coachName}</strong>
                     </span>
                   </li>
                 </ul>
@@ -285,9 +288,9 @@ export function ClassesTab({ onRefreshStats, isManager }: ClassesTabProps) {
                 {/* Teilnehmer Auslastung & Buchung */}
                 <div className="fitness-card-foot">
                   <div className="fitness-count">
-                    <span className="muted">Teilnehmer:</span>
+                    <span className="muted">{t("classes.participants")}</span>
                     <span className={isFull ? "full" : ""}>
-                      {bookedCount} / {course.maxParticipants} {isFull && "(Voll)"}
+                      {bookedCount} / {course.maxParticipants} {isFull && t("classes.full")}
                     </span>
                   </div>
                   <div className="fitness-bar thin">
@@ -295,7 +298,7 @@ export function ClassesTab({ onRefreshStats, isManager }: ClassesTabProps) {
                   </div>
                   <button onClick={() => handleOpenParticipants(course)} className="button block">
                     <Users size={17} />
-                    Teilnehmerliste & Buchen
+                    {t("classes.openList")}
                   </button>
                 </div>
               </section>
@@ -310,22 +313,22 @@ export function ClassesTab({ onRefreshStats, isManager }: ClassesTabProps) {
           <div className="fitness-dialog">
             <div className="stack-sm">
               <span className="eyebrow">
-                {activeClass.weekday} · {activeClass.startTime} - {activeClass.endTime} Uhr
+                {weekday(activeClass.weekday)} · {t("common.timeRange", { start: activeClass.startTime, end: activeClass.endTime })}
               </span>
               <p className="small muted">
-                Trainer: {activeClass.coachName} · Raum: {activeClass.room}
+                {t("classes.coachRoom", { coach: activeClass.coachName, room: activeClass.room })}
               </p>
             </div>
 
             {/* Eingebuchte Mitglieder */}
             <div className="stack-sm">
               <h3>
-                Gebuchte Plätze ({activeClass.bookedMemberIds.length} / {activeClass.maxParticipants})
-                {activeClass.bookingsFor && <> · am {new Date(`${activeClass.bookingsFor}T12:00:00Z`).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" })}</>}
+                {t("classes.booked", { n: activeClass.bookedMemberIds.length, max: activeClass.maxParticipants })}
+                {activeClass.bookingsFor && t("classes.bookedOn", { date: fmtDay(activeClass.bookingsFor, { day: "2-digit", month: "2-digit" }) })}
               </h3>
 
               {activeClass.bookedMemberIds.length === 0 ? (
-                <p className="small muted">Für diesen Kurs liegen noch keine Buchungen vor.</p>
+                <p className="small muted">{t("classes.noBookings")}</p>
               ) : (
                 <div className="fitness-scroll">
                   {activeClass.bookedMemberIds.map((mId) => {
@@ -336,7 +339,7 @@ export function ClassesTab({ onRefreshStats, isManager }: ClassesTabProps) {
                           {member ? `${member.firstName[0]}${member.lastName[0]}` : "?"}
                         </span>
                         <span className="list-main">
-                          <strong>{member ? `${member.firstName} ${member.lastName}` : `Mitglied ${mId}`}</strong>
+                          <strong>{member ? `${member.firstName} ${member.lastName}` : t("classes.memberFallback", { id: mId })}</strong>
                           <small className="muted">
                             {member?.memberNumber} · {member?.planName}
                           </small>
@@ -345,10 +348,10 @@ export function ClassesTab({ onRefreshStats, isManager }: ClassesTabProps) {
                           onClick={() => handleCancelBooking(mId)}
                           disabled={bookingLoading}
                           className="button small-button danger"
-                          title="Platz stornieren"
+                          title={t("classes.cancelSeat")}
                         >
                           <UserMinus size={14} />
-                          Austragen
+                          {t("classes.remove")}
                         </button>
                       </div>
                     );
@@ -359,7 +362,7 @@ export function ClassesTab({ onRefreshStats, isManager }: ClassesTabProps) {
 
             {/* Mitglied schnell einbuchen */}
             <div className="stack-sm">
-              <h3>Mitglied in Kurs einbuchen</h3>
+              <h3>{t("classes.bookTitle")}</h3>
 
               <label className="search compact">
                 <Search size={16} />
@@ -367,15 +370,15 @@ export function ClassesTab({ onRefreshStats, isManager }: ClassesTabProps) {
                   type="search"
                   value={memberSearch}
                   onChange={(e) => setMemberSearch(e.target.value)}
-                  placeholder="Mitglied suchen (Name oder M-Nummer)..."
-                  aria-label="Mitglied suchen (Name oder M-Nummer)..."
+                  placeholder={t("classes.searchMember")}
+                  aria-label={t("classes.searchMember")}
                 />
               </label>
 
               {activeClass.bookedMemberIds.length >= activeClass.maxParticipants ? (
                 <p className="notice">
                   <AlertCircle size={17} />
-                  <span>Dieser Kurs ist bereits voll belegt. Bitte Teilnehmerzahl erhöhen oder Platz freigeben.</span>
+                  <span>{t("classes.fullNotice")}</span>
                 </p>
               ) : (
                 <div className="fitness-scroll">
@@ -397,7 +400,7 @@ export function ClassesTab({ onRefreshStats, isManager }: ClassesTabProps) {
                           <small className="muted mono">({m.memberNumber})</small>
                         </span>
                         <button onClick={() => handleBookMember(m.id)} disabled={bookingLoading} className="button small-button primary">
-                          Einbuchen
+                          {t("classes.book")}
                         </button>
                       </div>
                     ))}
@@ -410,40 +413,40 @@ export function ClassesTab({ onRefreshStats, isManager }: ClassesTabProps) {
 
       {/* --- KURS ERSTELLEN / BEARBEITEN DIALOG --- */}
       {isFormOpen && (
-        <Dialog title={editingClassId ? "Kurs bearbeiten" : "Neuen Kurs anlegen"} onClose={() => setIsFormOpen(false)}>
+        <Dialog title={editingClassId ? t("classes.editTitle") : t("classes.newTitle")} onClose={() => setIsFormOpen(false)}>
           <form onSubmit={handleSaveClass} className="fitness-dialog">
             <div className="grid form-grid">
-              <Field label="Kursname" required wide>
+              <Field label={t("classes.name")} required wide>
                 <input
                   type="text"
                   required
                   value={formState.name}
                   onChange={(e) => setFormState({ ...formState, name: e.target.value })}
-                  placeholder="z. B. Vinyasa Yoga, Spinning, HIIT..."
+                  placeholder={t("classes.phName")}
                 />
               </Field>
-              <Field label="Trainer/in">
+              <Field label={t("classes.coachLabel")}>
                 <input
                   type="text"
                   required
                   value={formState.coachName}
                   onChange={(e) => setFormState({ ...formState, coachName: e.target.value })}
-                  placeholder="z. B. Elena Richter"
+                  placeholder={t("classes.phCoach")}
                 />
               </Field>
-              <Field label="Wochentag">
+              <Field label={t("classes.weekday")}>
                 <select
                   value={formState.weekday}
                   onChange={(e) => setFormState({ ...formState, weekday: e.target.value as Weekday })}
                 >
                   {WEEKDAYS.map((d) => (
                     <option key={d} value={d}>
-                      {d}
+                      {weekday(d)}
                     </option>
                   ))}
                 </select>
               </Field>
-              <Field label="Beginn">
+              <Field label={t("classes.start")}>
                 <input
                   type="time"
                   required
@@ -451,7 +454,7 @@ export function ClassesTab({ onRefreshStats, isManager }: ClassesTabProps) {
                   onChange={(e) => setFormState({ ...formState, startTime: e.target.value })}
                 />
               </Field>
-              <Field label="Ende">
+              <Field label={t("classes.end")}>
                 <input
                   type="time"
                   required
@@ -459,15 +462,15 @@ export function ClassesTab({ onRefreshStats, isManager }: ClassesTabProps) {
                   onChange={(e) => setFormState({ ...formState, endTime: e.target.value })}
                 />
               </Field>
-              <Field label="Raum / Bereich">
+              <Field label={t("classes.room")}>
                 <input
                   type="text"
                   value={formState.room}
                   onChange={(e) => setFormState({ ...formState, room: e.target.value })}
-                  placeholder="Kursraum 1, Arena..."
+                  placeholder={t("classes.phRoom")}
                 />
               </Field>
-              <Field label="Max. Teilnehmer">
+              <Field label={t("classes.maxParticipants")}>
                 <input
                   type="number"
                   min="1"
@@ -478,22 +481,22 @@ export function ClassesTab({ onRefreshStats, isManager }: ClassesTabProps) {
                   }
                 />
               </Field>
-              <Field label="Beschreibung / Level" wide>
+              <Field label={t("classes.description")} wide>
                 <textarea
                   rows={2}
                   value={formState.description}
                   onChange={(e) => setFormState({ ...formState, description: e.target.value })}
-                  placeholder="Voraussetzungen, Ausrüstung..."
+                  placeholder={t("classes.phDescription")}
                 />
               </Field>
             </div>
 
             <div className="actions-end">
               <button type="button" onClick={() => setIsFormOpen(false)} className="button">
-                Abbrechen
+                {t("common.cancel")}
               </button>
               <button type="submit" disabled={savingClass} className="button primary">
-                {savingClass ? "Wird gespeichert..." : "Speichern"}
+                {savingClass ? t("common.saving") : t("common.save")}
               </button>
             </div>
           </form>

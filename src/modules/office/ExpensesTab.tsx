@@ -5,7 +5,6 @@ import { Field } from "../../components";
 import { Dialog } from "../../pos/ui";
 import type { ExpenseCategory, LineItem, OfficeClient, OfficeExpense, OfficeProject } from "../../../shared/office";
 import { useOfficeI18n } from "./i18n";
-import { currencySymbol } from "../../money";
 
 export function ExpensesTab({
   isManager,
@@ -16,7 +15,7 @@ export function ExpensesTab({
   initialProjectId?: string;
   onNavigateToInvoiceWithItems?: (clientId: string, projectId: string | null, items: LineItem[]) => void;
 }) {
-  const { o, euro, day, officeError } = useOfficeI18n();
+  const { o, euro, cur, day, officeError } = useOfficeI18n();
   const [expenses, setExpenses] = useState<OfficeExpense[]>([]);
   const [projects, setProjects] = useState<OfficeProject[]>([]);
   const [clients, setClients] = useState<OfficeClient[]>([]);
@@ -115,8 +114,8 @@ export function ExpensesTab({
       const unitCents = Math.round(exp.netCents * markupFactor);
       return {
         id: crypto.randomUUID(),
-        title: `Auslage: ${exp.title}`,
-        description: `Kategorie: ${o(`expenses.categories.${exp.category}`)} (Belegdatum: ${day(exp.day)})`,
+        title: o("expenses.invoiceItemTitle", { title: exp.title }),
+        description: o("expenses.invoiceItemDescription", { category: o(`expenses.categories.${exp.category}`), date: day(exp.day) }),
         qty: 1,
         unit: "Stk",
         unitCents,
@@ -145,12 +144,12 @@ export function ExpensesTab({
         <div className="tile stat-tile">
           <span className="stat-icon"><Receipt size={18} /></span>
           <strong>{euro(unbilledCents)}</strong>
-          <small>Unabgerechnete Auslagen · {unbilledExpenses.length} Belege offen für Kundenrechnung</small>
+          <small>{o("expenses.statUnbilled", { n: unbilledExpenses.length })}</small>
         </div>
         <div className="tile stat-tile">
           <span className="stat-icon"><Wallet size={18} /></span>
           <strong>{euro(totalCents)}</strong>
-          <small>Gesamtauslagen (Projektfilter) · {expenses.length} erfasste Belege</small>
+          <small>{o("expenses.statTotal", { n: expenses.length })}</small>
         </div>
       </div>
 
@@ -171,8 +170,8 @@ export function ExpensesTab({
 
         <div className="row wrap gap office-filters">
           {projects.length > 0 && (
-            <select value={selectedProjectId} onChange={(e) => setSelectedProjectId(e.target.value)} aria-label="Projekt">
-              <option value="all">Alle Projekte</option>
+            <select value={selectedProjectId} onChange={(e) => setSelectedProjectId(e.target.value)} aria-label={o("common.project")}>
+              <option value="all">{o("common.allProjects")}</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
@@ -180,8 +179,8 @@ export function ExpensesTab({
           )}
           <div className="row wrap gap push-end">
             {unbilledExpenses.length > 0 && onNavigateToInvoiceWithItems && (
-              <button className="button" onClick={handleInvoiceUnbilled} title="Offene Auslagen als Positionen in Rechnung überführen">
-                <Receipt size={18} /> Weiterberechnen
+              <button className="button" onClick={handleInvoiceUnbilled} title={o("expenses.forwardHint")}>
+                <Receipt size={18} /> {o("expenses.forward")}
               </button>
             )}
             {isManager && (
@@ -194,7 +193,7 @@ export function ExpensesTab({
       </div>
 
       {loading ? (
-        <p className="muted">Laden...</p>
+        <p className="muted">{o("common.loading")}</p>
       ) : (
         <section className="card list-card">
           {filteredExpenses.length === 0 && <p className="empty muted">{o("expenses.noExpenses")}</p>}
@@ -209,11 +208,11 @@ export function ExpensesTab({
                 <strong>{euro(exp.totalCents)}</strong>
                 <small className="muted">{euro(exp.netCents)} + {exp.vatRate}% ({euro(exp.vatCents)})</small>
                 {exp.billedInvoiceId ? (
-                  <span className="pill success">In Rechnung gestellt</span>
+                  <span className="pill success">{o("expenses.pillInvoiced")}</span>
                 ) : exp.billable ? (
-                  <span className="pill warn">Abrechenbar {exp.markupPercent > 0 ? `(+${exp.markupPercent}%)` : ""}</span>
+                  <span className="pill warn">{o("expenses.pillBillable")} {exp.markupPercent > 0 ? `(+${exp.markupPercent}%)` : ""}</span>
                 ) : (
-                  <span className="pill">Eigenkosten</span>
+                  <span className="pill">{o("expenses.pillOwnCost")}</span>
                 )}
               </span>
               {!exp.billedInvoiceId && isManager ? (
@@ -234,38 +233,36 @@ export function ExpensesTab({
           <form onSubmit={handleSave} className="stack office-dialog">
             {errorMsg && <p className="error" role="alert">{errorMsg}</p>}
             <div className="grid form-grid">
-              <Field label="Projekt" required wide>
+              <Field label={o("common.project")} required wide>
                 <select required value={form.projectId} onChange={(e) => setForm({ ...form, projectId: e.target.value })}>
                   {projects.map((p) => (
                     <option key={p.id} value={p.id}>{p.name} ({p.clientName})</option>
                   ))}
                 </select>
               </Field>
-              <Field label="Bezeichnung / Beleg" required>
+              <Field label={o("expenses.titleField")} required>
                 <input
                   type="text"
                   required
-                  placeholder="z.B. Bahnticket Berlin-München, Server-Lizenz..."
+                  placeholder={o("expenses.titlePlaceholder")}
                   value={form.title}
                   onChange={(e) => setForm({ ...form, title: e.target.value })}
                 />
               </Field>
-              <Field label="Kategorie" required>
+              <Field label={o("expenses.category")} required>
                 <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value as ExpenseCategory })}>
-                  <option value="travel">Reisekosten & Fahrt</option>
-                  <option value="subcontractor">Fremdleistung / Subunternehmer</option>
-                  <option value="software">Software & Lizenzen</option>
-                  <option value="material">Material & Muster</option>
-                  <option value="other">Sonstige Auslagen</option>
+                  {(["travel", "subcontractor", "software", "material", "other"] as const).map((cat) => (
+                    <option key={cat} value={cat}>{o(`expenses.categories.${cat}`)}</option>
+                  ))}
                 </select>
               </Field>
             </div>
 
             <div className="grid three">
-              <Field label="Belegdatum" required>
+              <Field label={o("expenses.receiptDate")} required>
                 <input type="date" required value={form.day} onChange={(e) => setForm({ ...form, day: e.target.value })} />
               </Field>
-              <Field label={`Nettobetrag (${currencySymbol("de-DE")})`} required>
+              <Field label={o("expenses.netAmount", { currency: cur() })} required>
                 <input
                   type="number"
                   step="0.01"
@@ -276,7 +273,7 @@ export function ExpensesTab({
                   onChange={(e) => setForm({ ...form, netCents: Math.round(parseFloat(e.target.value || "0") * 100) })}
                 />
               </Field>
-              <Field label="MwSt.-Satz">
+              <Field label={o("expenses.vatRate")}>
                 <select value={form.vatRate} onChange={(e) => setForm({ ...form, vatRate: parseInt(e.target.value, 10) || 19 })}>
                   <option value={19}>19%</option>
                   <option value={7}>7%</option>
@@ -291,12 +288,12 @@ export function ExpensesTab({
                 <span>{o("expenses.billableNotice")}</span>
               </label>
               {form.billable && (
-                <Field label="Service-Aufschlag für den Kunden (%)">
+                <Field label={o("expenses.markupField")}>
                   <input
                     type="number"
                     min="0"
                     max="100"
-                    placeholder="z.B. 10% Handlingsgebühr"
+                    placeholder={o("expenses.markupPlaceholder")}
                     value={form.markupPercent || ""}
                     onChange={(e) => setForm({ ...form, markupPercent: parseInt(e.target.value, 10) || 0 })}
                   />
@@ -304,10 +301,10 @@ export function ExpensesTab({
               )}
             </div>
 
-            <Field label="Notizen / Rechnungsnummer des Lieferanten">
+            <Field label={o("expenses.notes")}>
               <textarea
                 rows={2}
-                placeholder="Belegnummer, Zweck der Reise..."
+                placeholder={o("expenses.notesPlaceholder")}
                 value={form.notes}
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
               />

@@ -7,7 +7,7 @@ import { useSalonI18n } from "./i18n";
 import { Dialog } from "../../pos/ui";
 
 export function ClientsTab({ isManager }: { isManager: boolean }) {
-  const { s, euro, day: formatDay } = useSalonI18n();
+  const { s, euro, day: formatDay, errorText } = useSalonI18n();
   const [clients, setClients] = useState<SalonClient[]>([]);
   const [staff, setStaff] = useState<SalonStaff[]>([]);
   const [loading, setLoading] = useState(true);
@@ -109,8 +109,8 @@ export function ClientsTab({ isManager }: { isManager: boolean }) {
       setFormulaForm((f) => ({ ...f, formula: "", notes: "" }));
       await loadFormulas(formulaModalClient.id);
       await loadData();
-    } catch (err: any) {
-      setFormulaError(err?.message || "Fehler beim Speichern der Rezeptur");
+    } catch (err) {
+      setFormulaError(errorText(err));
     }
   };
 
@@ -120,8 +120,8 @@ export function ClientsTab({ isManager }: { isManager: boolean }) {
       await api(`/salon/formulas/${id}`, { method: "DELETE" });
       setDeleteConfirmFormulaId(null);
       if (formulaModalClient) await loadFormulas(formulaModalClient.id);
-    } catch (err: any) {
-      setFormulaError(err?.message || "Fehler beim Löschen der Rezeptur");
+    } catch (err) {
+      setFormulaError(errorText(err));
     }
   };
 
@@ -168,8 +168,8 @@ export function ClientsTab({ isManager }: { isManager: boolean }) {
       });
       setModalOpen(false);
       await loadData();
-    } catch (err: any) {
-      setErrorMsg(err?.message || "Fehler beim Speichern des Kunden");
+    } catch (err) {
+      setErrorMsg(errorText(err));
     }
   };
 
@@ -179,8 +179,8 @@ export function ClientsTab({ isManager }: { isManager: boolean }) {
       await api(`/salon/clients/${id}`, { method: "DELETE" });
       setDeleteConfirmClientId(null);
       await loadData();
-    } catch (err: any) {
-      setClientError(err?.message || "Fehler beim Löschen des Kunden");
+    } catch (err) {
+      setClientError(errorText(err));
     }
   };
 
@@ -200,7 +200,7 @@ export function ClientsTab({ isManager }: { isManager: boolean }) {
       {clientError && <p className="error" role="alert">{clientError}</p>}
 
       {loading ? (
-        <p className="muted">Lade Kundenkartei...</p>
+        <p className="muted">{s("clients.loading")}</p>
       ) : (
         <section className="card list-card">
           {clients.length === 0 && <p className="empty muted">{s("clients.noClients")}</p>}
@@ -211,7 +211,7 @@ export function ClientsTab({ isManager }: { isManager: boolean }) {
               <div key={c.id} className="list-row salon-row">
                 <span className="salon-avatar" aria-hidden>{initials(c.name)}</span>
                 <span className="list-main">
-                  <strong>{c.name} <small className="muted">· Kunden-Nr. #{c.number}</small></strong>
+                  <strong>{c.name} <small className="muted">· {s("clients.number", { n: c.number })}</small></strong>
                   {(c.phone || c.email) && (
                     <small className="muted">
                       {c.phone && <><Phone size={13} /> {c.phone} </>}
@@ -220,26 +220,26 @@ export function ClientsTab({ isManager }: { isManager: boolean }) {
                   )}
                   {(c.birthday || preferredStaff) && (
                     <small className="muted">
-                      {c.birthday && <><Calendar size={13} /> Geburtstag: {c.birthday} </>}
-                      {preferredStaff && <><Heart size={13} /> Wunsch-Stylist: {preferredStaff.name}</>}
+                      {c.birthday && <><Calendar size={13} /> {s("clients.birthday", { date: c.birthday })} </>}
+                      {preferredStaff && <><Heart size={13} /> {s("clients.preferredStylist", { name: preferredStaff.name })}</>}
                     </small>
                   )}
                   {c.allergies && (
                     <small className="error"><AlertTriangle size={13} /> {s("clients.allergies")}: {c.allergies}</small>
                   )}
-                  {c.notes && <small className="muted">„{c.notes}“</small>}
+                  {c.notes && <small className="muted">{s("common.quote", { text: c.notes })}</small>}
                 </span>
                 <span className="salon-row-meta">
                   {c.totalVisits ? (
                     <span className="pill pos">
-                      {c.totalVisits} Besuche ({euro(c.totalSpentCents || 0)})
+                      {s("clients.visits", { n: c.totalVisits, amount: euro(c.totalSpentCents || 0) })}
                     </span>
                   ) : (
-                    <span className="pill">Neu</span>
+                    <span className="pill">{s("clients.new")}</span>
                   )}
                   <span className="salon-row-actions">
-                    <button className="button small-button" onClick={() => openFormulasModal(c)} title="Farbrezepturen und Behandlungshistorie ansehen">
-                      <Palette size={15} /> Farbkarten
+                    <button className="button small-button" onClick={() => openFormulasModal(c)} title={s("clients.colorCardsTitle")}>
+                      <Palette size={15} /> {s("clients.colorCards")}
                     </button>
                     <button className="icon-button" onClick={() => openEditClient(c)} title={s("actions.edit")} aria-label={s("actions.edit")}>
                       <Pencil size={16} />
@@ -247,11 +247,11 @@ export function ClientsTab({ isManager }: { isManager: boolean }) {
                     {isManager && (
                       deleteConfirmClientId === c.id ? (
                         <>
-                          <button className="button danger small-button" onClick={() => handleDeleteClient(c.id)} title="Unwiderruflich löschen">
-                            Löschen
+                          <button className="button danger small-button" onClick={() => handleDeleteClient(c.id)} title={s("actions.deleteForever")}>
+                            {s("actions.delete")}
                           </button>
                           <button className="button small-button" onClick={() => setDeleteConfirmClientId(null)}>
-                            Abbr.
+                            {s("actions.cancelShort")}
                           </button>
                         </>
                       ) : (
@@ -270,28 +270,28 @@ export function ClientsTab({ isManager }: { isManager: boolean }) {
 
       {/* Dialog: Kunde anlegen / bearbeiten */}
       {modalOpen && (
-        <Dialog title={editingClient ? "Kunde bearbeiten" : s("actions.newClient")} onClose={() => setModalOpen(false)} wide>
+        <Dialog title={editingClient ? s("clients.edit") : s("actions.newClient")} onClose={() => setModalOpen(false)} wide>
           <form onSubmit={handleSaveClient} className="salon-dialog stack">
             {errorMsg && <p className="error" role="alert">{errorMsg}</p>}
 
             <div className="grid form-grid">
-              <Field label="Name des Kunden" required wide>
-                <input type="text" required placeholder="Vor- und Nachname" value={clientForm.name} onChange={(e) => setClientForm({ ...clientForm, name: e.target.value })} />
+              <Field label={s("clients.name")} required wide>
+                <input type="text" required placeholder={s("common.fullNamePlaceholder")} value={clientForm.name} onChange={(e) => setClientForm({ ...clientForm, name: e.target.value })} />
               </Field>
 
-              <Field label="Telefonnummer">
-                <input type="tel" placeholder="+49 171 1234567" value={clientForm.phone} onChange={(e) => setClientForm({ ...clientForm, phone: e.target.value })} />
+              <Field label={s("common.phone")}>
+                <input type="tel" placeholder={s("common.phonePlaceholder")} value={clientForm.phone} onChange={(e) => setClientForm({ ...clientForm, phone: e.target.value })} />
               </Field>
-              <Field label="E-Mail-Adresse">
-                <input type="email" placeholder="kunde@example.de" value={clientForm.email} onChange={(e) => setClientForm({ ...clientForm, email: e.target.value })} />
+              <Field label={s("common.email")}>
+                <input type="email" placeholder={s("common.emailPlaceholder")} value={clientForm.email} onChange={(e) => setClientForm({ ...clientForm, email: e.target.value })} />
               </Field>
 
-              <Field label="Geburtstag (für Gratulation / Rabatt)">
+              <Field label={s("clients.birthdayLabel")}>
                 <input type="date" value={clientForm.birthday} onChange={(e) => setClientForm({ ...clientForm, birthday: e.target.value })} />
               </Field>
-              <Field label="Bevorzugter Stylist">
+              <Field label={s("clients.preferredStaff")}>
                 <select value={clientForm.preferredStaffId} onChange={(e) => setClientForm({ ...clientForm, preferredStaffId: e.target.value })}>
-                  <option value="">-- Keine Präferenz --</option>
+                  <option value="">{s("clients.noPreference")}</option>
                   {staff.map((st) => (
                     <option key={st.id} value={st.id}>
                       {st.name} ({st.title})
@@ -300,19 +300,19 @@ export function ClientsTab({ isManager }: { isManager: boolean }) {
                 </select>
               </Field>
 
-              <Field label="Allergien, Kopfhautempfindlichkeit oder Unverträglichkeiten" wide>
+              <Field label={s("clients.allergiesLabel")} wide>
                 <input
                   type="text"
-                  placeholder="z.B. PPD-Allergie, brennt bei 9%, empfindlicher Nacken"
+                  placeholder={s("clients.allergiesPlaceholder")}
                   value={clientForm.allergies}
                   onChange={(e) => setClientForm({ ...clientForm, allergies: e.target.value })}
                 />
               </Field>
 
-              <Field label="Notizen & Vorlieben" wide>
+              <Field label={s("clients.notes")} wide>
                 <textarea
                   rows={3}
-                  placeholder="Haarstruktur, bevorzugter Scheitel, Getränkewunsch (Espresso, Latte, Prosecco)..."
+                  placeholder={s("clients.notesPlaceholder")}
                   value={clientForm.notes}
                   onChange={(e) => setClientForm({ ...clientForm, notes: e.target.value })}
                 />
@@ -333,25 +333,25 @@ export function ClientsTab({ isManager }: { isManager: boolean }) {
 
       {/* Dialog: Farbrezepturen (Farbkartei) */}
       {formulaModalClient && (
-        <Dialog title="Farbrezepturen & Behandlungsakte" onClose={() => setFormulaModalClient(null)} wide>
+        <Dialog title={s("formulas.title")} onClose={() => setFormulaModalClient(null)} wide>
           <div className="salon-dialog stack">
-            <p className="muted">Kunde: {formulaModalClient.name}</p>
+            <p className="muted">{s("formulas.client", { name: formulaModalClient.name })}</p>
 
             {formulaError && <p className="error" role="alert">{formulaError}</p>}
 
             {/* Neue Rezeptur anlegen */}
             <form onSubmit={handleSaveFormula} className="salon-formula">
-              <strong>Neue Rezeptur dokumentieren</strong>
+              <strong>{s("formulas.newTitle")}</strong>
               <div className="grid form-grid">
-                <Field label="Farbmarke / Produktlinie">
+                <Field label={s("formulas.brand")}>
                   <input
                     type="text"
-                    placeholder="z.B. Wella Koleston / Color Touch"
+                    placeholder={s("formulas.brandPlaceholder")}
                     value={formulaForm.brand}
                     onChange={(e) => setFormulaForm({ ...formulaForm, brand: e.target.value })}
                   />
                 </Field>
-                <Field label="Stylist">
+                <Field label={s("common.stylist")}>
                   <select value={formulaForm.staffId} onChange={(e) => setFormulaForm({ ...formulaForm, staffId: e.target.value })}>
                     {staff.map((st) => (
                       <option key={st.id} value={st.id}>{st.name}</option>
@@ -359,17 +359,17 @@ export function ClientsTab({ isManager }: { isManager: boolean }) {
                   </select>
                 </Field>
 
-                <Field label="Rezeptur & Mischungsverhältnis" required wide>
+                <Field label={s("formulas.formula")} required wide>
                   <input
                     type="text"
                     required
-                    placeholder="z.B. 40g 8/1 + 20g 9/16 mit 6% Welloxon (1:1)"
+                    placeholder={s("formulas.formulaPlaceholder")}
                     value={formulaForm.formula}
                     onChange={(e) => setFormulaForm({ ...formulaForm, formula: e.target.value })}
                   />
                 </Field>
 
-                <Field label="Einwirkzeit (Minuten)">
+                <Field label={s("formulas.development")}>
                   <input
                     type="number"
                     min="1"
@@ -378,10 +378,10 @@ export function ClientsTab({ isManager }: { isManager: boolean }) {
                     onChange={(e) => setFormulaForm({ ...formulaForm, developmentMinutes: Number(e.target.value) || 35 })}
                   />
                 </Field>
-                <Field label="Anwendung / Technik / Notizen">
+                <Field label={s("formulas.notes")}>
                   <input
                     type="text"
-                    placeholder="z.B. Ansatz 6%, Längen & Spitzen mit 1.9% glossed"
+                    placeholder={s("formulas.notesPlaceholder")}
                     value={formulaForm.notes}
                     onChange={(e) => setFormulaForm({ ...formulaForm, notes: e.target.value })}
                   />
@@ -390,16 +390,16 @@ export function ClientsTab({ isManager }: { isManager: boolean }) {
 
               <div>
                 <button type="submit" className="button primary">
-                  <Plus size={17} /> Rezeptur speichern
+                  <Plus size={17} /> {s("formulas.save")}
                 </button>
               </div>
             </form>
 
             {/* Bisherige Rezepturen */}
             <div className="stack-sm salon-formula-list">
-              <small className="muted">Gespeicherte Farbkarten:</small>
+              <small className="muted">{s("formulas.saved")}</small>
               {clientFormulas.length === 0 ? (
-                <p className="empty muted">Bisher keine Farbrezepturen für diesen Kunden hinterlegt.</p>
+                <p className="empty muted">{s("formulas.empty")}</p>
               ) : (
                 clientFormulas.map((f) => (
                   <div key={f.id} className="salon-formula">
@@ -411,14 +411,14 @@ export function ClientsTab({ isManager }: { isManager: boolean }) {
                           deleteConfirmFormulaId === f.id ? (
                             <>
                               <button className="button danger small-button" onClick={() => handleDeleteFormula(f.id)}>
-                                Löschen
+                                {s("actions.delete")}
                               </button>
                               <button className="button small-button" onClick={() => setDeleteConfirmFormulaId(null)}>
-                                Abbr.
+                                {s("actions.cancelShort")}
                               </button>
                             </>
                           ) : (
-                            <button className="icon-button danger" onClick={() => setDeleteConfirmFormulaId(f.id)} title="Löschen" aria-label="Löschen">
+                            <button className="icon-button danger" onClick={() => setDeleteConfirmFormulaId(f.id)} title={s("actions.delete")} aria-label={s("actions.delete")}>
                               <Trash2 size={15} />
                             </button>
                           )
@@ -427,7 +427,7 @@ export function ClientsTab({ isManager }: { isManager: boolean }) {
                     </div>
                     <code>{f.formula}</code>
                     <small className="muted">
-                      Einwirkzeit: <strong>{f.developmentMinutes} Min</strong>{f.notes ? ` · ${f.notes}` : ""}
+                      {s("formulas.developmentLabel")} <strong>{s("common.minutes", { n: f.developmentMinutes })}</strong>{f.notes ? ` · ${f.notes}` : ""}
                     </small>
                   </div>
                 ))

@@ -25,7 +25,9 @@ import { Dialog } from "../../pos/ui";
 import { ModuleCheckout } from "../../pos/ModuleCheckout";
 import type { InspectionItem, OrderPosition, SparePart, WorkshopOrder, WorkshopOrderStatus } from "../../../shared/workshop";
 import { WorkshopPrint } from "./WorkshopPrint";
-import { currency as companyCurrency, currencySymbol, standardVat } from "../../money";
+import { standardVat } from "../../money";
+import { useWorkshopI18n } from "./i18n";
+import { de } from "./lang/de";
 
 interface OrderDetailsModalProps {
   order: WorkshopOrder;
@@ -38,27 +40,31 @@ interface OrderDetailsModalProps {
   onDeleted: (id: string) => void;
 }
 
-const STATUS_CONFIG: Record<WorkshopOrderStatus, { label: string; tone: "neutral" | "warn" | "info" | "ok" | "done"; desc: string }> = {
-  annahme: { label: "01. Annahme", tone: "neutral", desc: "Fahrzeug angenommen, Hebebühne zugewiesen" },
-  diagnose: { label: "02. Diagnose", tone: "warn", desc: "Fehleranalyse & Kostenschätzung läuft" },
-  wartet_teile: { label: "03. Wartet auf Teile", tone: "warn", desc: "Ersatzteile bestellt oder KVA beim Kunden" },
-  in_arbeit: { label: "04. Auf Hebebühne", tone: "info", desc: "Reparatur & Wartung aktiv in Arbeit" },
-  endkontrolle: { label: "05. Endkontrolle", tone: "info", desc: "Meisterabnahme & Probefahrt" },
-  abholbereit: { label: "06. Abholbereit", tone: "ok", desc: "Fahrzeug fertig, Kunde benachrichtigt" },
-  abgerechnet: { label: "07. Abgerechnet", tone: "done", desc: "Rechnung erstellt und bezahlt" },
+// Texte der Phasen kommen aus status.<id>.label / .desc
+const STATUS_CONFIG: Record<WorkshopOrderStatus, { tone: "neutral" | "warn" | "info" | "ok" | "done" }> = {
+  annahme: { tone: "neutral" },
+  diagnose: { tone: "warn" },
+  wartet_teile: { tone: "warn" },
+  in_arbeit: { tone: "info" },
+  endkontrolle: { tone: "info" },
+  abholbereit: { tone: "ok" },
+  abgerechnet: { tone: "done" },
 };
 
-const DEFAULT_INSPECTION_ITEMS: InspectionItem[] = [
-  { id: "1", category: "motor_abgas", name: "Motoröl & Filter", status: "ok" },
-  { id: "2", category: "bremsen", name: "Bremsbeläge & Scheiben Vorderachse", status: "not_checked" },
-  { id: "3", category: "bremsen", name: "Bremsbeläge & Scheiben Hinterachse", status: "not_checked" },
-  { id: "4", category: "fluessigkeiten", name: "Bremsflüssigkeit (Siedepunkt)", status: "ok" },
-  { id: "5", category: "fluessigkeiten", name: "Kühlmittel & Frostschutz", status: "ok" },
-  { id: "6", category: "reifen", name: "Reifenprofil & Luftdruck", status: "ok" },
-  { id: "7", category: "fahrwerk", name: "Stoßdämpfer & Koppelstangen", status: "not_checked" },
-  { id: "8", category: "beleuchtung", name: "Lichtanlage & Scheinwerfereinstellung", status: "ok" },
-  { id: "9", category: "karosserie", name: "Scheibenwischer & Scheibenwaschanlage", status: "ok" },
+// Standard-Prüfpunkte; gespeichert wird der deutsche Name, angezeigt wird er übersetzt (inspection.defaults.i<id>)
+const INSPECTION_DEFAULTS: Omit<InspectionItem, "name">[] = [
+  { id: "1", category: "motor_abgas", status: "ok" },
+  { id: "2", category: "bremsen", status: "not_checked" },
+  { id: "3", category: "bremsen", status: "not_checked" },
+  { id: "4", category: "fluessigkeiten", status: "ok" },
+  { id: "5", category: "fluessigkeiten", status: "ok" },
+  { id: "6", category: "reifen", status: "ok" },
+  { id: "7", category: "fahrwerk", status: "not_checked" },
+  { id: "8", category: "beleuchtung", status: "ok" },
+  { id: "9", category: "karosserie", status: "ok" },
 ];
+
+const DEFAULT_INSPECTION_ITEMS: InspectionItem[] = INSPECTION_DEFAULTS.map((item) => ({ ...item, name: de.inspection.defaults[`i${item.id}` as keyof typeof de.inspection.defaults] }));
 
 export function OrderDetailsModal({
   order: initialOrder,
@@ -90,8 +96,7 @@ export function OrderDetailsModal({
   const [newPosPrice, setNewPosPrice] = useState<number>(9.5);
   const [selectedPartId, setSelectedPartId] = useState("");
 
-  const fmtEuro = (amount: number) =>
-    new Intl.NumberFormat("de-DE", { style: "currency", currency: companyCurrency() }).format(amount);
+  const { t, workshopError, euro: fmtEuro, symbol, num, day, lift, unit, payment, inspectionName, inspectionCategory } = useWorkshopI18n();
 
   // Status-URL für den Kunden
   const statusUrl = `${window.location.origin}/status/kfz/${tenantId}/${order.statusToken}`;
@@ -110,8 +115,8 @@ export function OrderDetailsModal({
       });
       setOrder(updated);
       onUpdated(updated);
-    } catch (err: any) {
-      setErrorMsg(err.message || "Fehler beim Aktualisieren des Status.");
+    } catch (err: unknown) {
+      setErrorMsg(workshopError(err, t("details.statusError")));
     }
   };
 
@@ -175,8 +180,8 @@ export function OrderDetailsModal({
       });
       setOrder(updated);
       onUpdated(updated);
-    } catch (err: any) {
-      setErrorMsg(err.message || "Fehler beim Speichern der Positionen.");
+    } catch (err: unknown) {
+      setErrorMsg(workshopError(err, t("details.positionsError")));
     } finally {
       setSaving(false);
     }
@@ -188,7 +193,7 @@ export function OrderDetailsModal({
     if (idx >= 0) {
       list[idx] = { ...list[idx], status, note: note ?? list[idx].note };
     } else {
-      list.push({ id: itemId, category: "sonstiges" as any, name: "Prüfpunkt", status, note });
+      list.push({ id: itemId, category: "sonstiges" as any, name: de.inspection.checkpoint, status, note });
     }
 
     try {
@@ -198,8 +203,8 @@ export function OrderDetailsModal({
       });
       setOrder(updated);
       onUpdated(updated);
-    } catch (err: any) {
-      setErrorMsg(err.message || "Fehler beim Aktualisieren der Checkliste.");
+    } catch (err: unknown) {
+      setErrorMsg(workshopError(err, t("details.checklistError")));
     }
   };
 
@@ -218,18 +223,18 @@ export function OrderDetailsModal({
       await api(`/workshop/orders/${order.id}`, { method: "DELETE" });
       onDeleted(order.id);
       onClose();
-    } catch (err: any) {
-      setErrorMsg(err.message || "Fehler beim Löschen des Auftrags.");
+    } catch (err: unknown) {
+      setErrorMsg(workshopError(err, t("details.deleteError")));
     }
   };
 
 
   const checklistItems = order.checklist && order.checklist.length > 0 ? order.checklist : DEFAULT_INSPECTION_ITEMS;
   const subTabs: { id: typeof activeSubTab; label: string }[] = [
-    { id: "positions", label: `Leistungen & Teile (${order.positions.length})` },
-    { id: "checklist", label: "Dialogannahme / Checkliste" },
-    { id: "diagnostic", label: "Kundenauftrag & Diagnose" },
-    { id: "checkout", label: "Kasse & Abrechnung" },
+    { id: "positions", label: t("details.tabs.positions", { n: order.positions.length }) },
+    { id: "checklist", label: t("details.tabs.checklist") },
+    { id: "diagnostic", label: t("details.tabs.diagnostic") },
+    { id: "checkout", label: t("details.tabs.checkout") },
   ];
 
   return (
@@ -241,20 +246,20 @@ export function OrderDetailsModal({
             <div className="stack-sm">
               <div className="row wrap gap">
                 <span className="workshop-mono muted">({order.orderNumber})</span>
-                <span className={`pill workshop-status tone-${STATUS_CONFIG[order.status]?.tone}`}>{STATUS_CONFIG[order.status]?.label}</span>
+                <span className={`pill workshop-status tone-${STATUS_CONFIG[order.status]?.tone}`}>{t(`status.${order.status}.label`)}</span>
               </div>
               <p className="muted">
-                {order.vehicleInfo} · {order.mileage.toLocaleString("de-DE")} km · {order.liftBay}
+                {order.vehicleInfo} · {t("common.km", { n: num(order.mileage) })} · {lift(order.liftBay)}
               </p>
             </div>
             <div className="row wrap gap">
-              <button onClick={() => setPrintDoc("intake")} className="button small-button" title="Werkstattauftrag & Annahmeschein drucken">
+              <button onClick={() => setPrintDoc("intake")} className="button small-button" title={t("details.printOrderTitle")}>
                 <Printer size={16} />
-                Auftrag drucken
+                {t("details.printOrder")}
               </button>
-              <button onClick={() => setPrintDoc("invoice")} className="button small-button" title="Rechnung drucken">
+              <button onClick={() => setPrintDoc("invoice")} className="button small-button" title={t("details.printInvoiceTitle")}>
                 <FileText size={16} />
-                Rechnung
+                {t("details.invoice")}
               </button>
             </div>
           </div>
@@ -264,13 +269,13 @@ export function OrderDetailsModal({
           {/* Auftragsphase */}
           <div className="workshop-panel stack-sm">
             <div className="workshop-panel-head">
-              <strong>Auftragsphase ändern</strong>
-              <small className="muted">{STATUS_CONFIG[order.status]?.desc}</small>
+              <strong>{t("details.changePhase")}</strong>
+              <small className="muted">{t(`status.${order.status}.desc`)}</small>
             </div>
             <div className="chips wrap">
               {(Object.keys(STATUS_CONFIG) as WorkshopOrderStatus[]).map((st) => (
                 <button key={st} onClick={() => handleStatusChange(st)} className={order.status === st ? "chip active" : "chip"}>
-                  {STATUS_CONFIG[st].label}
+                  {t(`status.${st}.label`)}
                 </button>
               ))}
             </div>
@@ -279,26 +284,26 @@ export function OrderDetailsModal({
           {/* Kunden-Portal */}
           <div className="workshop-portal">
             <span className="list-main">
-              <strong>Kunden-Portal:</strong>
+              <strong>{t("details.portal")}</strong>
               <small className="muted workshop-mono">{statusUrl}</small>
             </span>
             <div className="row gap">
               <button onClick={copyStatusLink} className="button small-button">
                 {copyFeedback ? <Check size={15} /> : <Copy size={15} />}
-                {copyFeedback ? "Kopiert!" : "Link kopieren"}
+                {copyFeedback ? t("details.copied") : t("details.copyLink")}
               </button>
               <a href={`/status/kfz/${tenantId}/${order.statusToken}`} target="_blank" rel="noreferrer" className="button primary small-button">
                 <ExternalLink size={15} />
-                Öffnen
+                {t("details.openLink")}
               </a>
             </div>
           </div>
 
           {/* Unter-Navigation */}
           <div className="chips sub-nav" role="tablist">
-            {subTabs.map((t) => (
-              <button key={t.id} role="tab" aria-selected={activeSubTab === t.id} onClick={() => setActiveSubTab(t.id)} className={activeSubTab === t.id ? "chip active" : "chip"}>
-                {t.label}
+            {subTabs.map((tab) => (
+              <button key={tab.id} role="tab" aria-selected={activeSubTab === tab.id} onClick={() => setActiveSubTab(tab.id)} className={activeSubTab === tab.id ? "chip active" : "chip"}>
+                {tab.label}
               </button>
             ))}
           </div>
@@ -308,7 +313,7 @@ export function OrderDetailsModal({
             <div className="stack">
               <div className="workshop-panel stack">
                 <div className="workshop-panel-head">
-                  <strong>Position hinzufügen (Arbeitswert oder Ersatzteil)</strong>
+                  <strong>{t("details.addPosition")}</strong>
                 </div>
                 <div className="segmented">
                   <button
@@ -320,7 +325,7 @@ export function OrderDetailsModal({
                     }}
                     className={newPosType === "labor" ? "active" : ""}
                   >
-                    Arbeitswert (AW)
+                    {t("details.laborToggle")}
                   </button>
                   <button
                     type="button"
@@ -331,17 +336,17 @@ export function OrderDetailsModal({
                     }}
                     className={newPosType === "part" ? "active" : ""}
                   >
-                    Ersatzteil aus Lager
+                    {t("details.partToggle")}
                   </button>
                 </div>
 
                 {newPosType === "part" && parts.length > 0 && (
-                  <Field label="Aus Ersatzteillager wählen">
+                  <Field label={t("details.pickPart")}>
                     <select value={selectedPartId} onChange={(e) => handlePartSelect(e.target.value)}>
-                      <option value="">-- Teil aus Lager auswählen --</option>
+                      <option value="">{t("details.pickPartPlaceholder")}</option>
                       {parts.map((p) => (
                         <option key={p.id} value={p.id}>
-                          {p.partNumber} - {p.name} (Bestand: {p.stock} | {fmtEuro(p.salePriceNet)})
+                          {t("details.partOption", { number: p.partNumber, name: p.name, stock: p.stock, price: fmtEuro(p.salePriceNet) })}
                         </option>
                       ))}
                     </select>
@@ -349,31 +354,30 @@ export function OrderDetailsModal({
                 )}
 
                 <div className="workshop-pos-form">
-                  <Field label="Bezeichnung *">
+                  <Field label={t("details.name")}>
                     <input
                       type="text"
-                      placeholder={newPosType === "labor" ? "z. B. Bremsbeläge VA erneuern" : "z. B. Ölfilter"}
+                      placeholder={newPosType === "labor" ? t("details.laborPlaceholder") : t("details.partPlaceholder")}
                       value={newPosName}
                       onChange={(e) => setNewPosName(e.target.value)}
                     />
                   </Field>
-                  <Field label="Menge & Einheit">
+                  <Field label={t("details.quantity")}>
                     <div className="workshop-qty">
                       <input type="number" step="0.1" value={newPosQty} onChange={(e) => setNewPosQty(Number(e.target.value))} className="workshop-mono" />
                       <select value={newPosUnit} onChange={(e) => setNewPosUnit(e.target.value as any)}>
-                        <option value="AW">AW</option>
-                        <option value="Std">Std</option>
-                        <option value="Stück">Stück</option>
-                        <option value="Liter">Liter</option>
-                        <option value="Satz">Satz</option>
-                        <option value="Pauschal">Pauschal</option>
+                        {(["AW", "Std", "Stück", "Liter", "Satz", "Pauschal"] as const).map((u) => (
+                          <option key={u} value={u}>
+                            {unit(u)}
+                          </option>
+                        ))}
                       </select>
                     </div>
                   </Field>
-                  <Field label={`Einzelpreis Netto (${currencySymbol("de-DE")})`}>
+                  <Field label={t("details.unitPrice", { symbol: symbol() })}>
                     <input type="number" step="0.01" value={newPosPrice} onChange={(e) => setNewPosPrice(Number(e.target.value))} className="workshop-mono" />
                   </Field>
-                  <button type="button" onClick={handleAddPosition} disabled={!newPosName.trim() || saving} className="button primary workshop-pos-add" aria-label="Position hinzufügen">
+                  <button type="button" onClick={handleAddPosition} disabled={!newPosName.trim() || saving} className="button primary workshop-pos-add" aria-label={t("details.addPositionAria")}>
                     <Plus size={18} />
                   </button>
                 </div>
@@ -382,27 +386,27 @@ export function OrderDetailsModal({
               {/* Vorhandene Positionen */}
               <section className="card list-card workshop-flat">
                 {order.positions.length === 0 ? (
-                  <p className="empty muted">Noch keine Positionen erfasst. Füge oben Arbeitswerte oder Ersatzteile hinzu.</p>
+                  <p className="empty muted">{t("details.noPositions")}</p>
                 ) : (
                   order.positions.map((pos) => {
                     const net = pos.quantity * pos.unitPriceNet;
                     return (
                       <div key={pos.id} className="list-row workshop-pos-row">
-                        <span className="workshop-pos-type">{pos.type === "labor" ? "AW" : "ET"}</span>
+                        <span className="workshop-pos-type">{pos.type === "labor" ? t("posType.labor") : t("posType.part")}</span>
                         <span className="list-main">
                           <strong>
                             {pos.name}
                             {pos.code && <span className="muted workshop-mono"> ({pos.code})</span>}
                           </strong>
                           <small className="muted workshop-mono">
-                            {pos.quantity} {pos.unit} × {fmtEuro(pos.unitPriceNet)}
+                            {num(pos.quantity)} {unit(pos.unit)} × {fmtEuro(pos.unitPriceNet)}
                           </small>
                         </span>
                         <span className="workshop-row-meta">
                           <strong className="workshop-num">{fmtEuro(net)}</strong>
-                          <span className={pos.approvedByCustomer ? "pill pos" : "pill warn"}>{pos.approvedByCustomer ? "Freigegeben" : "Offen"}</span>
+                          <span className={pos.approvedByCustomer ? "pill pos" : "pill warn"}>{pos.approvedByCustomer ? t("details.approved") : t("details.pending")}</span>
                         </span>
-                        <button onClick={() => handleRemovePosition(pos.id)} className="icon-button danger" title="Position löschen" aria-label="Position löschen">
+                        <button onClick={() => handleRemovePosition(pos.id)} className="icon-button danger" title={t("details.removePosition")} aria-label={t("details.removePosition")}>
                           <Trash2 size={17} />
                         </button>
                       </div>
@@ -413,9 +417,9 @@ export function OrderDetailsModal({
 
               {/* Summen */}
               <div className="workshop-totals">
-                <div><span className="muted">Nettosumme:</span><span className="workshop-num">{fmtEuro(order.totalNet)}</span></div>
-                <div><span className="muted">MwSt. (19%):</span><span className="workshop-num">{fmtEuro(order.totalTax)}</span></div>
-                <div className="workshop-totals-sum"><span>Gesamtbetrag:</span><span className="workshop-num">{fmtEuro(order.totalGross)}</span></div>
+                <div><span className="muted">{t("details.totalNet")}</span><span className="workshop-num">{fmtEuro(order.totalNet)}</span></div>
+                <div><span className="muted">{t("details.vat", { rate: 19 })}</span><span className="workshop-num">{fmtEuro(order.totalTax)}</span></div>
+                <div className="workshop-totals-sum"><span>{t("details.total")}</span><span className="workshop-num">{fmtEuro(order.totalGross)}</span></div>
               </div>
             </div>
           )}
@@ -424,30 +428,29 @@ export function OrderDetailsModal({
           {activeSubTab === "checklist" && (
             <div className="stack">
               <p className="muted">
-                Prüfpunkte der Dialogannahme & Sichtprüfung. Änderungen werden sofort gespeichert und im Kundenportal
-                sowie auf dem Werkstattauftrag angezeigt.
+                {t("details.checklistIntro")}
               </p>
               <div className="workshop-checklist">
                 {checklistItems.map((item) => (
                   <div key={item.id} className="workshop-panel stack-sm">
                     <div className="workshop-panel-head">
-                      <strong>{item.name}</strong>
-                      <small className="muted workshop-mono workshop-upper">{item.category}</small>
+                      <strong>{inspectionName(item)}</strong>
+                      <small className="muted workshop-mono workshop-upper">{inspectionCategory(item.category)}</small>
                     </div>
                     <div className="segmented three workshop-traffic">
                       <button type="button" onClick={() => handleChecklistChange(item.id, "ok")} className={item.status === "ok" ? "active ok" : ""}>
-                        ✓ OK
+                        ✓ {t("inspection.status.ok")}
                       </button>
                       <button type="button" onClick={() => handleChecklistChange(item.id, "warning")} className={item.status === "warning" ? "active warn" : ""}>
-                        ⚠ Hinweis
+                        ⚠ {t("inspection.status.warning")}
                       </button>
                       <button type="button" onClick={() => handleChecklistChange(item.id, "defect")} className={item.status === "defect" ? "active bad" : ""}>
-                        ✕ Mangel
+                        ✕ {t("inspection.status.defect")}
                       </button>
                     </div>
                     <input
                       type="text"
-                      placeholder="Zusätzliche Notiz (z. B. Belagstärke, Messwert)..."
+                      placeholder={t("details.notePlaceholder")}
                       value={item.note || ""}
                       onChange={(e) => handleChecklistChange(item.id, item.status, e.target.value)}
                     />
@@ -462,26 +465,26 @@ export function OrderDetailsModal({
             <div className="stack">
               <div className="grid">
                 <div className="workshop-panel stack-sm">
-                  <h3 className="card-subtitle"><Phone size={16} aria-hidden /> Kunde & Ansprechpartner</h3>
+                  <h3 className="card-subtitle"><Phone size={16} aria-hidden /> {t("details.customerSection")}</h3>
                   <strong>{order.customerName}</strong>
-                  <span className="muted">Telefon: {order.customerPhone}</span>
-                  {order.customerEmail && <span className="muted">E-Mail: {order.customerEmail}</span>}
+                  <span className="muted">{t("details.phoneLine", { phone: order.customerPhone })}</span>
+                  {order.customerEmail && <span className="muted">{t("details.emailLine", { email: order.customerEmail })}</span>}
                 </div>
                 <div className="workshop-panel stack-sm">
-                  <h3 className="card-subtitle"><Car size={16} aria-hidden /> Fahrzeugdaten</h3>
+                  <h3 className="card-subtitle"><Car size={16} aria-hidden /> {t("details.vehicleSection")}</h3>
                   <strong className="workshop-plate">{order.licensePlate}</strong>
                   <span>{order.vehicleInfo}</span>
-                  <span className="muted workshop-mono">KM-Stand: {order.mileage.toLocaleString("de-DE")} km</span>
+                  <span className="muted workshop-mono">{t("details.mileageLine", { km: num(order.mileage) })}</span>
                 </div>
               </div>
 
-              <Field label="Kundenbeanstandung / Fehlerbeschreibung">
+              <Field label={t("details.issue")}>
                 <textarea rows={3} value={order.issueDescription} onChange={(e) => setOrder({ ...order, issueDescription: e.target.value })} />
               </Field>
-              <Field label="Werkstatt-Diagnose & Befund (auch für Kundenportal sichtbar)">
+              <Field label={t("details.diagnosis")}>
                 <textarea
                   rows={3}
-                  placeholder="Diagnoseergebnis der Werkstatt, Ursache der Beanstandung..."
+                  placeholder={t("details.diagnosisPlaceholder")}
                   value={order.diagnosticNotes}
                   onChange={(e) => setOrder({ ...order, diagnosticNotes: e.target.value })}
                 />
@@ -508,7 +511,7 @@ export function OrderDetailsModal({
                   }}
                   className="button primary"
                 >
-                  Befund & Notizen speichern
+                  {t("details.saveNotes")}
                 </button>
               </div>
             </div>
@@ -519,33 +522,33 @@ export function OrderDetailsModal({
             <div className="stack">
               <div className="workshop-pay-total">
                 <span className="stack-sm">
-                  <small className="muted">Abrechnungsstatus</small>
-                  <strong>{order.paymentStatus === "bezahlt" ? `Bezahlt via ${order.paymentMethod?.toUpperCase()}` : "Offener Rechnungsbetrag"}</strong>
+                  <small className="muted">{t("details.billingStatus")}</small>
+                  <strong>{order.paymentStatus === "bezahlt" ? t("details.paidVia", { method: payment(order.paymentMethod) }) : t("details.openAmount")}</strong>
                 </span>
                 <span className="stack-sm workshop-pay-sum">
-                  <small className="muted">Gesamt brutto</small>
+                  <small className="muted">{t("details.grossTotal")}</small>
                   <strong className="workshop-num">{fmtEuro(order.totalGross)}</strong>
                 </span>
               </div>
 
               {order.paymentStatus !== "bezahlt" ? (
                 <div className="stack">
-                  <p className="muted">Bezahlt wird über die Kasse: mit Belegnummer, im Tagesabschluss und stornierbar.</p>
+                  <p className="muted">{t("details.payHint")}</p>
                   <button type="button" onClick={() => setPaying(true)} className="button primary">
                     <Banknote size={18} />
-                    Bezahlen
+                    {t("details.pay")}
                   </button>
                 </div>
               ) : (
                 <div className="notice success workshop-paid">
                   <CheckCircle2 size={20} />
                   <span className="list-main">
-                    <strong>Auftrag ist vollständig abgerechnet.</strong>
-                    <small>Bezahlt am {new Date(order.completedAt || order.updatedAt).toLocaleDateString("de-DE")}</small>
+                    <strong>{t("details.fullyBilled")}</strong>
+                    <small>{t("details.paidOn", { date: day(order.completedAt || order.updatedAt) })}</small>
                   </span>
                   <button onClick={() => setPrintDoc("invoice")} className="button small-button">
                     <Printer size={15} />
-                    Rechnung drucken
+                    {t("details.printInvoice")}
                   </button>
                 </div>
               )}
@@ -558,22 +561,22 @@ export function OrderDetailsModal({
               <span />
             ) : deleteConfirm ? (
               <div className="row wrap gap">
-                <strong className="error">Unwiderruflich löschen?</strong>
+                <strong className="error">{t("details.confirmDelete")}</strong>
                 <button onClick={handleDelete} className="button danger small-button">
-                  Ja, löschen
+                  {t("details.confirmDeleteYes")}
                 </button>
                 <button onClick={() => setDeleteConfirm(false)} className="text-button">
-                  Abbrechen
+                  {t("common.cancel")}
                 </button>
               </div>
             ) : (
               <button type="button" onClick={() => setDeleteConfirm(true)} className="text-button workshop-delete">
                 <Trash2 size={15} />
-                Auftrag löschen
+                {t("details.deleteOrder")}
               </button>
             )}
             <button type="button" onClick={onClose} className="button">
-              Schließen
+              {t("common.close")}
             </button>
           </div>
         </div>

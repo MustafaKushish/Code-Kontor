@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { Printer, X } from "lucide-react";
 import type { WorkshopOrder } from "../../../shared/workshop";
 import type { CompanyProfile } from "../../../shared/company";
-import { currency as companyCurrency } from "../../money";
+import { useWorkshopI18n } from "./i18n";
 
 interface WorkshopPrintProps {
   order: WorkshopOrder;
@@ -14,13 +14,11 @@ interface WorkshopPrintProps {
 
 export function WorkshopPrint({ order, company, type, onClose }: WorkshopPrintProps) {
   const isInvoice = type === "invoice";
+  const { t, euro: fmtEuro, num, day, lift, unit, payment, inspectionName } = useWorkshopI18n();
 
   const handlePrint = () => {
     window.print();
   };
-
-  const fmtEuro = (amount: number) =>
-    new Intl.NumberFormat("de-DE", { style: "currency", currency: companyCurrency() }).format(amount);
 
   // Druckmodus der Plattform: blendet beim Drucken alles außer dem Blatt aus
   useEffect(() => {
@@ -34,68 +32,68 @@ export function WorkshopPrint({ order, company, type, onClose }: WorkshopPrintPr
       <div className="print-toolbar">
         <button onClick={handlePrint} className="button primary">
           <Printer size={18} />
-          Jetzt drucken
+          {t("print.printNow")}
         </button>
         <button onClick={onClose} className="button">
           <X size={18} />
-          Schließen
+          {t("common.close")}
         </button>
       </div>
 
       {/* Druckdokument im DIN-A4-Format */}
-      <article className="print-sheet" aria-label={isInvoice ? "Werkstattrechnung drucken" : "Werkstattauftrag & Annahmeschein"}>
+      <article className="print-sheet" aria-label={isInvoice ? t("print.invoiceAria") : t("print.intakeAria")}>
         {/* Briefkopf */}
         <header className="print-head">
           <div>
-            <strong className="print-company">{company?.name || "Kfz-Meisterbetrieb & Service"}</strong>
-            <p>{company?.legalForm ? `${company.name} ${company.legalForm}` : "Kfz-Reparaturen & Fahrzeughandel"}</p>
+            <strong className="print-company">{company?.name || t("print.defaultCompany")}</strong>
+            <p>{company?.legalForm ? `${company.name} ${company.legalForm}` : t("print.defaultTagline")}</p>
             {company?.street && <p>{company.street}</p>}
             {company?.postalCode && company?.city && (
               <p>
                 {company.postalCode} {company.city}
               </p>
             )}
-            {company?.phone && <p>Tel: {company.phone}</p>}
-            {company?.email && <p>E-Mail: {company.email}</p>}
+            {company?.phone && <p>{t("print.phone", { v: company.phone })}</p>}
+            {company?.email && <p>{t("print.email", { v: company.email })}</p>}
           </div>
 
           <div className="print-meta">
-            <h1>{isInvoice ? "Rechnung" : "Werkstattauftrag"}</h1>
+            <h1>{isInvoice ? t("print.invoice") : t("print.order")}</h1>
             <p>
-              Auftrags-Nr.: <strong>{order.orderNumber}</strong>
+              {t("print.orderNo")} <strong>{order.orderNumber}</strong>
             </p>
-            <p>Datum: {new Date(order.createdAt).toLocaleDateString("de-DE")}</p>
-            <p>Hebebühne: {order.liftBay}</p>
-            {order.mechanicName && <p>Mechaniker: {order.mechanicName}</p>}
+            <p>{t("print.date", { date: day(order.createdAt) })}</p>
+            <p>{t("print.lift", { lift: lift(order.liftBay) })}</p>
+            {order.mechanicName && <p>{t("print.mechanic", { name: order.mechanicName })}</p>}
           </div>
         </header>
 
         {/* Empfänger / Kunde & Fahrzeugdaten */}
         <div className="print-grid">
           <div>
-            <h2>Kunde / Halter</h2>
+            <h2>{t("print.customer")}</h2>
             <strong>{order.customerName}</strong>
             <p>{order.customerPhone}</p>
             {order.customerEmail && <p>{order.customerEmail}</p>}
           </div>
           <div>
-            <h2>Fahrzeugdaten</h2>
+            <h2>{t("print.vehicle")}</h2>
             <strong>{order.licensePlate}</strong>
             <p>{order.vehicleInfo}</p>
-            <p>Kilometerstand: {order.mileage.toLocaleString("de-DE")} km</p>
+            <p>{t("print.mileage", { km: num(order.mileage) })}</p>
           </div>
         </div>
 
         {/* Beanstandung / Auftrag */}
         <div>
-          <h2>Kundenauftrag / Beanstandung</h2>
-          <p>{order.issueDescription || "Regulärer Inspektions- und Wartungsauftrag."}</p>
+          <h2>{t("print.issue")}</h2>
+          <p>{order.issueDescription || t("print.defaultIssue")}</p>
         </div>
 
         {/* Diagnose / Befund falls vorhanden */}
         {order.diagnosticNotes && (
           <div>
-            <h2>Werkstatt-Diagnose & Befund</h2>
+            <h2>{t("print.diagnosis")}</h2>
             <p>{order.diagnosticNotes}</p>
           </div>
         )}
@@ -103,15 +101,15 @@ export function WorkshopPrint({ order, company, type, onClose }: WorkshopPrintPr
         {/* Checkliste / Dialogannahme (nur auf Werkstattauftrag) */}
         {!isInvoice && order.checklist && order.checklist.length > 0 && (
           <div>
-            <h2>Dialogannahme & Inspektionsbefund</h2>
+            <h2>{t("print.checklist")}</h2>
             <table className="print-table">
               <tbody>
                 {order.checklist.map((item) => (
                   <tr key={item.id}>
-                    <td>{item.name}</td>
+                    <td>{inspectionName(item)}</td>
                     <td className="num">
                       <strong>
-                        {item.status === "ok" ? "OK" : item.status === "warning" ? "Hinweis" : "Mangel"}
+                        {item.status === "ok" ? t("inspection.status.ok") : item.status === "warning" ? t("inspection.status.warning") : t("inspection.status.defect")}
                         {item.value ? ` (${item.value})` : ""}
                       </strong>
                     </td>
@@ -124,16 +122,16 @@ export function WorkshopPrint({ order, company, type, onClose }: WorkshopPrintPr
 
         {/* Positionstabelle */}
         <div>
-          <h2>Leistungspositionen & Ersatzteile</h2>
+          <h2>{t("print.positions")}</h2>
           <table className="print-table">
             <thead>
               <tr>
-                <th>Art / Code</th>
-                <th>Bezeichnung</th>
-                <th className="num">Menge</th>
-                <th className="num">Einzelpreis</th>
-                <th className="num">MwSt</th>
-                <th className="num">Gesamt</th>
+                <th>{t("print.cols.type")}</th>
+                <th>{t("print.cols.name")}</th>
+                <th className="num">{t("print.cols.qty")}</th>
+                <th className="num">{t("print.cols.unitPrice")}</th>
+                <th className="num">{t("print.cols.vat")}</th>
+                <th className="num">{t("print.cols.total")}</th>
               </tr>
             </thead>
             <tbody>
@@ -143,15 +141,15 @@ export function WorkshopPrint({ order, company, type, onClose }: WorkshopPrintPr
                   <tr key={pos.id}>
                     <td>
                       <small>
-                        {pos.type === "labor" ? "AW" : "ET"} {pos.code || ""}
+                        {pos.type === "labor" ? t("posType.labor") : t("posType.part")} {pos.code || ""}
                       </small>
                     </td>
                     <td>{pos.name}</td>
                     <td className="num">
-                      {pos.quantity} {pos.unit}
+                      {num(pos.quantity)} {unit(pos.unit)}
                     </td>
                     <td className="num">{fmtEuro(pos.unitPriceNet)}</td>
-                    <td className="num">{pos.taxRate}%</td>
+                    <td className="num">{num(pos.taxRate)}%</td>
                     <td className="num">
                       <strong>{fmtEuro(lineNet)}</strong>
                     </td>
@@ -165,32 +163,32 @@ export function WorkshopPrint({ order, company, type, onClose }: WorkshopPrintPr
         {/* Summenblock */}
         <div className="print-totals">
           <p>
-            <span>Summe Netto:</span>
+            <span>{t("print.totalNet")}</span>
             <span>{fmtEuro(order.totalNet)}</span>
           </p>
           <p>
-            <span>MwSt. (19%):</span>
+            <span>{t("print.vat", { rate: 19 })}</span>
             <span>{fmtEuro(order.totalTax)}</span>
           </p>
           <p className="grand">
-            <strong>Gesamtbetrag:</strong>
+            <strong>{t("print.total")}</strong>
             <strong>{fmtEuro(order.totalGross)}</strong>
           </p>
-          {order.paymentStatus === "bezahlt" && <p>✓ Betrag vollständig bezahlt ({order.paymentMethod?.toUpperCase()})</p>}
+          {order.paymentStatus === "bezahlt" && <p>{t("print.paid", { method: payment(order.paymentMethod) })}</p>}
         </div>
 
         {/* Unterschriftenblock (für Werkstattauftrag) */}
         {!isInvoice && (
           <div className="print-sign">
             <div>
-              <p>Auftrag erteilt und Probefahrt gestattet:</p>
+              <p>{t("print.signCustomer")}</p>
               <span />
-              Datum, Unterschrift Auftraggeber
+              {t("print.signCustomerLine")}
             </div>
             <div>
-              <p>Fahrzeug angenommen durch Werkstatt:</p>
+              <p>{t("print.signShop")}</p>
               <span />
-              Datum, Unterschrift Serviceberater
+              {t("print.signShopLine")}
             </div>
           </div>
         )}
@@ -198,8 +196,8 @@ export function WorkshopPrint({ order, company, type, onClose }: WorkshopPrintPr
         {/* Fußzeile */}
         {company && (
           <footer className="print-foot">
-            {company.taxNumber && <span>St.-Nr.: {company.taxNumber}</span>}
-            {company.vatId && <span>USt-IdNr.: {company.vatId}</span>}
+            {company.taxNumber && <span>{t("print.taxNumber", { v: company.taxNumber })}</span>}
+            {company.vatId && <span>{t("print.vatId", { v: company.vatId })}</span>}
             {company.iban && <span>IBAN: {company.iban}</span>}
             {company.bic && <span>BIC: {company.bic}</span>}
           </footer>

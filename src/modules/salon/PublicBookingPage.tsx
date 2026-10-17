@@ -19,7 +19,7 @@ import { useSalonI18n } from "./i18n";
 import "./salon.css";
 
 export default function PublicBookingPage({ tenantId }: { tenantId: string }) {
-  const { euro: money, day: formatDay, errorText } = useSalonI18n();
+  const { s, euro: money, day: formatDay, errorText } = useSalonI18n();
   const [info, setInfo] = useState<Info | null>(null);
   const [invalid, setInvalid] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -110,7 +110,7 @@ export default function PublicBookingPage({ tenantId }: { tenantId: string }) {
   if (loading) {
     return (
       <div className="splash">
-        <p className="muted">Lade Buchungsportal...</p>
+        <p className="muted">{s("booking.loading")}</p>
       </div>
     );
   }
@@ -118,7 +118,7 @@ export default function PublicBookingPage({ tenantId }: { tenantId: string }) {
   if (invalid || !info) {
     return (
       <div className="splash">
-        <p className="muted">Die Online-Terminbuchung ist zurzeit nicht verfügbar. Bitte rufen Sie uns an.</p>
+        <p className="muted">{s("booking.unavailable")}</p>
       </div>
     );
   }
@@ -133,8 +133,8 @@ export default function PublicBookingPage({ tenantId }: { tenantId: string }) {
 
       <main className="stack">
         <section className="card stack-sm">
-          <h1 className="display">Online-Terminreservierung</h1>
-          <p className="muted">Schnell, unkompliziert & rund um die Uhr</p>
+          <h1 className="display">{s("booking.title")}</h1>
+          <p className="muted">{s("booking.subtitle")}</p>
           {settings?.noticeText && <p className="notice">{settings.noticeText}</p>}
         </section>
 
@@ -142,8 +142,8 @@ export default function PublicBookingPage({ tenantId }: { tenantId: string }) {
         {step === 1 && (
           <section className="card stack">
             <div className="salon-steps">
-              <h2>1. Dienstleistung auswählen</h2>
-              <small className="muted">Schritt 1 von 4</small>
+              <h2>{s("booking.step1")}</h2>
+              <small className="muted">{s("booking.stepOf", { n: 1 })}</small>
             </div>
 
             <div className="salon-choices">
@@ -165,7 +165,7 @@ export default function PublicBookingPage({ tenantId }: { tenantId: string }) {
                   >
                     <span className="list-main">
                       <strong>{srv.name}</strong>
-                      <small className="muted"><Clock size={13} /> {srv.durationMinutes} Minuten</small>
+                      <small className="muted"><Clock size={13} /> {s("common.minutesLong", { n: srv.durationMinutes })}</small>
                     </span>
                     <strong className="salon-price">{euro(srv.priceCents)}</strong>
                   </button>
@@ -176,11 +176,11 @@ export default function PublicBookingPage({ tenantId }: { tenantId: string }) {
             {selectedServiceIds.length > 0 && (
               <div className="salon-nav">
                 <span className="stack-sm">
-                  <small className="muted">Gesamt:</small>
-                  <span><strong>{euro(totalCents)}</strong> ({totalDuration} Min)</span>
+                  <small className="muted">{s("booking.total")}</small>
+                  <span><strong>{euro(totalCents)}</strong> ({s("common.minutes", { n: totalDuration })})</span>
                 </span>
                 <button className="button primary" onClick={() => setStep(2)}>
-                  Weiter zur Stylistenauswahl <ArrowRight size={17} className="flip-rtl" />
+                  {s("booking.toStaff")} <ArrowRight size={17} className="flip-rtl" />
                 </button>
               </div>
             )}
@@ -191,8 +191,8 @@ export default function PublicBookingPage({ tenantId }: { tenantId: string }) {
         {step === 2 && (
           <section className="card stack">
             <div className="salon-steps">
-              <h2>2. Wunsch-Stylist wählen</h2>
-              <small className="muted">Schritt 2 von 4</small>
+              <h2>{s("booking.step2")}</h2>
+              <small className="muted">{s("booking.stepOf", { n: 2 })}</small>
             </div>
 
             <div className="salon-choices">
@@ -204,8 +204,8 @@ export default function PublicBookingPage({ tenantId }: { tenantId: string }) {
               >
                 <span className="salon-avatar" aria-hidden><Sparkles size={18} /></span>
                 <span className="list-main">
-                  <strong>Keine Präferenz</strong>
-                  <small className="muted">Schnellster verfügbarer Termin bei einem Teammitglied</small>
+                  <strong>{s("booking.noPreference")}</strong>
+                  <small className="muted">{s("booking.noPreferenceHint")}</small>
                 </span>
               </button>
 
@@ -232,10 +232,10 @@ export default function PublicBookingPage({ tenantId }: { tenantId: string }) {
 
             <div className="salon-nav">
               <button className="button" onClick={() => setStep(1)}>
-                <ArrowLeft size={17} className="flip-rtl" /> Zurück
+                <ArrowLeft size={17} className="flip-rtl" /> {s("actions.back")}
               </button>
               <button className="button primary" onClick={() => setStep(3)}>
-                Weiter zum Datum <ArrowRight size={17} className="flip-rtl" />
+                {s("booking.toDate")} <ArrowRight size={17} className="flip-rtl" />
               </button>
             </div>
           </section>
@@ -245,11 +245,11 @@ export default function PublicBookingPage({ tenantId }: { tenantId: string }) {
         {step === 3 && (
           <section className="card stack">
             <div className="salon-steps">
-              <h2>3. Datum & Uhrzeit wählen</h2>
-              <small className="muted">Schritt 3 von 4</small>
+              <h2>{s("booking.step3")}</h2>
+              <small className="muted">{s("booking.stepOf", { n: 3 })}</small>
             </div>
 
-            <Field label="Tag auswählen">
+            <Field label={s("booking.pickDay")}>
               <input
                 type="date"
                 min={info.today}
@@ -262,13 +262,13 @@ export default function PublicBookingPage({ tenantId }: { tenantId: string }) {
               />
             </Field>
 
-            <small className="muted">Freie Termine am {formatDay(selectedDate)}:</small>
+            <small className="muted">{s("booking.freeSlotsOn", { date: formatDay(selectedDate) })}</small>
 
             {errorMsg && <p className="error" role="alert">{errorMsg}</p>}
 
             {freeSlots.length === 0 ? (
               <p className="notice">
-                Für diesen Tag sind leider keine freien Termine verfügbar. Bitte wählen Sie ein anderes Datum.
+                {s("booking.noSlots")}
               </p>
             ) : (
               <div className="salon-slots">
@@ -286,10 +286,10 @@ export default function PublicBookingPage({ tenantId }: { tenantId: string }) {
 
             <div className="salon-nav">
               <button className="button" onClick={() => setStep(2)}>
-                <ArrowLeft size={17} className="flip-rtl" /> Zurück
+                <ArrowLeft size={17} className="flip-rtl" /> {s("actions.back")}
               </button>
               <button className="button primary" disabled={!selectedSlot} onClick={() => setStep(4)}>
-                Weiter zu Ihren Daten <ArrowRight size={17} className="flip-rtl" />
+                {s("booking.toContact")} <ArrowRight size={17} className="flip-rtl" />
               </button>
             </div>
           </section>
@@ -299,22 +299,22 @@ export default function PublicBookingPage({ tenantId }: { tenantId: string }) {
         {step === 4 && (
           <section className="card stack">
             <div className="salon-steps">
-              <h2>4. Ihre Kontaktdaten</h2>
-              <small className="muted">Schritt 4 von 4</small>
+              <h2>{s("booking.step4")}</h2>
+              <small className="muted">{s("booking.stepOf", { n: 4 })}</small>
             </div>
 
             {/* Zusammenfassung */}
             <div className="salon-summary stack-sm">
               <dl className="facts">
-                <dt>Termin:</dt>
-                <dd>{formatDay(selectedDate)} um {selectedSlot?.time} Uhr</dd>
-                <dt>Stylist:</dt>
+                <dt>{s("booking.appointmentLabel")}</dt>
+                <dd>{s("booking.appointmentValue", { date: formatDay(selectedDate), time: selectedSlot?.time ?? "" })}</dd>
+                <dt>{s("booking.stylistLabel")}</dt>
                 <dd>{selectedSlot?.staffName}</dd>
-                <dt>Dienstleistungen:</dt>
+                <dt>{s("booking.servicesLabel")}</dt>
                 <dd>{chosenServices.map((s) => s.name).join(", ")}</dd>
               </dl>
               <div className="salon-total">
-                <span>Geschätzter Preis:</span>
+                <span>{s("booking.estimatedPrice")}</span>
                 <strong>{euro(totalCents)}</strong>
               </div>
             </div>
@@ -325,29 +325,29 @@ export default function PublicBookingPage({ tenantId }: { tenantId: string }) {
               {/* Unsichtbar für Menschen, nur Bots füllen es aus */}
               <input type="text" name="website" value={website} onChange={(e) => setWebsite(e.target.value)} tabIndex={-1} autoComplete="off" aria-hidden style={{ position: "absolute", left: "-9999px" }} />
               <div className="grid form-grid">
-                <Field label="Ihr vollständiger Name" required wide>
-                  <input type="text" required placeholder="Vor- und Nachname" value={clientName} onChange={(e) => setClientName(e.target.value)} autoComplete="name" />
+                <Field label={s("booking.fullName")} required wide>
+                  <input type="text" required placeholder={s("common.fullNamePlaceholder")} value={clientName} onChange={(e) => setClientName(e.target.value)} autoComplete="name" />
                 </Field>
 
-                <Field label="Ihre Telefonnummer (für Rückfragen/Terminerinnerung)" required wide>
-                  <input type="tel" required placeholder="+49 171 1234567" value={clientPhone} onChange={(e) => setClientPhone(e.target.value)} autoComplete="tel" />
+                <Field label={s("booking.phone")} required wide>
+                  <input type="tel" required placeholder={s("common.phonePlaceholder")} value={clientPhone} onChange={(e) => setClientPhone(e.target.value)} autoComplete="tel" />
                 </Field>
 
-                <Field label="Ihre E-Mail-Adresse" wide>
-                  <input type="email" placeholder="name@beispiel.de" value={clientEmail} onChange={(e) => setClientEmail(e.target.value)} autoComplete="email" />
+                <Field label={s("booking.email")} wide>
+                  <input type="email" placeholder={s("booking.emailPlaceholder")} value={clientEmail} onChange={(e) => setClientEmail(e.target.value)} autoComplete="email" />
                 </Field>
 
-                <Field label="Anmerkungen an den Salon (optional)" wide>
-                  <input type="text" placeholder="z.B. Wünsche, Haarlänge, Allergien..." value={notes} onChange={(e) => setNotes(e.target.value)} />
+                <Field label={s("booking.notes")} wide>
+                  <input type="text" placeholder={s("booking.notesPlaceholder")} value={notes} onChange={(e) => setNotes(e.target.value)} />
                 </Field>
               </div>
 
               <div className="salon-nav">
                 <button type="button" className="button" onClick={() => setStep(3)}>
-                  <ArrowLeft size={17} className="flip-rtl" /> Zurück
+                  <ArrowLeft size={17} className="flip-rtl" /> {s("actions.back")}
                 </button>
                 <button type="submit" className="button primary" disabled={bookingLoading}>
-                  <CheckCircle2 size={18} /> {bookingLoading ? "Wird gebucht..." : "Verbindlich reservieren"}
+                  <CheckCircle2 size={18} /> {bookingLoading ? s("booking.booking") : s("booking.book")}
                 </button>
               </div>
             </form>
@@ -358,25 +358,23 @@ export default function PublicBookingPage({ tenantId }: { tenantId: string }) {
         {step === 5 && (
           <section className="card stack salon-done">
             <span className="salon-done-icon"><CheckCircle2 size={32} /></span>
-            <h2 className="display">Termin erfolgreich reserviert!</h2>
-            <p className="muted">
-              Vielen Dank, <strong>{clientName}</strong>! Ihr Termin wurde verbindlich im Salon hinterlegt.
-            </p>
+            <h2 className="display">{s("booking.doneTitle")}</h2>
+            <p className="muted">{s("booking.doneThanks", { name: clientName })}</p>
 
             <div className="salon-summary">
               <dl className="facts">
-                <dt>Datum:</dt>
+                <dt>{s("booking.dateLabel")}</dt>
                 <dd>{formatDay(selectedDate)}</dd>
-                <dt>Uhrzeit:</dt>
-                <dd>{selectedSlot?.time} Uhr</dd>
-                <dt>Stylist:</dt>
+                <dt>{s("booking.timeLabel")}</dt>
+                <dd>{s("common.clock", { time: selectedSlot?.time ?? "" })}</dd>
+                <dt>{s("booking.stylistLabel")}</dt>
                 <dd>{selectedSlot?.staffName}</dd>
-                <dt>Dauer:</dt>
-                <dd>ca. {totalDuration} Minuten</dd>
+                <dt>{s("booking.durationLabel")}</dt>
+                <dd>{s("booking.durationValue", { n: totalDuration })}</dd>
               </dl>
             </div>
 
-            <p className="small muted">Wir freuen uns auf Ihren Besuch bei {info.company.name || settings?.salonName}!</p>
+            <p className="small muted">{s("booking.seeYou", { name: info.company.name || settings?.salonName || "" })}</p>
           </section>
         )}
       </main>

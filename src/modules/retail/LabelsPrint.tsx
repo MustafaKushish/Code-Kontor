@@ -12,7 +12,7 @@ export function LabelsPrint({
   products: RetailProduct[];
   onClose: () => void;
 }) {
-  const { euro } = useRetailI18n();
+  const { euro, r, unit, lang } = useRetailI18n();
   const [company, setCompany] = useState<CompanyProfile | null>(null);
 
   useEffect(() => {
@@ -27,19 +27,19 @@ export function LabelsPrint({
     <div className="print-layer">
       <div className="print-toolbar">
         <button className="button primary" onClick={() => window.print()}>
-          <Printer size={18} /> Etiketten drucken ({products.length} Artikel)
+          <Printer size={18} /> {r("labels.print", { n: products.length })}
         </button>
         <button className="button push-end" onClick={onClose}>
-          <X size={18} /> Schließen
+          <X size={18} /> {r("actions.close")}
         </button>
       </div>
 
       <article className="print-sheet" style={{ maxWidth: "800px", margin: "0 auto", padding: "20px" }}>
         <header className="print-head" style={{ marginBottom: "16px", borderBottom: "1px dashed #cbd5e1", paddingBottom: "12px" }}>
           <div>
-            <strong style={{ fontSize: "1.2rem" }}>{company?.name || "Code Kontor Einzelhandel"}</strong>
+            <strong style={{ fontSize: "1.2rem" }}>{company?.name || r("labels.fallbackCompany")}</strong>
             <p style={{ margin: "2px 0 0", color: "#64748b", fontSize: "0.85rem" }}>
-              Regal- & Artikeletiketten · Erstellt am {new Date().toLocaleDateString("de-DE")}
+              {r("labels.subtitle", { date: new Date().toLocaleDateString(lang) })}
             </p>
           </div>
         </header>
@@ -77,10 +77,10 @@ export function LabelsPrint({
 
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: "4px", borderTop: "1px solid #e2e8f0", paddingTop: "6px" }}>
                 <div>
-                  <span style={{ fontSize: "0.75rem", color: "#64748b" }}>inkl. {p.vatRate}% MwSt.</span>
+                  <span style={{ fontSize: "0.75rem", color: "#64748b" }}>{r("labels.vatIncl", { rate: p.vatRate })}</span>
                   {p.location && (
                     <div style={{ fontSize: "0.72rem", color: "#475569" }}>
-                      Ort: <strong>{p.location}</strong>
+                      {r("labels.location")} <strong>{p.location}</strong>
                     </div>
                   )}
                 </div>
@@ -89,7 +89,7 @@ export function LabelsPrint({
                     {euro(p.sellingPriceCents)}
                   </span>
                   <div style={{ fontSize: "0.75rem", color: "#64748b" }}>
-                    pro {p.unit}
+                    {r("labels.perUnit", { unit: unit(p.unit) })}
                   </div>
                 </div>
               </div>
@@ -99,7 +99,7 @@ export function LabelsPrint({
                 <div style={{ fontFamily: "monospace", fontSize: "0.88rem", letterSpacing: "2px", fontWeight: 700 }}>
                   {p.ean}
                 </div>
-                <small style={{ fontSize: "0.68rem", color: "#64748b" }}>Art.-Nr. #{p.number}</small>
+                <small style={{ fontSize: "0.68rem", color: "#64748b" }}>{r("labels.articleNo", { number: p.number })}</small>
               </div>
             </div>
           ))}

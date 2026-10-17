@@ -81,6 +81,9 @@ export interface FitnessCheckInResult {
   member?: FitnessMember;
   checkIn?: FitnessCheckIn;
   message: string;
+  /** Meldung als Code für die Übersetzung (checkinMsg.*), `message` bleibt die deutsche Fassung. */
+  code?: string;
+  vars?: Record<string, string | number>;
   alertLevel: "success" | "warning" | "error";
   remainingUnits?: number;
 }

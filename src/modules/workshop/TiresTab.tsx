@@ -4,6 +4,7 @@ import { api } from "../../api";
 import { Field } from "../../components";
 import { Dialog } from "../../pos/ui";
 import type { TireStorage, Vehicle } from "../../../shared/workshop";
+import { useWorkshopI18n } from "./i18n";
 
 interface TiresTabProps {
   isManager: boolean;
@@ -13,6 +14,8 @@ interface TiresTabProps {
 }
 
 export function TiresTab({ tires, vehicles, onTiresChanged, isManager }: TiresTabProps) {
+  const { t: tr, workshopError, num } = useWorkshopI18n();
+  const mm = (value: number) => tr("common.mm", { n: num(value, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) });
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
 
@@ -33,7 +36,7 @@ export function TiresTab({ tires, vehicles, onTiresChanged, isManager }: TiresTa
     treadDepthRL: 5.5,
     treadDepthRR: 5.5,
     condition: "gut" as TireStorage["condition"],
-    storageLocation: "Reifenregal 1 - Fach A1",
+    storageLocation: tr("tires.defaultLocation"),
   });
 
   const [saving, setSaving] = useState(false);
@@ -71,7 +74,7 @@ export function TiresTab({ tires, vehicles, onTiresChanged, isManager }: TiresTa
       treadDepthRL: 6.0,
       treadDepthRR: 6.0,
       condition: "gut",
-      storageLocation: "Reifenregal 2 - Fach B1",
+      storageLocation: tr("tires.defaultLocationNew"),
     });
     setModalOpen(true);
   };
@@ -113,7 +116,7 @@ export function TiresTab({ tires, vehicles, onTiresChanged, isManager }: TiresTa
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.licensePlate.trim() || !form.brand.trim() || !form.dimension.trim()) {
-      setErrorMsg("Bitte mindestens Kennzeichen, Reifenmarke und Dimension ausfüllen.");
+      setErrorMsg(tr("tires.required"));
       return;
     }
 
@@ -148,8 +151,8 @@ export function TiresTab({ tires, vehicles, onTiresChanged, isManager }: TiresTa
         onTiresChanged([saved, ...tires]);
       }
       setModalOpen(false);
-    } catch (err: any) {
-      setErrorMsg(err.message || "Fehler beim Speichern der Reifeneinlagerung.");
+    } catch (err: unknown) {
+      setErrorMsg(workshopError(err, tr("tires.saveError")));
     } finally {
       setSaving(false);
     }
@@ -160,8 +163,8 @@ export function TiresTab({ tires, vehicles, onTiresChanged, isManager }: TiresTa
       await api(`/workshop/tires/${id}`, { method: "DELETE" });
       onTiresChanged(tires.filter((t) => t.id !== id));
       setDeleteConfirmId(null);
-    } catch (err: any) {
-      setErrorMsg(err.message || "Fehler beim Löschen.");
+    } catch (err: unknown) {
+      setErrorMsg(workshopError(err, tr("common.deleteError")));
     }
   };
 
@@ -173,23 +176,23 @@ export function TiresTab({ tires, vehicles, onTiresChanged, isManager }: TiresTa
           <Search size={18} />
           <input
             type="search"
-            placeholder="Kennzeichen, Halter, Dimension, Lagerplatz..."
-            aria-label="Kennzeichen, Halter, Dimension, Lagerplatz..."
+            placeholder={tr("tires.searchPlaceholder")}
+            aria-label={tr("tires.searchPlaceholder")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </label>
 
-        <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="workshop-select" aria-label="Reifensaison">
-          <option value="all">Alle Reifensaisons</option>
-          <option value="Sommer">Sommerreifen</option>
-          <option value="Winter">Winterreifen</option>
-          <option value="Ganzjahr">Ganzjahresreifen</option>
+        <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="workshop-select" aria-label={tr("tires.seasonFilter")}>
+          <option value="all">{tr("tires.allSeasons")}</option>
+          <option value="Sommer">{tr("tires.seasonOptions.Sommer")}</option>
+          <option value="Winter">{tr("tires.seasonOptions.Winter")}</option>
+          <option value="Ganzjahr">{tr("tires.seasonOptions.Ganzjahr")}</option>
         </select>
 
         <button onClick={openNewModal} className="button primary workshop-toolbar-end">
           <Plus size={18} />
-          Radsatz einlagern
+          {tr("tires.store")}
         </button>
       </div>
 
@@ -198,7 +201,7 @@ export function TiresTab({ tires, vehicles, onTiresChanged, isManager }: TiresTa
       {/* Reifenkarten */}
       {filtered.length === 0 ? (
         <section className="card list-card">
-          <p className="empty muted">Keine Reifensätze im Räderhotel eingelagert.</p>
+          <p className="empty muted">{tr("tires.empty")}</p>
         </section>
       ) : (
         <div className="workshop-cards">
@@ -210,30 +213,30 @@ export function TiresTab({ tires, vehicles, onTiresChanged, isManager }: TiresTa
                   <span>{t.brand}</span>
                 </span>
                 <span className="pill">
-                  {t.type} · {t.rimType}
+                  {tr(`tires.seasons.${t.type}`)} · {tr(`tires.rims.${t.rimType}`)}
                 </span>
               </div>
 
               <p className="workshop-mono">
-                {t.dimension} {t.dot && <span className="muted">(DOT {t.dot})</span>}
+                {t.dimension} {t.dot && <span className="muted">({tr("tires.dot", { dot: t.dot })})</span>}
               </p>
 
               {/* Profiltiefen-Gitter */}
               <div className="workshop-panel stack-sm">
-                <small className="muted">Gemessene Profiltiefe (mm)</small>
+                <small className="muted">{tr("tires.treadTitle")}</small>
                 <div className="workshop-tread">
-                  <span><small className="muted">Vorne Links</small><strong className="workshop-num">{t.treadDepthFL.toFixed(1)} mm</strong></span>
-                  <span><small className="muted">Vorne Rechts</small><strong className="workshop-num">{t.treadDepthFR.toFixed(1)} mm</strong></span>
-                  <span><small className="muted">Hinten Links</small><strong className="workshop-num">{t.treadDepthRL.toFixed(1)} mm</strong></span>
-                  <span><small className="muted">Hinten Rechts</small><strong className="workshop-num">{t.treadDepthRR.toFixed(1)} mm</strong></span>
+                  <span><small className="muted">{tr("tires.fl")}</small><strong className="workshop-num">{mm(t.treadDepthFL)}</strong></span>
+                  <span><small className="muted">{tr("tires.fr")}</small><strong className="workshop-num">{mm(t.treadDepthFR)}</strong></span>
+                  <span><small className="muted">{tr("tires.rl")}</small><strong className="workshop-num">{mm(t.treadDepthRL)}</strong></span>
+                  <span><small className="muted">{tr("tires.rr")}</small><strong className="workshop-num">{mm(t.treadDepthRR)}</strong></span>
                 </div>
               </div>
 
               {/* Lagerplatz & Halter */}
               <dl className="workshop-facts">
-                <dt>Lagerort:</dt>
+                <dt>{tr("tires.location")}</dt>
                 <dd>{t.storageLocation}</dd>
-                <dt>Kunde:</dt>
+                <dt>{tr("tires.customer")}</dt>
                 <dd>
                   {t.customerName} {t.customerPhone && <small className="muted">({t.customerPhone})</small>}
                 </dd>
@@ -242,19 +245,19 @@ export function TiresTab({ tires, vehicles, onTiresChanged, isManager }: TiresTa
               <div className="workshop-card-foot">
                 <button onClick={() => openEditModal(t)} className="text-button workshop-icon-text">
                   <Pencil size={15} />
-                  Bearbeiten
+                  {tr("common.edit")}
                 </button>
                 {!isManager ? null : deleteConfirmId === t.id ? (
                   <div className="row gap">
                     <button onClick={() => handleDelete(t.id)} className="button danger small-button">
-                      Löschen
+                      {tr("common.delete")}
                     </button>
                     <button onClick={() => setDeleteConfirmId(null)} className="text-button">
-                      Nein
+                      {tr("common.no")}
                     </button>
                   </div>
                 ) : (
-                  <button onClick={() => setDeleteConfirmId(t.id)} className="icon-button danger" aria-label="Löschen">
+                  <button onClick={() => setDeleteConfirmId(t.id)} className="icon-button danger" aria-label={tr("common.delete")}>
                     <Trash2 size={17} />
                   </button>
                 )}
@@ -266,54 +269,54 @@ export function TiresTab({ tires, vehicles, onTiresChanged, isManager }: TiresTa
 
       {/* Dialog: Radsatz erfassen / bearbeiten */}
       {modalOpen && (
-        <Dialog title={editingTire ? "Radsatz bearbeiten" : "Radsatz im Räderhotel einlagern"} onClose={() => setModalOpen(false)} wide>
+        <Dialog title={editingTire ? tr("tires.editTitle") : tr("tires.newTitle")} onClose={() => setModalOpen(false)} wide>
           <form onSubmit={handleSave} className="stack workshop-dialog">
             {errorMsg && <p className="error" role="alert">{errorMsg}</p>}
             <div className="grid form-grid">
-              <Field label="Amtliches Kennzeichen *">
+              <Field label={tr("common.plate")}>
                 <input
                   type="text"
                   required
-                  placeholder="z. B. HH-WM 2024"
+                  placeholder={tr("common.platePlaceholder")}
                   value={form.licensePlate}
                   onChange={(e) => handlePlateChange(e.target.value)}
                   className="workshop-mono workshop-upper"
                 />
               </Field>
-              <Field label="Saison / Reifentyp">
+              <Field label={tr("tires.season")}>
                 <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as any })}>
-                  <option value="Sommer">Sommerreifen</option>
-                  <option value="Winter">Winterreifen</option>
-                  <option value="Ganzjahr">Ganzjahresreifen</option>
+                  <option value="Sommer">{tr("tires.seasonOptions.Sommer")}</option>
+                  <option value="Winter">{tr("tires.seasonOptions.Winter")}</option>
+                  <option value="Ganzjahr">{tr("tires.seasonOptions.Ganzjahr")}</option>
                 </select>
               </Field>
-              <Field label="Reifenmarke & Profil *">
-                <input type="text" required placeholder="z. B. Continental WinterContact" value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} />
+              <Field label={tr("tires.brand")}>
+                <input type="text" required placeholder={tr("tires.brandPlaceholder")} value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} />
               </Field>
-              <Field label="Reifendimension *">
+              <Field label={tr("tires.dimension")}>
                 <input
                   type="text"
                   required
-                  placeholder="z. B. 205/55 R16 91H"
+                  placeholder={tr("tires.dimensionPlaceholder")}
                   value={form.dimension}
                   onChange={(e) => setForm({ ...form, dimension: e.target.value })}
                   className="workshop-mono"
                 />
               </Field>
-              <Field label="DOT (Herstellungswoche/Jahr)">
-                <input type="text" placeholder="z. B. 3822" value={form.dot} onChange={(e) => setForm({ ...form, dot: e.target.value })} className="workshop-mono" />
+              <Field label={tr("tires.dotLabel")}>
+                <input type="text" placeholder={tr("tires.dotPlaceholder")} value={form.dot} onChange={(e) => setForm({ ...form, dot: e.target.value })} className="workshop-mono" />
               </Field>
-              <Field label="Felgentyp">
+              <Field label={tr("tires.rim")}>
                 <select value={form.rimType} onChange={(e) => setForm({ ...form, rimType: e.target.value as any })}>
-                  <option value="Alufelge">Alufelge</option>
-                  <option value="Stahlfelge">Stahlfelge</option>
+                  <option value="Alufelge">{tr("tires.rims.Alufelge")}</option>
+                  <option value="Stahlfelge">{tr("tires.rims.Stahlfelge")}</option>
                 </select>
               </Field>
-              <Field label="Lagerplatz im Räderhotel *" wide>
+              <Field label={tr("tires.storageLocation")} wide>
                 <input
                   type="text"
                   required
-                  placeholder="z. B. Reifenregal 2 - Fach B1"
+                  placeholder={tr("tires.storageLocationPlaceholder")}
                   value={form.storageLocation}
                   onChange={(e) => setForm({ ...form, storageLocation: e.target.value })}
                 />
@@ -321,39 +324,39 @@ export function TiresTab({ tires, vehicles, onTiresChanged, isManager }: TiresTa
             </div>
 
             {/* Profiltiefen */}
-            <h3 className="card-subtitle"><Disc size={17} aria-hidden /> Profiltiefenmessung (mm)</h3>
+            <h3 className="card-subtitle"><Disc size={17} aria-hidden /> {tr("tires.treadSection")}</h3>
             <div className="workshop-tread-form">
-              <Field label="Vorne Links (VL)">
+              <Field label={tr("tires.flField")}>
                 <input type="number" step="0.1" value={form.treadDepthFL} onChange={(e) => setForm({ ...form, treadDepthFL: Number(e.target.value) })} className="workshop-mono" />
               </Field>
-              <Field label="Vorne Rechts (VR)">
+              <Field label={tr("tires.frField")}>
                 <input type="number" step="0.1" value={form.treadDepthFR} onChange={(e) => setForm({ ...form, treadDepthFR: Number(e.target.value) })} className="workshop-mono" />
               </Field>
-              <Field label="Hinten Links (HL)">
+              <Field label={tr("tires.rlField")}>
                 <input type="number" step="0.1" value={form.treadDepthRL} onChange={(e) => setForm({ ...form, treadDepthRL: Number(e.target.value) })} className="workshop-mono" />
               </Field>
-              <Field label="Hinten Rechts (HR)">
+              <Field label={tr("tires.rrField")}>
                 <input type="number" step="0.1" value={form.treadDepthRR} onChange={(e) => setForm({ ...form, treadDepthRR: Number(e.target.value) })} className="workshop-mono" />
               </Field>
             </div>
 
             {/* Halterdaten */}
             <div className="grid form-grid">
-              <Field label="Kundenname">
+              <Field label={tr("common.customerName")}>
                 <input type="text" value={form.customerName} onChange={(e) => setForm({ ...form, customerName: e.target.value })} />
               </Field>
-              <Field label="Telefon">
+              <Field label={tr("common.phone")}>
                 <input type="tel" value={form.customerPhone} onChange={(e) => setForm({ ...form, customerPhone: e.target.value })} />
               </Field>
             </div>
 
             <div className="row gap workshop-dialog-actions">
               <button type="button" onClick={() => setModalOpen(false)} className="button">
-                Abbrechen
+                {tr("common.cancel")}
               </button>
               <button type="submit" disabled={saving} className="button primary">
                 <Check size={18} />
-                {saving ? "Wird gespeichert..." : "Radsatz einlagern"}
+                {saving ? tr("common.saving") : tr("tires.store")}
               </button>
             </div>
           </form>

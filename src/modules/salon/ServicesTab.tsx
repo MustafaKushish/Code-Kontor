@@ -8,7 +8,7 @@ import { Dialog } from "../../pos/ui";
 import { currencySymbol } from "../../money";
 
 export function ServicesTab({ isManager }: { isManager: boolean }) {
-  const { s, euro } = useSalonI18n();
+  const { s, euro, lang, errorText } = useSalonI18n();
   const [services, setServices] = useState<SalonService[]>([]);
   const [loading, setLoading] = useState(true);
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
@@ -90,8 +90,8 @@ export function ServicesTab({ isManager }: { isManager: boolean }) {
       });
       setModalOpen(false);
       await loadServices();
-    } catch (err: any) {
-      setErrorMsg(err?.message || "Fehler beim Speichern der Dienstleistung");
+    } catch (err) {
+      setErrorMsg(errorText(err));
     }
   };
 
@@ -104,8 +104,8 @@ export function ServicesTab({ isManager }: { isManager: boolean }) {
       await api(`/salon/services/${id}`, { method: "DELETE" });
       setDeleteConfirmId(null);
       await loadServices();
-    } catch (err: any) {
-      setActionError(err?.message || "Fehler beim Deaktivieren der Dienstleistung");
+    } catch (err) {
+      setActionError(errorText(err));
     }
   };
 
@@ -126,7 +126,7 @@ export function ServicesTab({ isManager }: { isManager: boolean }) {
               className={categoryFilter === cat ? "chip active" : "chip"}
               onClick={() => setCategoryFilter(cat)}
             >
-              {cat === "all" ? "Alle Kategorien" : s(`categories.${cat}`)}
+              {s(`categories.${cat}`)}
             </button>
           ))}
         </div>
@@ -141,7 +141,7 @@ export function ServicesTab({ isManager }: { isManager: boolean }) {
       {actionError && <p className="error" role="alert">{actionError}</p>}
 
       {loading ? (
-        <p className="muted">Lade Dienstleistungen...</p>
+        <p className="muted">{s("services.loading")}</p>
       ) : filteredServices.length === 0 ? (
         <section className="card list-card">
           <p className="empty muted">{s("services.noServices")}</p>
@@ -157,7 +157,7 @@ export function ServicesTab({ isManager }: { isManager: boolean }) {
                 </span>
                 <span className="salon-row-meta">
                   <span className="salon-price">{euro(srv.priceCents)}</span>
-                  <small className="muted">{srv.vatRate}% MwSt.</small>
+                  <small className="muted">{s("services.vat", { rate: srv.vatRate })}</small>
                 </span>
               </div>
 
@@ -165,7 +165,7 @@ export function ServicesTab({ isManager }: { isManager: boolean }) {
 
               <div className="salon-card-foot">
                 <span className="salon-meta">
-                  <span><Clock size={15} /> <strong>{srv.durationMinutes} Minuten</strong></span>
+                  <span><Clock size={15} /> <strong>{s("common.minutesLong", { n: srv.durationMinutes })}</strong></span>
                 </span>
 
                 {isManager && (
@@ -175,11 +175,11 @@ export function ServicesTab({ isManager }: { isManager: boolean }) {
                     </button>
                     {deleteConfirmId === srv.id ? (
                       <>
-                        <button className="button danger small-button" onClick={() => handleDelete(srv.id)} title="Unwiderruflich deaktivieren">
-                          Deaktivieren
+                        <button className="button danger small-button" onClick={() => handleDelete(srv.id)} title={s("actions.deactivateForever")}>
+                          {s("actions.deactivate")}
                         </button>
                         <button className="button small-button" onClick={() => setDeleteConfirmId(null)}>
-                          Abbr.
+                          {s("actions.cancelShort")}
                         </button>
                       </>
                     ) : (
@@ -197,16 +197,16 @@ export function ServicesTab({ isManager }: { isManager: boolean }) {
 
       {/* Dialog: Dienstleistung bearbeiten / anlegen */}
       {modalOpen && (
-        <Dialog title={editingService ? "Dienstleistung bearbeiten" : s("actions.newService")} onClose={() => setModalOpen(false)} wide>
+        <Dialog title={editingService ? s("services.edit") : s("actions.newService")} onClose={() => setModalOpen(false)} wide>
           <form onSubmit={handleSave} className="salon-dialog stack">
             {errorMsg && <p className="error" role="alert">{errorMsg}</p>}
 
             <div className="grid form-grid">
-              <Field label="Name der Dienstleistung" required wide>
-                <input type="text" required placeholder="z.B. Waschen, Schneiden & Föhnen" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <Field label={s("services.name")} required wide>
+                <input type="text" required placeholder={s("services.namePlaceholder")} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
               </Field>
 
-              <Field label="Kategorie" required>
+              <Field label={s("services.category")} required>
                 <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value as ServiceCategory })}>
                   <option value="cut_style">{s("categories.cut_style")}</option>
                   <option value="color">{s("categories.color")}</option>
@@ -217,7 +217,7 @@ export function ServicesTab({ isManager }: { isManager: boolean }) {
                 </select>
               </Field>
 
-              <Field label="Dauer (Minuten)" required>
+              <Field label={s("services.durationLabel")} required>
                 <input
                   type="number"
                   min="5"
@@ -228,21 +228,21 @@ export function ServicesTab({ isManager }: { isManager: boolean }) {
                 />
               </Field>
 
-              <Field label={`Preis (${currencySymbol("de-DE")}, brutto)`} required>
+              <Field label={s("services.priceLabel", { currency: currencySymbol(lang) })} required>
                 <input type="text" required placeholder="48.00" value={form.priceEuro} onChange={(e) => setForm({ ...form, priceEuro: e.target.value })} />
               </Field>
-              <Field label="MwSt.-Satz (%)">
+              <Field label={s("services.vatLabel")}>
                 <select value={form.vatRate} onChange={(e) => setForm({ ...form, vatRate: Number(e.target.value) })}>
-                  <option value="19">19% (Regulär)</option>
-                  <option value="7">7% (Ermäßigt)</option>
-                  <option value="0">0% (Steuerfrei)</option>
+                  <option value="19">{s("services.vatStandard")}</option>
+                  <option value="7">{s("services.vatReduced")}</option>
+                  <option value="0">{s("services.vatFree")}</option>
                 </select>
               </Field>
 
-              <Field label="Beschreibung" wide>
+              <Field label={s("services.description")} wide>
                 <textarea
                   rows={3}
-                  placeholder="Detaillierte Beschreibung der Behandlung..."
+                  placeholder={s("services.descriptionPlaceholder")}
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
                 />

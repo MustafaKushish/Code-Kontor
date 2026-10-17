@@ -19,6 +19,7 @@ import type {
   CraftProject,
   CraftSiteDiaryEntry,
 } from "../../../shared/craft";
+import { useCraftI18n } from "./i18n";
 
 interface SiteDiaryTabProps {
   diary: CraftSiteDiaryEntry[];
@@ -27,6 +28,7 @@ interface SiteDiaryTabProps {
 }
 
 export function SiteDiaryTab({ diary, projects, onRefresh }: SiteDiaryTabProps) {
+  const { t, day, tradeLabel, weatherLabel } = useCraftI18n();
   const [selectedProjectId, setSelectedProjectId] = useState<string>("alle");
   const [search, setSearch] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -35,7 +37,7 @@ export function SiteDiaryTab({ diary, projects, onRefresh }: SiteDiaryTabProps) 
   // New Entry Form State
   const [newProjectId, setNewProjectId] = useState(projects[0]?.id || "");
   const [newDate, setNewDate] = useState(new Date().toISOString().slice(0, 10));
-  const [newAuthor, setNewAuthor] = useState("Markus Krause (Bauleiter)");
+  const [newAuthor, setNewAuthor] = useState(() => t("diary.defaultAuthor"));
   const [newWeather, setNewWeather] = useState<CraftSiteDiaryEntry["weather"]>("Sonnig");
   const [newTemp, setNewTemp] = useState(19);
   const [newTrades, setNewTrades] = useState<string[]>(["Elektro", "Sanitär"]);
@@ -123,8 +125,8 @@ export function SiteDiaryTab({ diary, projects, onRefresh }: SiteDiaryTabProps) 
             <Search size={18} />
             <input
               type="search"
-              placeholder="Eintrag suchen..."
-              aria-label="Eintrag suchen..."
+              placeholder={t("diary.searchPlaceholder")}
+              aria-label={t("diary.searchPlaceholder")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -132,10 +134,10 @@ export function SiteDiaryTab({ diary, projects, onRefresh }: SiteDiaryTabProps) 
           <select
             value={selectedProjectId}
             onChange={(e) => setSelectedProjectId(e.target.value)}
-            aria-label="Bauvorhaben:"
-            title="Bauvorhaben:"
+            aria-label={t("common.projectFilter")}
+            title={t("common.projectFilter")}
           >
-            <option value="alle">Alle Baustellen ({projects.length})</option>
+            <option value="alle">{t("common.allSites", { n: projects.length })}</option>
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.projectNumber} · {p.title}
@@ -143,7 +145,7 @@ export function SiteDiaryTab({ diary, projects, onRefresh }: SiteDiaryTabProps) 
             ))}
           </select>
           <button onClick={() => setIsModalOpen(true)} className="button primary">
-            <Plus size={18} /> Bautagebuch-Eintrag
+            <Plus size={18} /> {t("diary.add")}
           </button>
         </div>
       </div>
@@ -151,9 +153,9 @@ export function SiteDiaryTab({ diary, projects, onRefresh }: SiteDiaryTabProps) 
       {filteredDiary.length === 0 ? (
         <section className="card craft-empty">
           <BookOpen size={40} aria-hidden />
-          <strong>Noch keine Bautagebuch-Einträge vorhanden</strong>
+          <strong>{t("diary.emptyTitle")}</strong>
           <p className="muted small">
-            Dokumentiere Witterung, anwesende Gewerke und den täglichen Baufortschritt vor Ort.
+            {t("diary.emptyText")}
           </p>
         </section>
       ) : (
@@ -167,7 +169,7 @@ export function SiteDiaryTab({ diary, projects, onRefresh }: SiteDiaryTabProps) 
                   <span className="list-main">
                     <strong>
                       <Calendar size={15} aria-hidden />{" "}
-                      {new Date(entry.date).toLocaleDateString("de-DE", {
+                      {day(entry.date, {
                         weekday: "short",
                         day: "2-digit",
                         month: "2-digit",
@@ -181,7 +183,7 @@ export function SiteDiaryTab({ diary, projects, onRefresh }: SiteDiaryTabProps) 
                   <div className="row wrap gap">
                     <span className="pill craft-pill-icon">
                       {getWeatherIcon(entry.weather)}
-                      {entry.weather}
+                      {weatherLabel(entry.weather)}
                     </span>
                     {entry.temperatureCelsius !== undefined && (
                       <span className="pill craft-pill-icon">
@@ -195,11 +197,11 @@ export function SiteDiaryTab({ diary, projects, onRefresh }: SiteDiaryTabProps) 
                 {entry.tradesPresent && entry.tradesPresent.length > 0 && (
                   <div className="row wrap gap craft-trades">
                     <small className="muted craft-pill-icon">
-                      <Users size={13} /> Gewerke vor Ort:
+                      <Users size={13} /> {t("diary.tradesOnSite")}
                     </small>
                     {entry.tradesPresent.map((trade) => (
                       <span key={trade} className="pill">
-                        {trade}
+                        {tradeLabel(trade)}
                       </span>
                     ))}
                   </div>
@@ -211,7 +213,7 @@ export function SiteDiaryTab({ diary, projects, onRefresh }: SiteDiaryTabProps) 
                   <div className="craft-issue" role="note">
                     <AlertTriangle size={17} aria-hidden />
                     <div>
-                      <strong>Behinderungsanzeige / Mangel:</strong>
+                      <strong>{t("diary.issue")}</strong>
                       <p>{entry.issuesOrDelays}</p>
                     </div>
                   </div>
@@ -223,10 +225,10 @@ export function SiteDiaryTab({ diary, projects, onRefresh }: SiteDiaryTabProps) 
       )}
 
       {isModalOpen && (
-        <Dialog title="Bautagebuch-Eintrag verfassen" onClose={() => setIsModalOpen(false)} wide>
+        <Dialog title={t("diary.dialogTitle")} onClose={() => setIsModalOpen(false)} wide>
           <form onSubmit={handleSaveEntry} className="stack">
             <div className="grid form-grid">
-              <Field label="Bauvorhaben / Baustelle" required wide>
+              <Field label={t("common.projectOrSite")} required wide>
                 <select
                   required
                   value={newProjectId}
@@ -240,7 +242,7 @@ export function SiteDiaryTab({ diary, projects, onRefresh }: SiteDiaryTabProps) 
                 </select>
               </Field>
 
-              <Field label="Datum" required>
+              <Field label={t("common.date")} required>
                 <input
                   type="date"
                   required
@@ -249,7 +251,7 @@ export function SiteDiaryTab({ diary, projects, onRefresh }: SiteDiaryTabProps) 
                 />
               </Field>
 
-              <Field label="Erfasser / Bauleiter" required>
+              <Field label={t("diary.fieldAuthor")} required>
                 <input
                   type="text"
                   required
@@ -258,20 +260,20 @@ export function SiteDiaryTab({ diary, projects, onRefresh }: SiteDiaryTabProps) 
                 />
               </Field>
 
-              <Field label="Witterung">
+              <Field label={t("diary.fieldWeather")}>
                 <select
                   value={newWeather}
                   onChange={(e) => setNewWeather(e.target.value as any)}
                 >
-                  <option value="Sonnig">Sonnig</option>
-                  <option value="Bewölkt">Bewölkt</option>
-                  <option value="Regen">Regen</option>
-                  <option value="Frost">Frost</option>
-                  <option value="Schnee">Schnee</option>
+                  <option value="Sonnig">{t("weather.sunny")}</option>
+                  <option value="Bewölkt">{t("weather.cloudy")}</option>
+                  <option value="Regen">{t("weather.rain")}</option>
+                  <option value="Frost">{t("weather.frost")}</option>
+                  <option value="Schnee">{t("weather.snow")}</option>
                 </select>
               </Field>
 
-              <Field label="Temperatur (°C)">
+              <Field label={t("diary.fieldTemperature")}>
                 <input
                   type="number"
                   value={newTemp}
@@ -280,7 +282,7 @@ export function SiteDiaryTab({ diary, projects, onRefresh }: SiteDiaryTabProps) 
               </Field>
 
               <div className="field wide">
-                <span className="field-label">Anwesende Gewerke auf der Baustelle:</span>
+                <span className="field-label">{t("diary.fieldTrades")}</span>
                 <div className="chips wrap">
                   {availableTrades.map((trade) => {
                     const isSelected = newTrades.includes(trade);
@@ -292,27 +294,27 @@ export function SiteDiaryTab({ diary, projects, onRefresh }: SiteDiaryTabProps) 
                         onClick={() => toggleTrade(trade)}
                         className={isSelected ? "chip active" : "chip"}
                       >
-                        {trade}
+                        {tradeLabel(trade)}
                       </button>
                     );
                   })}
                 </div>
               </div>
 
-              <Field label="Tätigkeitsbericht & Baufortschritt" required wide>
+              <Field label={t("diary.fieldActivities")} required wide>
                 <textarea
                   rows={3}
                   required
-                  placeholder="Ausgeführte Arbeiten aller Monteure, erreichte Bauabschnitte..."
+                  placeholder={t("diary.activitiesPlaceholder")}
                   value={newActivities}
                   onChange={(e) => setNewActivities(e.target.value)}
                 />
               </Field>
 
-              <Field label="Behinderungen, Mängel oder Lieferverzug (optional)" wide>
+              <Field label={t("diary.fieldIssues")} wide>
                 <input
                   type="text"
-                  placeholder="z.B. Vorleistung Trockenbauer unvollständig, kein Baustrom vorhanden"
+                  placeholder={t("diary.issuesPlaceholder")}
                   value={newIssues}
                   onChange={(e) => setNewIssues(e.target.value)}
                 />
@@ -321,10 +323,10 @@ export function SiteDiaryTab({ diary, projects, onRefresh }: SiteDiaryTabProps) 
 
             <div className="row gap craft-dialog-actions">
               <button type="button" onClick={() => setIsModalOpen(false)} className="button">
-                Abbrechen
+                {t("common.cancel")}
               </button>
               <button type="submit" disabled={isBusy} className="button primary">
-                Eintrag speichern
+                {t("diary.save")}
               </button>
             </div>
           </form>

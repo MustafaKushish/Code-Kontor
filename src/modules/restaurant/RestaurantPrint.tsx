@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { Printer, X } from "lucide-react";
 import type { RestaurantOrder } from "../../../shared/restaurant";
 import type { CompanyProfile } from "../../../shared/company";
-import { currency as companyCurrency } from "../../money";
+import { useRestaurantI18n } from "./i18n";
 
 interface RestaurantPrintProps {
   order: RestaurantOrder;
@@ -15,13 +15,13 @@ interface RestaurantPrintProps {
 export function RestaurantPrint({ order, company, type, onClose }: RestaurantPrintProps) {
   const isGuest = type === "guest";
   const isBar = type === "bar";
+  const { t, euro, time, day, course, payment } = useRestaurantI18n();
 
   const handlePrint = () => {
     window.print();
   };
 
-  const fmtEuro = (amount: number) =>
-    new Intl.NumberFormat("de-DE", { style: "currency", currency: companyCurrency() }).format(amount);
+  const fmtEuro = euro;
 
   const filteredItems = isGuest
     ? order.items
@@ -39,22 +39,22 @@ export function RestaurantPrint({ order, company, type, onClose }: RestaurantPri
       <div className="print-toolbar">
         <button onClick={handlePrint} className="button primary">
           <Printer size={18} />
-          Jetzt drucken
+          {t("print.printNow")}
         </button>
         <button onClick={onClose} className="button">
           <X size={18} />
-          Schließen
+          {t("print.close")}
         </button>
       </div>
 
       <article className="print-sheet restaurant-bon">
         <p className="restaurant-bon-caption">
-          {isGuest ? "Bewirtungsbeleg / Gastrechnung" : isBar ? "Schank- / Barbon" : "Küchenbon"} ({order.orderNumber})
+          {isGuest ? t("print.guestCaption") : isBar ? t("print.barCaption") : t("print.kitchenCaption")} ({order.orderNumber})
         </p>
 
         <header className="restaurant-bon-head">
           <h1>
-            {isGuest ? company?.name || "Restaurant & Café" : isBar ? "*** SCHANKBON ***" : "*** KÜCHENBON ***"}
+            {isGuest ? company?.name || t("app.defaultName") : isBar ? t("print.barHeading") : t("print.kitchenHeading")}
           </h1>
           {isGuest && company?.street && (
             <p className="restaurant-bon-soft">
@@ -64,14 +64,14 @@ export function RestaurantPrint({ order, company, type, onClose }: RestaurantPri
           <p className="restaurant-bon-split restaurant-bon-rule">
             <strong>
               {order.type === "tisch"
-                ? order.tableName || "Tisch"
-                : `Abholung #${order.pickupNumber || order.orderNumber}`}
+                ? order.tableName || t("print.table")
+                : t("print.pickup", { n: order.pickupNumber || order.orderNumber })}
             </strong>
-            <span>{new Date(order.createdAt).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}</span>
+            <span>{time(order.createdAt)}</span>
           </p>
           <p className="restaurant-bon-split restaurant-bon-soft">
-            <span>Bon-Nr.: {order.orderNumber}</span>
-            <span>{order.type === "abholung" ? "Außer Haus (Takeaway)" : "Im Haus verzehrt"}</span>
+            <span>{t("print.ticketNo", { n: order.orderNumber })}</span>
+            <span>{order.type === "abholung" ? t("print.takeaway") : t("print.dineIn")}</span>
           </p>
         </header>
 
@@ -82,9 +82,9 @@ export function RestaurantPrint({ order, company, type, onClose }: RestaurantPri
                 <p>
                   <strong className="restaurant-bon-qty">{item.quantity}x</strong> <strong>{item.name}</strong>
                 </p>
-                {item.note && <p className="restaurant-bon-wish">» WUNSCH: {item.note}</p>}
+                {item.note && <p className="restaurant-bon-wish">{t("print.wish", { note: item.note })}</p>}
                 {item.course && item.course !== "Sofort" && (
-                  <p className="restaurant-bon-indent restaurant-bon-soft">[{item.course}]</p>
+                  <p className="restaurant-bon-indent restaurant-bon-soft">[{course(item.course)}]</p>
                 )}
               </div>
               {isGuest && <strong>{fmtEuro(item.quantity * item.unitPriceGross)}</strong>}
@@ -95,38 +95,38 @@ export function RestaurantPrint({ order, company, type, onClose }: RestaurantPri
         {isGuest && (
           <div className="restaurant-bon-totals">
             <p className="restaurant-bon-split restaurant-bon-soft">
-              <span>Nettosumme:</span>
+              <span>{t("print.net")}</span>
               <span>{fmtEuro(order.totalNet)}</span>
             </p>
             {order.totalTax7 > 0 && (
               <p className="restaurant-bon-split restaurant-bon-soft">
-                <span>MwSt. 7% (Speisen):</span>
+                <span>{t("print.tax7")}</span>
                 <span>{fmtEuro(order.totalTax7)}</span>
               </p>
             )}
             {order.totalTax19 > 0 && (
               <p className="restaurant-bon-split restaurant-bon-soft">
-                <span>MwSt. 19% (Getränke / In-Haus):</span>
+                <span>{t("print.tax19")}</span>
                 <span>{fmtEuro(order.totalTax19)}</span>
               </p>
             )}
             <p className="restaurant-bon-split restaurant-bon-grand">
-              <span>GESAMTBETRAG:</span>
+              <span>{t("print.total")}</span>
               <span>{fmtEuro(order.totalGross)}</span>
             </p>
 
             {order.paymentStatus === "bezahlt" && (
               <p className="restaurant-bon-paid">
-                *** DANKESCHÖN - VOLLSTÄNDIG BEZAHLT ({order.paymentMethod?.toUpperCase()}) ***
+                {t("print.paid", { method: payment(order.paymentMethod).toLocaleUpperCase() })}
               </p>
             )}
 
             <div className="restaurant-bon-hospitality">
-              <p><strong>Angaben zu Bewirtungskosten (§ 4 Abs. 5 Ziff. 2 EStG)</strong></p>
-              <p className="restaurant-bon-field">Tag der Bewirtung: {new Date().toLocaleDateString("de-DE")}</p>
-              <p className="restaurant-bon-field">Bewirtete Personen (Name): ________________________________________</p>
-              <p className="restaurant-bon-field">Anlass der Bewirtung: _____________________________________________</p>
-              <p className="restaurant-bon-sign">____________________________________<br />Unterschrift des Gastgebers</p>
+              <p><strong>{t("print.hospitalityTitle")}</strong></p>
+              <p className="restaurant-bon-field">{t("print.hospitalityDate", { date: day(new Date()) })}</p>
+              <p className="restaurant-bon-field">{t("print.hospitalityGuests")} ________________________________________</p>
+              <p className="restaurant-bon-field">{t("print.hospitalityOccasion")} _____________________________________________</p>
+              <p className="restaurant-bon-sign">____________________________________<br />{t("print.hostSignature")}</p>
             </div>
           </div>
         )}

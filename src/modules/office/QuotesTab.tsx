@@ -6,10 +6,9 @@ import { Dialog } from "../../pos/ui";
 import type { LineItem, OfficeClient, OfficeProject, OfficeQuote, QuoteStatus } from "../../../shared/office";
 import { useOfficeI18n } from "./i18n";
 import { PrintDocument } from "./PrintDocument";
-import { currencySymbol } from "../../money";
 
 export function QuotesTab({ isManager }: { isManager: boolean }) {
-  const { o, euro, day, officeError } = useOfficeI18n();
+  const { o, euro, cur, day, unitLabel, officeError } = useOfficeI18n();
   const [quotes, setQuotes] = useState<OfficeQuote[]>([]);
   const [clients, setClients] = useState<OfficeClient[]>([]);
   const [projects, setProjects] = useState<OfficeProject[]>([]);
@@ -34,14 +33,14 @@ export function QuotesTab({ isManager }: { isManager: boolean }) {
     clientId: "",
     projectId: "",
     status: "draft",
-    title: "Angebot für Dienstleistungen",
+    title: o("quotes.defaultTitle"),
     validUntil: new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10),
-    notes: "Zahlbar innerhalb von 14 Tagen nach Rechnungsstellung.",
+    notes: o("quotes.initialNotes"),
     items: [
       {
         id: crypto.randomUUID(),
-        title: "Beratung & Konzeption",
-        description: "Anforderungsanalyse und Fachkonzept",
+        title: o("quotes.initialItemTitle"),
+        description: o("quotes.initialItemDescription"),
         qty: 8,
         unit: "Std",
         unitCents: 9500,
@@ -81,14 +80,14 @@ export function QuotesTab({ isManager }: { isManager: boolean }) {
       clientId: clientFilter !== "all" ? clientFilter : (clients[0]?.id || ""),
       projectId: "",
       status: "draft",
-      title: "Angebot für Dienstleistungen",
+      title: o("quotes.defaultTitle"),
       validUntil: new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10),
-      notes: "Dieses Angebot ist freibleibend und 30 Tage gültig.",
+      notes: o("quotes.defaultNotes"),
       items: [
         {
           id: crypto.randomUUID(),
-          title: "Dienstleistung",
-          description: "Leistungserbringung nach Vereinbarung",
+          title: o("quotes.defaultItemTitle"),
+          description: o("quotes.defaultItemDescription"),
           qty: 1,
           unit: "Pauschal",
           unitCents: 150000,
@@ -113,7 +112,7 @@ export function QuotesTab({ isManager }: { isManager: boolean }) {
       items: quote.items.length > 0 ? quote.items : [
         {
           id: crypto.randomUUID(),
-          title: "Dienstleistung",
+          title: o("quotes.defaultItemTitle"),
           description: "",
           qty: 1,
           unit: "Std",
@@ -143,7 +142,7 @@ export function QuotesTab({ isManager }: { isManager: boolean }) {
         ...form.items,
         {
           id: crypto.randomUUID(),
-          title: "Neue Position",
+          title: o("quotes.newItemTitle"),
           description: "",
           qty: 1,
           unit: "Std",
@@ -187,11 +186,11 @@ export function QuotesTab({ isManager }: { isManager: boolean }) {
   };
 
   const handleConvert = async (quote: OfficeQuote) => {
-    if (!confirm(`Angebot ${quote.number} wirklich in eine Rechnung umwandeln?`)) return;
+    if (!confirm(o("quotes.convertConfirm", { number: quote.number }))) return;
     try {
       await api(`/office/quotes/${quote.id}/convert`, { method: "POST" });
       await loadData();
-      alert("Rechnung erfolgreich erstellt! Sie finden sie im Reiter „Rechnungen“.");
+      alert(o("quotes.convertDone"));
     } catch (err) {
       alert(officeError(err));
     }
@@ -219,15 +218,15 @@ export function QuotesTab({ isManager }: { isManager: boolean }) {
       <div className="office-stats">
         <div className="tile stat-tile">
           <span className="stat-icon"><FileText size={18} /></span>
-          <strong>{euro(openCents)}</strong><small>Offene Angebote · {openQuotes.length} Angebote in Prüfung</small>
+          <strong>{euro(openCents)}</strong><small>{o("quotes.statOpen", { n: openQuotes.length })}</small>
         </div>
         <div className="tile stat-tile">
           <span className="stat-icon"><CheckCircle size={18} /></span>
-          <strong>{euro(acceptedCents)}</strong><small>Angenommene Angebote · {acceptedQuotes.length} erfolgreich beauftragt</small>
+          <strong>{euro(acceptedCents)}</strong><small>{o("quotes.statAccepted", { n: acceptedQuotes.length })}</small>
         </div>
         <div className="tile stat-tile">
           <span className="stat-icon"><Files size={18} /></span>
-          <strong>{quotes.length}</strong><small>Gesamtanzahl Angebote</small>
+          <strong>{quotes.length}</strong><small>{o("quotes.statTotal")}</small>
         </div>
       </div>
 
@@ -248,8 +247,8 @@ export function QuotesTab({ isManager }: { isManager: boolean }) {
 
         <div className="row wrap gap office-filters">
           {clients.length > 0 && (
-            <select value={clientFilter} onChange={(e) => setClientFilter(e.target.value)} aria-label="Kunde">
-              <option value="all">Alle Kunden</option>
+            <select value={clientFilter} onChange={(e) => setClientFilter(e.target.value)} aria-label={o("common.client")}>
+              <option value="all">{o("common.allClients")}</option>
               {clients.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
@@ -266,7 +265,7 @@ export function QuotesTab({ isManager }: { isManager: boolean }) {
       </div>
 
       {loading ? (
-        <p className="muted">Laden...</p>
+        <p className="muted">{o("common.loading")}</p>
       ) : (
         <section className="card list-card">
           {filteredQuotes.length === 0 && <p className="empty muted">{o("quotes.noQuotes")}</p>}
@@ -280,7 +279,7 @@ export function QuotesTab({ isManager }: { isManager: boolean }) {
                 </span>
                 <span className="office-row-meta">
                   <strong>{euro(q.totalCents)}</strong>
-                  <small className="muted">Netto {euro(q.netCents)} · Gültig bis {day(q.validUntil)}</small>
+                  <small className="muted">{o("quotes.rowMeta", { net: euro(q.netCents), date: day(q.validUntil) })}</small>
                   <span className={`pill ${q.status === "accepted" ? "success" : q.status === "rejected" ? "neg" : q.status === "sent" ? "warn" : ""}`}>
                     {o(`quotes.status.${q.status}`)}
                   </span>
@@ -292,7 +291,7 @@ export function QuotesTab({ isManager }: { isManager: boolean }) {
                 </button>
                 {q.status !== "accepted" && (
                   <button className="button small-button primary" onClick={() => handleConvert(q)} title={o("quotes.convertToInvoice")}>
-                    <ArrowRight size={15} /> Rechnung
+                    <ArrowRight size={15} /> {o("quotes.convertButton")}
                   </button>
                 )}
                 {isManager && (
@@ -322,20 +321,20 @@ export function QuotesTab({ isManager }: { isManager: boolean }) {
 
       {/* Dialog: Angebot erstellen / bearbeiten */}
       {modalOpen && (
-        <Dialog title={editingQuote ? "Angebot bearbeiten" : o("quotes.newQuote")} onClose={() => setModalOpen(false)} wide>
+        <Dialog title={editingQuote ? o("quotes.editQuote") : o("quotes.newQuote")} onClose={() => setModalOpen(false)} wide>
           <form onSubmit={handleSave} className="stack office-dialog">
             {errorMsg && <p className="error" role="alert">{errorMsg}</p>}
             <div className="grid form-grid">
-              <Field label="Kunde" required>
+              <Field label={o("documents.client")} required>
                 <select required value={form.clientId} onChange={(e) => setForm({ ...form, clientId: e.target.value })}>
                   {clients.map((c) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </select>
               </Field>
-              <Field label="Projekt (optional)">
+              <Field label={o("documents.projectOptional")}>
                 <select value={form.projectId} onChange={(e) => setForm({ ...form, projectId: e.target.value })}>
-                  <option value="">Keinem Projekt zugeordnet</option>
+                  <option value="">{o("documents.noProject")}</option>
                   {projects
                     .filter((p) => !form.clientId || p.clientId === form.clientId)
                     .map((p) => (
@@ -343,13 +342,13 @@ export function QuotesTab({ isManager }: { isManager: boolean }) {
                     ))}
                 </select>
               </Field>
-              <Field label="Betreff / Titel" required wide>
+              <Field label={o("documents.subject")} required wide>
                 <input type="text" required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
               </Field>
               <Field label={o("quotes.validUntil")}>
                 <input type="date" value={form.validUntil} onChange={(e) => setForm({ ...form, validUntil: e.target.value })} />
               </Field>
-              <Field label="Status">
+              <Field label={o("documents.status")}>
                 <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as QuoteStatus })}>
                   <option value="draft">{o("quotes.status.draft")}</option>
                   <option value="sent">{o("quotes.status.sent")}</option>
@@ -363,7 +362,7 @@ export function QuotesTab({ isManager }: { isManager: boolean }) {
             {/* Positionen */}
             <div className="office-section">
               <div className="section-head">
-                <h3 className="card-subtitle">Positionen & Leistungen</h3>
+                <h3 className="card-subtitle">{o("quotes.itemsTitle")}</h3>
                 <button type="button" className="button small-button" onClick={addItem}>
                   <Plus size={15} /> {o("common.addItem")}
                 </button>
@@ -371,10 +370,10 @@ export function QuotesTab({ isManager }: { isManager: boolean }) {
 
               {form.items.map((it, idx) => (
                 <div key={it.id || idx} className="office-line">
-                  <Field label="Titel / Leistung" wide>
+                  <Field label={o("documents.itemTitle")} wide>
                     <input type="text" required value={it.title} onChange={(e) => updateItem(idx, { title: e.target.value })} />
                   </Field>
-                  <Field label="Menge">
+                  <Field label={o("documents.qty")}>
                     <input
                       type="number"
                       step="0.01"
@@ -383,15 +382,14 @@ export function QuotesTab({ isManager }: { isManager: boolean }) {
                       onChange={(e) => updateItem(idx, { qty: parseFloat(e.target.value || "1") })}
                     />
                   </Field>
-                  <Field label="Einheit">
+                  <Field label={o("documents.unit")}>
                     <select value={it.unit} onChange={(e) => updateItem(idx, { unit: e.target.value })}>
-                      <option value="Std">Std</option>
-                      <option value="Tag">Tag</option>
-                      <option value="Stk">Stk</option>
-                      <option value="Pauschal">Pauschal</option>
+                      {["Std", "Tag", "Stk", "Pauschal"].map((u) => (
+                        <option key={u} value={u}>{unitLabel(u)}</option>
+                      ))}
                     </select>
                   </Field>
-                  <Field label={`Einzelpreis (${currencySymbol("de-DE")})`}>
+                  <Field label={o("documents.unitPrice", { currency: cur() })}>
                     <input
                       type="number"
                       step="0.01"
@@ -400,7 +398,7 @@ export function QuotesTab({ isManager }: { isManager: boolean }) {
                       onChange={(e) => updateItem(idx, { unitCents: Math.round(parseFloat(e.target.value || "0") * 100) })}
                     />
                   </Field>
-                  <Field label="MwSt.">
+                  <Field label={o("documents.vat")}>
                     <select value={it.vatRate} onChange={(e) => updateItem(idx, { vatRate: parseInt(e.target.value, 10) || 19 })}>
                       <option value={19}>19%</option>
                       <option value={7}>7%</option>
@@ -417,8 +415,8 @@ export function QuotesTab({ isManager }: { isManager: boolean }) {
                   <input
                     type="text"
                     className="wide"
-                    placeholder="Zusätzliche Leistungsbeschreibung (optional)"
-                    aria-label="Zusätzliche Leistungsbeschreibung (optional)"
+                    placeholder={o("documents.itemDescription")}
+                    aria-label={o("documents.itemDescription")}
                     value={it.description}
                     onChange={(e) => updateItem(idx, { description: e.target.value })}
                   />
@@ -427,16 +425,16 @@ export function QuotesTab({ isManager }: { isManager: boolean }) {
 
               <table className="price-table office-totals">
                 <tbody>
-                  <tr><td>Netto:</td><td><strong>{euro(totals.net)}</strong></td></tr>
-                  <tr><td>Umsatzsteuer:</td><td>{euro(totals.vat)}</td></tr>
+                  <tr><td>{o("documents.net")}</td><td><strong>{euro(totals.net)}</strong></td></tr>
+                  <tr><td>{o("documents.vatTotal")}</td><td>{euro(totals.vat)}</td></tr>
                 </tbody>
                 <tfoot>
-                  <tr><th>Gesamt:</th><th>{euro(totals.gross)}</th></tr>
+                  <tr><th>{o("documents.total")}</th><th>{euro(totals.gross)}</th></tr>
                 </tfoot>
               </table>
             </div>
 
-            <Field label="Hinweise & Zahlungsbedingungen">
+            <Field label={o("documents.notes")}>
               <textarea rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
             </Field>
 
