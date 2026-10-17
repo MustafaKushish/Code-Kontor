@@ -62,6 +62,9 @@ restaurantRoutes.use("*", async (c, next) => {
   await next();
 });
 
+/** Bezahlt wird nur über die Kasse (mit Beleg); Zahlungsfelder aus dem Browser zählen nicht. */
+const unpaid = ({ paymentStatus: _s, paymentMethod: _m, ...rest }: Record<string, unknown>) => rest;
+
 // ---------- STATS ----------
 restaurantRoutes.get("/stats", async (c) => {
   const user = c.get("user");
@@ -142,7 +145,7 @@ restaurantRoutes.post("/orders", async (c) => {
   if (!Array.isArray(body.items) || body.items.length === 0) {
     return fail(c, "checkFields", 400);
   }
-  const res = await store(c.env, user.tenantId).createOrder(body as any);
+  const res = await store(c.env, user.tenantId).createOrder(unpaid(body) as any);
   if (!res.ok) return moduleError(c, res.code);
   return c.json(res.value, 201);
 });
@@ -150,7 +153,7 @@ restaurantRoutes.post("/orders", async (c) => {
 restaurantRoutes.put("/orders/:id", async (c) => {
   const user = c.get("user");
   const body = await readBody(c);
-  const res = await store(c.env, user.tenantId).updateOrder(c.req.param("id"), body as any);
+  const res = await store(c.env, user.tenantId).updateOrder(c.req.param("id"), unpaid(body) as any);
   if (!res.ok) return moduleError(c, res.code);
   return c.json(res.value);
 });
@@ -173,15 +176,6 @@ restaurantRoutes.post("/orders/:id/items/:itemId/status", async (c) => {
     c.req.param("itemId"),
     body.status as any,
   );
-  if (!res.ok) return moduleError(c, res.code);
-  return c.json(res.value);
-});
-
-restaurantRoutes.post("/orders/:id/checkout", async (c) => {
-  const user = c.get("user");
-  const body = await readBody(c);
-  const method = (typeof body.paymentMethod === "string" ? body.paymentMethod : "bar") as any;
-  const res = await store(c.env, user.tenantId).checkoutOrder(c.req.param("id"), method);
   if (!res.ok) return moduleError(c, res.code);
   return c.json(res.value);
 });

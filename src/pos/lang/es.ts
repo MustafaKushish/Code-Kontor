@@ -298,8 +298,10 @@ export const es: PosDict = {
   },
   moduleGroups: {
     repairs: { part: "Recambios", accessory: "Accesorios", used: "Equipos usados", order: "Listo para recoger" },
+    salon: { appointment: "Citas", service: "Servicios" }, retail: { product: "Artículos" }, workshop: { order: "Órdenes de taller", part: "Recambios" }, restaurant: { order: "Pedidos abiertos", menu: "Comida y bebida" }, craft: { report: "Partes de trabajo" },
   },
   moduleErrors: {
+    alreadyPaid: "Ya está pagado.", notPayable: "No se puede cobrar: anulado o ya pagado.",
     notFound: "Un artículo ya no existe. Recarga.",
     alreadySold: "Este dispositivo ya está vendido.",
     statusNotAllowed: "El pedido no está listo para recoger.",

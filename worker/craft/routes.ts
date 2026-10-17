@@ -171,15 +171,6 @@ craftRoutes.post("/reports/:id/sign", async (c) => {
   return c.json(res.value);
 });
 
-craftRoutes.post("/reports/:id/checkout", async (c) => {
-  const user = c.get("user");
-  const body = await readBody(c);
-  const method = (typeof body.paymentMethod === "string" ? body.paymentMethod : "bar") as any;
-  const res = await store(c.env, user.tenantId).checkoutReport(c.req.param("id"), method);
-  if (!res.ok) return moduleError(c, res.code);
-  return c.json(res.value);
-});
-
 craftRoutes.delete("/reports/:id", managers, async (c) => {
   const user = c.get("user");
   const res = await store(c.env, user.tenantId).deleteReport(c.req.param("id"));

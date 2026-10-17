@@ -1299,3 +1299,12 @@ fieldset.grid { border: 0; padding: 0; margin: 0; min-width: 0; }
 @media (max-width: 640px) {
   .settings-section fieldset.grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Bezahlen eines Vorgangs aus einem Branchen-System */
+.module-checkout-lines { width: 100%; border-collapse: collapse; }
+.module-checkout-lines td, .module-checkout-lines th { padding: 6px 4px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.module-checkout-lines td:first-child { white-space: nowrap; color: var(--muted); width: 1%; }
+.module-checkout-lines .num { text-align: right; white-space: nowrap; }
+.module-checkout-lines tfoot th { border-bottom: 0; font-size: 1.05rem; }
+.module-checkout-done { align-items: center; justify-items: center; text-align: center; }
+.module-checkout-done svg { color: var(--ok, #1a7f37); }

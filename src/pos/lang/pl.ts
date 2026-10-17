@@ -298,8 +298,10 @@ export const pl: PosDict = {
   },
   moduleGroups: {
     repairs: { part: "Części zamienne", accessory: "Akcesoria", used: "Urządzenia używane", order: "Gotowe do odbioru" },
+    salon: { appointment: "Wizyty", service: "Usługi" }, retail: { product: "Artykuły" }, workshop: { order: "Zlecenia warsztatu", part: "Części zamienne" }, restaurant: { order: "Otwarte zamówienia", menu: "Jedzenie i napoje" }, craft: { report: "Raporty pracy" },
   },
   moduleErrors: {
+    alreadyPaid: "To jest już opłacone.", notPayable: "Nie można rozliczyć: anulowane lub już opłacone.",
     notFound: "Pozycja już nie istnieje. Odśwież.",
     alreadySold: "To urządzenie jest już sprzedane.",
     statusNotAllowed: "Zlecenie nie jest gotowe do odbioru.",

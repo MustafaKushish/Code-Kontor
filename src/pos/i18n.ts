@@ -53,7 +53,9 @@ export function usePosI18n() {
   /** Fehler der Kasse und der angebundenen Systeme mit eigenen Texten, sonst wie in der Plattform. */
   const posError = (error: unknown) => {
     if (error instanceof ApiError && error.code?.startsWith("pos.")) return p(`errors.${error.code.slice(4)}`);
-    if (error instanceof ApiError && error.code?.startsWith("repairs.") && lookup(de.moduleErrors, error.code.slice(8))) return p(`moduleErrors.${error.code.slice(8)}`);
+    // Fehler der Systeme kommen mit Vorsilbe, z. B. „repairs.loanerOut“ oder „salon.notPayable“
+    const moduleCode = error instanceof ApiError ? error.code?.split(".")[1] : undefined;
+    if (moduleCode && lookup(de.moduleErrors, moduleCode)) return p(`moduleErrors.${moduleCode}`);
     return core.errorText(error);
   };
 

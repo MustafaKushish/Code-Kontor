@@ -695,7 +695,7 @@ export const uk: Dict = {
     toPos: "До каси",
     noData: "Поки нічого",
     noGroup: "Без групи",
-    moduleGroups: { repair: "Ремонт", part: "Запчастини", used: "Вживані пристрої", other: "Інше" },
+    moduleGroups: { appointment: "Записи", service: "Послуги", product: "Товари", order: "Замовлення", menu: "Їжа та напої", report: "Звіти про роботу", repair: "Ремонт", part: "Запчастини", used: "Вживані пристрої", other: "Інше" },
     chart: { hour: "Виторг за годинами", day: "Виторг за днями", month: "Виторг за місяцями" },
   },
   legal: {

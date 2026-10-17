@@ -298,8 +298,10 @@ export const tr: PosDict = {
   },
   moduleGroups: {
     repairs: { part: "Yedek parçalar", accessory: "Aksesuarlar", used: "İkinci el cihazlar", order: "Teslime hazır" },
+    salon: { appointment: "Randevular", service: "Hizmetler" }, retail: { product: "Ürünler" }, workshop: { order: "Servis siparişleri", part: "Yedek parçalar" }, restaurant: { order: "Açık siparişler", menu: "Yiyecek ve içecek" }, craft: { report: "İş raporları" },
   },
   moduleErrors: {
+    alreadyPaid: "Bu zaten ödendi.", notPayable: "Tahsil edilemez: iptal edildi veya zaten ödendi.",
     notFound: "Bir kalem artık yok. Yenile.",
     alreadySold: "Bu cihaz zaten satıldı.",
     statusNotAllowed: "Sipariş teslime hazır değil.",

@@ -695,7 +695,7 @@ export const ru: Dict = {
     toPos: "К кассе",
     noData: "Пока ничего",
     noGroup: "Без группы",
-    moduleGroups: { repair: "Ремонт", part: "Запчасти", used: "Б/у устройства", other: "Прочее" },
+    moduleGroups: { appointment: "Записи", service: "Услуги", product: "Товары", order: "Заказы", menu: "Еда и напитки", report: "Отчёты о работе", repair: "Ремонт", part: "Запчасти", used: "Б/у устройства", other: "Прочее" },
     chart: { hour: "Выручка по часам", day: "Выручка по дням", month: "Выручка по месяцам" },
   },
   legal: {

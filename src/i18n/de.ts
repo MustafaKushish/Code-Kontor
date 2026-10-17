@@ -696,7 +696,7 @@ export const de = {
     toPos: "Zur Kasse",
     noData: "Noch nichts",
     noGroup: "Ohne Warengruppe",
-    moduleGroups: { repair: "Reparaturen", part: "Ersatzteile", used: "Gebrauchtgeräte", other: "Sonstiges" },
+    moduleGroups: { appointment: "Termine", service: "Dienstleistungen", product: "Artikel", order: "Aufträge", menu: "Speisen & Getränke", report: "Arbeitsberichte", repair: "Reparaturen", part: "Ersatzteile", used: "Gebrauchtgeräte", other: "Sonstiges" },
     chart: { hour: "Umsatz nach Stunde", day: "Umsatz pro Tag", month: "Umsatz pro Monat" },
   },
   legal: {

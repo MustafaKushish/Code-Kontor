@@ -695,7 +695,7 @@ export const en: Dict = {
     toPos: "Go to till",
     noData: "Nothing yet",
     noGroup: "No product group",
-    moduleGroups: { repair: "Repairs", part: "Spare parts", used: "Used devices", other: "Other" },
+    moduleGroups: { appointment: "Appointments", service: "Services", product: "Products", order: "Orders", menu: "Food & drinks", report: "Work reports", repair: "Repairs", part: "Spare parts", used: "Used devices", other: "Other" },
     chart: { hour: "Revenue by hour", day: "Revenue per day", month: "Revenue per month" },
   },
   legal: {

@@ -298,8 +298,10 @@ export const ar: PosDict = {
   },
   moduleGroups: {
     repairs: { part: "قطع الغيار", accessory: "الملحقات", used: "أجهزة مستعملة", order: "جاهز للاستلام" },
+    salon: { appointment: "المواعيد", service: "الخدمات" }, retail: { product: "المنتجات" }, workshop: { order: "طلبات الورشة", part: "قطع الغيار" }, restaurant: { order: "طلبات مفتوحة", menu: "طعام ومشروبات" }, craft: { report: "تقارير العمل" },
   },
   moduleErrors: {
+    alreadyPaid: "تم الدفع بالفعل.", notPayable: "لا يمكن المحاسبة: ملغى أو مدفوع بالفعل.",
     notFound: "أحد البنود لم يعد موجودًا. أعد التحميل.",
     alreadySold: "هذا الجهاز مُباع بالفعل.",
     statusNotAllowed: "الطلب غير جاهز للاستلام.",

@@ -11,6 +11,8 @@ import {
   type SalonSettings,
   type SalonStaff,
 } from "../../shared/salon";
+import type { PosArticle, PosLine } from "../../shared/pos";
+import type { PosModule } from "../pos/store";
 
 export class SalonError extends Error {
   constructor(public code: string) {
@@ -892,6 +894,76 @@ export class SalonStore {
     }
 
     return this.getSettings();
+  }
+
+  // ==========================================
+  // KASSE: Termine und Dienstleistungen werden in der Kasse der Plattform abgerechnet
+  // ==========================================
+
+  posModule(): PosModule {
+    const today = () => new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Berlin" });
+    const payable = (a: SalonAppointment) => !a.paid && a.status !== "canceled" && a.status !== "no_show";
+    const appointmentArticle = (a: SalonAppointment): PosArticle => ({
+      source: "salon", kind: "appointment", refId: a.id, name: `${a.startTime} ${a.clientName}`, detail: [a.serviceNames.join(", "), a.staffName].filter(Boolean).join(" · "),
+      priceCents: a.totalCents, vatRate: 0, single: true, group: "@salon.appointment",
+    });
+    const serviceArticle = (srv: SalonService): PosArticle => ({
+      source: "salon", kind: "service", refId: srv.id, name: srv.name, detail: `${srv.durationMinutes} min`, priceCents: srv.priceCents, vatRate: srv.vatRate, group: "@salon.service",
+    });
+    // Offene Termine von heute und den letzten Tagen (jemand hat vergessen abzurechnen)
+    const open = () =>
+      this.sql
+        .all<any>(`SELECT * FROM salon_appointments WHERE paid = 0 AND status NOT IN ('canceled', 'no_show') AND day <= ? AND day >= date(?, '-7 days') ORDER BY day DESC, start_time`, [today(), today()])
+        .map(this.mapAppointment);
+    return {
+      articles: (query) => {
+        const q = query.trim().toLowerCase();
+        return [
+          ...open().filter((a) => a.clientName.toLowerCase().includes(q)).map(appointmentArticle),
+          ...this.listServices().filter((srv) => srv.name.toLowerCase().includes(q)).map(serviceArticle),
+        ];
+      },
+      catalog: () => [...open().filter((a) => a.day === today()).map(appointmentArticle), ...this.listServices().map(serviceArticle)],
+      scan: (code) => {
+        const a = this.getAppointment(code);
+        return a && payable(a) ? [appointmentArticle(a)] : [];
+      },
+      prepare: (line) => {
+        if (line.kind === "service") {
+          const srv = line.refId ? this.getService(line.refId) : null;
+          if (!srv) throw new SalonError("notFound");
+          return { lines: [{ ...line, name: line.name || srv.name, kind: "service", vatRate: srv.vatRate }] };
+        }
+        const a = line.refId ? this.getAppointment(line.refId) : null;
+        if (!a) throw new SalonError("notFound");
+        if (!payable(a)) throw new SalonError("notPayable");
+        // Preise und Steuersätze der Dienstleistungen; gibt es eine nicht mehr, gilt der Betrag des Termins
+        const services = a.serviceIds.map((id) => this.getService(id));
+        const lines: PosLine[] = services.every((srv) => srv)
+          ? (services as SalonService[]).map((srv) => ({ source: "salon", kind: "appointment:service", refId: a.id, name: srv.name, qty: 1, unitCents: srv.priceCents, vatRate: srv.vatRate }))
+          : [{ source: "salon", kind: "appointment:service", refId: a.id, name: a.serviceNames.join(", ") || "Termin", qty: 1, unitCents: a.totalCents, vatRate: services.find((srv) => srv)?.vatRate ?? 19 }];
+        const client = a.clientId ? this.getClient(a.clientId) : null;
+        return {
+          lines,
+          refs: [{ source: "salon", kind: "appointment", refId: a.id, label: `${a.day} ${a.startTime} · ${a.clientName}` }],
+          customer: { id: client?.id ?? null, name: a.clientName, address: "", phone: a.clientPhone, email: a.clientEmail },
+        };
+      },
+      booked: (receipt, _lines, refs) => {
+        for (const ref of refs) {
+          if (ref.kind !== "appointment") continue;
+          const a = this.getAppointment(ref.refId);
+          if (!a || !payable(a)) throw new SalonError("notPayable");
+          this.sql.run(`UPDATE salon_appointments SET paid = 1, status = 'completed', billed_invoice_id = ?, updated_at = ? WHERE id = ?`, [receipt?.number ?? null, new Date().toISOString(), a.id]);
+        }
+      },
+      canceled: (original) => {
+        for (const ref of original.refs) {
+          if (ref.source !== "salon" || ref.kind !== "appointment") continue;
+          this.sql.run(`UPDATE salon_appointments SET paid = 0, billed_invoice_id = NULL, updated_at = ? WHERE id = ? AND billed_invoice_id = ?`, [new Date().toISOString(), ref.refId, original.number]);
+        }
+      },
+    };
   }
 
   // ==========================================

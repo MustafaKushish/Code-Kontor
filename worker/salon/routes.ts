@@ -184,7 +184,7 @@ salonRoutes.get("/appointments/:id", async (c) => {
 
 salonRoutes.post("/appointments", async (c) => {
   const body = await readBody(c);
-  const res = await store(c.env, c.get("user").tenantId).saveAppointment(body);
+  const res = await store(c.env, c.get("user").tenantId).saveAppointment({ ...body, paid: undefined }); // bezahlt nur über die Kasse
   if (!res.ok) return moduleError(c, res.code);
   return c.json({ appointment: res.value });
 });
@@ -215,21 +215,6 @@ salonRoutes.get("/slots", async (c) => {
   const res = await store(c.env, c.get("user").tenantId).getFreeSlots(day, duration, staffId);
   if (!res.ok) return moduleError(c, res.code);
   return c.json({ slots: res.value });
-});
-
-// ---------- CHECKOUT / BEZAHLUNG ----------
-
-salonRoutes.post("/appointments/:id/checkout", async (c) => {
-  const id = c.req.param("id");
-  const res = await store(c.env, c.get("user").tenantId).getAppointment(id);
-  if (!res.ok || !res.value) return fail(c, "notFound", 404);
-  const app = res.value;
-
-  // Markiere als bezahlt und abgeschlossen
-  await store(c.env, c.get("user").tenantId).updateAppointmentStatus(id, "completed");
-  await store(c.env, c.get("user").tenantId).saveAppointment({ ...app, status: "completed", paid: true });
-
-  return c.json({ ok: true, appointmentId: id });
 });
 
 // ---------- EINSTELLUNGEN ----------

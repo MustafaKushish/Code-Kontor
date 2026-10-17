@@ -695,7 +695,7 @@ export const pl: Dict = {
     toPos: "Do kasy",
     noData: "Jeszcze nic",
     noGroup: "Bez grupy",
-    moduleGroups: { repair: "Naprawy", part: "Części zamienne", used: "Urządzenia używane", other: "Inne" },
+    moduleGroups: { appointment: "Wizyty", service: "Usługi", product: "Artykuły", order: "Zlecenia", menu: "Jedzenie i napoje", report: "Raporty pracy", repair: "Naprawy", part: "Części zamienne", used: "Urządzenia używane", other: "Inne" },
     chart: { hour: "Obrót według godziny", day: "Obrót dziennie", month: "Obrót miesięcznie" },
   },
   legal: {

@@ -71,6 +71,9 @@ workshopRoutes.use("*", async (c, next) => {
   await next();
 });
 
+/** Bezahlt wird nur über die Kasse (mit Beleg); Zahlungsfelder aus dem Browser zählen nicht. */
+const unpaid = ({ paymentStatus: _s, paymentMethod: _m, ...rest }: Record<string, unknown>) => rest;
+
 // ---------- STATS ----------
 workshopRoutes.get("/stats", async (c) => {
   const user = c.get("user");
@@ -100,7 +103,7 @@ workshopRoutes.post("/orders", async (c) => {
   if (!body.licensePlate || !body.customerName) {
     return fail(c, "checkFields", 400);
   }
-  const res = await store(c.env, user.tenantId).createOrder(body as any);
+  const res = await store(c.env, user.tenantId).createOrder(unpaid(body) as any);
   if (!res.ok) return moduleError(c, res.code);
   return c.json(res.value, 201);
 });
@@ -108,7 +111,7 @@ workshopRoutes.post("/orders", async (c) => {
 workshopRoutes.put("/orders/:id", async (c) => {
   const user = c.get("user");
   const body = await readBody(c);
-  const res = await store(c.env, user.tenantId).updateOrder(c.req.param("id"), body as any);
+  const res = await store(c.env, user.tenantId).updateOrder(c.req.param("id"), unpaid(body) as any);
   if (!res.ok) return moduleError(c, res.code);
   return c.json(res.value);
 });
@@ -118,15 +121,6 @@ workshopRoutes.post("/orders/:id/status", async (c) => {
   const body = await readBody(c);
   if (typeof body.status !== "string") return fail(c, "checkFields", 400);
   const res = await store(c.env, user.tenantId).updateOrderStatus(c.req.param("id"), body.status as any);
-  if (!res.ok) return moduleError(c, res.code);
-  return c.json(res.value);
-});
-
-workshopRoutes.post("/orders/:id/checkout", async (c) => {
-  const user = c.get("user");
-  const body = await readBody(c);
-  const method = (typeof body.paymentMethod === "string" ? body.paymentMethod : "bar") as any;
-  const res = await store(c.env, user.tenantId).checkoutOrder(c.req.param("id"), method);
   if (!res.ok) return moduleError(c, res.code);
   return c.json(res.value);
 });

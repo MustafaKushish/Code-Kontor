@@ -7,7 +7,6 @@ import {
   Clock,
   CheckCircle2,
   AlertCircle,
-  CreditCard,
   Banknote,
   Printer,
   X,
@@ -17,6 +16,7 @@ import {
 } from "lucide-react";
 import { api } from "../../api";
 import { Field } from "../../components";
+import { ModuleCheckout } from "../../pos/ModuleCheckout";
 import type {
   MenuItem,
   OrderItem,
@@ -166,22 +166,7 @@ export function TablesTab({ tables, menu, orders, isManager, onRefresh }: Tables
     }
   };
 
-  const handleTableCheckout = async (method: "bar" | "karte") => {
-    if (!activeOrder) return;
-    setIsBusy(true);
-    try {
-      await api(`/restaurant/orders/${activeOrder.id}/checkout`, {
-        method: "POST",
-        body: { paymentMethod: method },
-      });
-      setSelectedTable(null);
-      onRefresh();
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsBusy(false);
-    }
-  };
+  const [paying, setPaying] = useState<string | null>(null);
 
   const categories = Array.from(new Set(menu.map((m) => m.category)));
   const filteredMenu = menu.filter((item) => {
@@ -418,27 +403,29 @@ export function TablesTab({ tables, menu, orders, isManager, onRefresh }: Tables
                 </div>
 
                 <div className="restaurant-actions">
-                  <button
-                    onClick={() => handleTableCheckout("bar")}
-                    disabled={isBusy}
-                    className="button primary"
-                  >
+                  <button onClick={() => setPaying(activeOrder.id)} disabled={isBusy} className="button primary">
                     <Banknote size={18} />
-                    Bar kassieren
-                  </button>
-                  <button
-                    onClick={() => handleTableCheckout("karte")}
-                    disabled={isBusy}
-                    className="button primary"
-                  >
-                    <CreditCard size={18} />
-                    Karte zahlen
+                    Bezahlen
                   </button>
                 </div>
               </div>
             )}
           </div>
         </Dialog>
+      )}
+
+      {paying && (
+        <ModuleCheckout
+          source="restaurant"
+          kind="order"
+          refId={paying}
+          onClose={() => setPaying(null)}
+          onPaid={() => {
+            setPaying(null);
+            setSelectedTable(null);
+            onRefresh();
+          }}
+        />
       )}
 
       {isEditTableModalOpen && (

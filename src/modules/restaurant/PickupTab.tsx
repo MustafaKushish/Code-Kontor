@@ -12,7 +12,6 @@ import {
   AlertTriangle,
   Printer,
   X,
-  CreditCard,
   Banknote,
   Utensils,
   ChevronRight,
@@ -26,6 +25,7 @@ import type {
   RestaurantOrder,
 } from "../../../shared/restaurant";
 import { Dialog } from "../../pos/ui";
+import { ModuleCheckout } from "../../pos/ModuleCheckout";
 import { RestaurantPrint } from "./RestaurantPrint";
 import { currency as companyCurrency } from "../../money";
 
@@ -89,20 +89,7 @@ export function PickupTab({ orders, menu, tenantId, onRefresh }: PickupTabProps)
     }
   };
 
-  const handleCheckoutAndComplete = async (orderId: string, paymentMethod: "bar" | "karte") => {
-    setIsBusy(true);
-    try {
-      await api(`/restaurant/orders/${orderId}/checkout`, {
-        method: "POST",
-        body: { paymentMethod },
-      });
-      onRefresh();
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsBusy(false);
-    }
-  };
+  const [paying, setPaying] = useState<string | null>(null);
 
   const handleCreatePhoneOrder = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -305,25 +292,11 @@ export function PickupTab({ orders, menu, tenantId, onRefresh }: PickupTabProps)
                       </button>
                     )}
 
-                    {isReady && order.paymentStatus === "offen" && (
-                      <>
-                        <button
-                          onClick={() => handleCheckoutAndComplete(order.id, "bar")}
-                          disabled={isBusy}
-                          className="button primary small-button"
-                        >
-                          <Banknote size={16} />
-                          Bar
-                        </button>
-                        <button
-                          onClick={() => handleCheckoutAndComplete(order.id, "karte")}
-                          disabled={isBusy}
-                          className="button primary small-button"
-                        >
-                          <CreditCard size={16} />
-                          Karte
-                        </button>
-                      </>
+                    {order.paymentStatus === "offen" && (
+                      <button onClick={() => setPaying(order.id)} disabled={isBusy} className="button primary small-button">
+                        <Banknote size={16} />
+                        Bezahlen
+                      </button>
                     )}
 
                     {isReady && order.paymentStatus === "bezahlt" && (
@@ -433,6 +406,19 @@ export function PickupTab({ orders, menu, tenantId, onRefresh }: PickupTabProps)
             </div>
           </form>
         </Dialog>
+      )}
+
+      {paying && (
+        <ModuleCheckout
+          source="restaurant"
+          kind="order"
+          refId={paying}
+          onClose={() => setPaying(null)}
+          onPaid={() => {
+            setPaying(null);
+            onRefresh();
+          }}
+        />
       )}
 
       {activePrintOrder && (

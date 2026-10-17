@@ -102,9 +102,12 @@ export function Register({ isManager, kiosk }: { isManager: boolean; kiosk?: boo
   useEffect(() => {
     const orderId = new URLSearchParams(location.search).get("auftrag");
     if (orderId) history.replaceState(null, "", location.pathname);
-    loadCatalog().then((articles) => {
+    loadCatalog().then(async (articles) => {
       if (!orderId) return;
-      const article = articles.find((a) => a.kind === "order" && a.refId === orderId);
+      // Vorgang aus irgendeinem System (Reparatur, Termin, Werkstatt, Bestellung, Rapport); sonst per Scan suchen
+      const article =
+        articles.find((a) => a.single && a.refId === orderId) ??
+        (await api<{ articles: PosArticle[] }>(`/pos/scan?code=${encodeURIComponent(orderId)}`).then((d) => d.articles.find((a) => a.single), () => undefined));
       if (article) add(article);
       else setError(p("moduleErrors.statusNotAllowed"));
     });

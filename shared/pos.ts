@@ -9,7 +9,23 @@ export const PAY_METHODS = ["cash", "card", "transfer", "voucher"] as const;
 export type PayMethod = (typeof PAY_METHODS)[number];
 
 /** Herkunft eines Postens: „pos“ = direkt in der Kasse erfasst, sonst die ID des Moduls. */
-export type PosSource = "pos" | "repairs";
+export type PosSource = "pos" | "repairs" | "salon" | "retail" | "workshop" | "restaurant" | "craft";
+
+/** System im App-Katalog, das hinter einer Herkunft steht. */
+export const SOURCE_APP: Record<Exclude<PosSource, "pos">, string> = {
+  repairs: "handy-it",
+  salon: "friseur",
+  retail: "einzelhandel",
+  workshop: "werkstatt",
+  restaurant: "restaurant",
+  craft: "handwerk",
+};
+
+/** Herkünfte, deren Systeme installiert sind. */
+export const installedSources = (installedApps: string[]) =>
+  (Object.keys(SOURCE_APP) as Exclude<PosSource, "pos">[]).filter((s) => installedApps.includes(SOURCE_APP[s]));
+
+const isSource = (v: unknown): v is PosSource => v === "pos" || (typeof v === "string" && v in SOURCE_APP);
 
 export interface PosLine {
   source: PosSource;
@@ -317,7 +333,7 @@ export function vatRateOf(value: unknown, fallback = 19): number {
 
 export function sanitizeLine(input: unknown, fallbackVat = 19): PosLine | null {
   const i = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
-  const source: PosSource = i.source === "repairs" ? "repairs" : "pos";
+  const source: PosSource = isSource(i.source) ? i.source : "pos";
   const name = str(i.name, 160);
   const kind = str(i.kind, 30) || "item";
   const refId = typeof i.refId === "string" && i.refId ? i.refId.slice(0, 64) : null;

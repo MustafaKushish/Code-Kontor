@@ -6,7 +6,7 @@ import { useI18n } from "../i18n";
 import { askAssistant, setAssistantContext, type AssistantTips } from "../layout/Assistant";
 import { formatMoney } from "../money";
 import { findApp } from "../../shared/apps";
-import { PAY_METHODS, POS_APP_ID, type PayMethod } from "../../shared/pos";
+import { PAY_METHODS, POS_APP_ID, SOURCE_APP, type PayMethod } from "../../shared/pos";
 import { REPAIR_APP_ID } from "../../shared/repairs";
 import { adviceFor, nextMonthOf, type Tip } from "../../shared/advice";
 import { INSIGHT_PERIODS, periodRange, type InsightPeriod, type Insights } from "../../shared/insights";
@@ -276,7 +276,7 @@ export function InsightsPage({ me }: { me: Me }) {
 }
 
 /** App des Katalogs zu einer Herkunft an der Kasse. */
-const appOf = (source: string) => (source === "repairs" ? REPAIR_APP_ID : source);
+const appOf = (source: string) => SOURCE_APP[source as keyof typeof SOURCE_APP] ?? source;
 
 function Trend({ now, before, money }: { now: number; before: number; money: (c: number) => string }) {
   const { t, lang } = useI18n();

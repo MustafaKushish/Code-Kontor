@@ -1,4 +1,6 @@
 import { berlinYear, nextNumber } from "../numbers";
+import type { PosArticle, PosLine } from "../../shared/pos";
+import type { PosModule } from "../pos/store";
 import type {
   CraftMeasurement,
   CraftProject,
@@ -652,18 +654,64 @@ export class CraftStore {
     return this.getReport(id);
   }
 
-  checkoutReport(id: string, paymentMethod: "bar" | "karte" | "rechnung" | "pos"): CraftReport {
-    const report = this.getReport(id);
+  // ---------- KASSE: Rapportzettel werden in der Kasse der Plattform abgerechnet ----------
 
-    this.sql.exec(
-      `UPDATE craft_reports
-       SET status = 'abgerechnet', payment_method = ?, payment_status = 'bezahlt'
-       WHERE id = ?`,
-      paymentMethod,
-      id
-    );
-
-    return this.getReport(id);
+  posModule(): PosModule {
+    const payable = (r: CraftReport) => r.paymentStatus !== "bezahlt" && r.status !== "abgerechnet";
+    const gross = (net: number, rate: number) => Math.round(net * 100 * (1 + rate / 100));
+    const article = (r: CraftReport): PosArticle => ({
+      source: "craft", kind: "report", refId: r.id, name: `${r.reportNumber} · ${r.projectTitle}`, detail: r.customerName,
+      priceCents: r.items.reduce((sum, i) => sum + Math.round(i.quantity * gross(i.unitPriceNet, i.taxRate ?? 19)), 0),
+      vatRate: 0, single: true, group: "@craft.report", code: r.reportNumber,
+    });
+    const open = () => this.listReports().filter(payable);
+    const report = (id: string | null) => {
+      const rows = id ? this.sql.exec<any>("SELECT * FROM craft_reports WHERE id = ?", id).toArray() : [];
+      return rows.length ? this.mapReport(rows[0]) : null;
+    };
+    return {
+      articles: (query) => {
+        const q = query.trim().toLowerCase();
+        return open().filter((r) => [r.reportNumber, r.projectTitle, r.customerName].some((v) => v.toLowerCase().includes(q))).slice(0, 30).map(article);
+      },
+      catalog: () => open().map(article),
+      scan: (code) => {
+        const r = report(code) ?? this.listReports().find((x) => x.reportNumber === code.toUpperCase()) ?? null;
+        return r && payable(r) ? [article(r)] : [];
+      },
+      prepare: (line) => {
+        const r = report(line.refId);
+        if (!r) throw new CraftError("notFound");
+        if (!payable(r)) throw new CraftError("notPayable");
+        const project = this.sql.exec<any>("SELECT customer_phone, customer_email FROM craft_projects WHERE id = ?", r.projectId).toArray()[0];
+        return {
+          lines: r.items.map((i): PosLine => ({
+            source: "craft", kind: `report:${i.type}`, refId: r.id, name: i.name, qty: i.quantity,
+            unitCents: gross(i.unitPriceNet, i.taxRate ?? 19), vatRate: i.taxRate ?? 19,
+          })),
+          refs: [{ source: "craft", kind: "report", refId: r.id, label: `${r.reportNumber} · ${r.projectTitle}` }],
+          customer: { id: null, name: r.customerName, address: r.siteAddress, phone: project?.customer_phone ?? "", email: project?.customer_email ?? "" },
+        };
+      },
+      booked: (_receipt, _lines, refs) => {
+        for (const ref of refs) {
+          const r = report(ref.refId);
+          if (!r || !payable(r)) throw new CraftError("notPayable");
+          this.sql.exec("UPDATE craft_reports SET status = 'abgerechnet', payment_method = 'pos', payment_status = 'bezahlt' WHERE id = ?", r.id);
+        }
+      },
+      canceled: (original) => {
+        for (const ref of original.refs) {
+          if (ref.source !== "craft") continue;
+          const r = report(ref.refId);
+          if (!r || r.paymentStatus !== "bezahlt") continue;
+          this.sql.exec(
+            "UPDATE craft_reports SET status = ?, payment_method = NULL, payment_status = 'offen' WHERE id = ?",
+            r.signedAt ? "unterschrieben" : "entwurf", r.id,
+          );
+        }
+      },
+    };
   }
 
   deleteReport(id: string): { success: boolean } {
