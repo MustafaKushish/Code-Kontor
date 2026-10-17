@@ -12,7 +12,14 @@ import {
   Shield,
   FileText,
 } from "lucide-react";
-import type { WorkshopOrder, WorkshopOrderStatus } from "../../../shared/workshop";
+import type { OrderPosition, WorkshopOrder, WorkshopOrderStatus } from "../../../shared/workshop";
+import { formatMoney } from "../../money";
+
+/** Was die Statusseite vom Server bekommt (ohne Kontaktdaten und Zahlungsdaten). */
+type PublicOrder = Pick<WorkshopOrder, "orderNumber" | "licensePlate" | "vehicleInfo" | "mileage" | "customerName" | "status" | "issueDescription" | "diagnosticNotes" | "estimateStatus" | "totalNet" | "totalTax" | "totalGross" | "createdAt" | "updatedAt"> & {
+  positions: Pick<OrderPosition, "id" | "name" | "quantity" | "unit" | "unitPriceNet" | "taxRate" | "approvedByCustomer">[];
+  paid: boolean;
+};
 import "./workshop.css";
 
 interface StatusPageProps {
@@ -30,13 +37,15 @@ const PHASES: { id: WorkshopOrderStatus; label: string; desc: string }[] = [
 ];
 
 export default function WorkshopStatusPage({ tenantId, token }: StatusPageProps) {
-  const [order, setOrder] = useState<WorkshopOrder | null>(null);
+  const [order, setOrder] = useState<PublicOrder | null>(null);
+  const [currency, setCurrency] = useState("EUR");
+  const [approveError, setApproveError] = useState("");
   const [company, setCompany] = useState<{
     name: string;
     phone?: string;
     email?: string;
     street?: string;
-    zip?: string;
+    postalCode?: string;
     city?: string;
   } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -44,8 +53,7 @@ export default function WorkshopStatusPage({ tenantId, token }: StatusPageProps)
   const [approving, setApproving] = useState(false);
   const [approvedSuccess, setApprovedSuccess] = useState(false);
 
-  const fmtEuro = (amount: number) =>
-    new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(amount);
+  const fmtEuro = (amount: number) => formatMoney(Math.round(amount * 100), "de-DE", currency);
 
   useEffect(() => {
     async function load() {
@@ -55,6 +63,7 @@ export default function WorkshopStatusPage({ tenantId, token }: StatusPageProps)
         const data = (await res.json()) as any;
         setOrder(data.order);
         setCompany(data.company);
+        if (data.currency) setCurrency(data.currency);
       } catch (err: any) {
         setErrorMsg(err.message || "Auftragsdaten konnten nicht geladen werden.");
       } finally {
@@ -66,18 +75,19 @@ export default function WorkshopStatusPage({ tenantId, token }: StatusPageProps)
 
   const handleApproveEstimate = async () => {
     setApproving(true);
+    setApproveError("");
     try {
       const res = await fetch(`/api/workshop/public/${tenantId}/approve-estimate/${token}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
       });
-      if (!res.ok) throw new Error("Freigabe fehlgeschlagen");
+      if (!res.ok) throw new Error("Die Freigabe ist nicht mehr möglich. Bitte rufe die Werkstatt an.");
       const data = (await res.json()) as any;
       setOrder(data.order);
       setApprovedSuccess(true);
     } catch (err: any) {
-      setErrorMsg(err.message || "Fehler bei der KVA-Freigabe.");
+      setApproveError(err.message || "Fehler bei der KVA-Freigabe.");
     } finally {
       setApproving(false);
     }
@@ -218,12 +228,14 @@ export default function WorkshopStatusPage({ tenantId, token }: StatusPageProps)
             </div>
 
             <div className="workshop-total-line">
-              <small className="muted">Inklusive 19% gesetzlicher Mehrwertsteuer</small>
+              <small className="muted">Inklusive gesetzlicher Mehrwertsteuer</small>
               <strong className="workshop-num">Gesamtkosten: {fmtEuro(order.totalGross)}</strong>
             </div>
 
             {/* Freigabebutton */}
-            {order.estimateStatus !== "approved" && (
+            {approveError && <p className="error" role="alert">{approveError}</p>}
+
+            {order.estimateStatus !== "approved" && order.estimateStatus !== "rejected" && !order.paid && order.status !== "abgerechnet" && (
               <div className="notice stack-sm">
                 <strong className="workshop-icon-text">
                   <AlertTriangle size={17} />
@@ -257,10 +269,10 @@ export default function WorkshopStatusPage({ tenantId, token }: StatusPageProps)
             )}
             <p className="muted workshop-small">
               <strong>{company.name}</strong>
-              {company.street && company.zip && company.city && (
+              {company.street && company.postalCode && company.city && (
                 <>
                   {" · "}
-                  {company.street}, {company.zip} {company.city}
+                  {company.street}, {company.postalCode} {company.city}
                 </>
               )}
             </p>

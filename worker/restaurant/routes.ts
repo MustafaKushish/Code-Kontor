@@ -3,6 +3,7 @@ import type { Env } from "../index";
 import { tenantStub, type ModuleResult } from "../tenant";
 import type { RestaurantStore } from "./store";
 import { fail } from "../errors";
+import { publicCompany, publicTenant } from "../public";
 
 interface User {
   id: string;
@@ -43,23 +44,6 @@ async function readBody(c: Ctx): Promise<Record<string, unknown>> {
 }
 
 export const restaurantRoutes = new Hono<RestaurantEnv>();
-
-// Öffentliche Abholanzeige (Kunden-Aufruf-Monitor) ohne Login
-restaurantRoutes.get("/public/:tenantId/pickup-queue", async (c) => {
-  const tenantId = c.req.param("tenantId");
-  const res = await store(c.env, tenantId).getPickupQueue();
-  if (!res.ok) return moduleError(c, res.code);
-
-  const company = await tenantStub(c.env, tenantId).getCompany();
-
-  return c.json({
-    queue: res.value,
-    company: company || {
-      name: "Restaurant & Café",
-      phone: "+49 40 123456",
-    },
-  });
-});
 
 // App-Buchung prüfen für interne Routen
 restaurantRoutes.use("*", async (c, next) => {
@@ -200,4 +184,24 @@ restaurantRoutes.get("/pickup-queue", async (c) => {
   const res = await store(c.env, user.tenantId).getPickupQueue();
   if (!res.ok) return moduleError(c, res.code);
   return c.json(res.value);
+});
+
+// ---------- Abholanzeige für Gäste (ohne Anmeldung) ----------
+// Wird in worker/index.ts vor der Anmeldung eingehängt. Nur Abholnummer und Vorname,
+// keine Tischbestellungen, keine Telefonnummern, keine Beträge.
+
+export const restaurantPublicRoutes = new Hono<{ Bindings: Env }>();
+
+restaurantPublicRoutes.get("/:tenantId/pickup-queue", async (c) => {
+  const tenantId = c.req.param("tenantId");
+  if (!(await publicTenant(c.env, tenantId, "restaurant"))) return fail(c, "linkInvalid", 404);
+  const res = await store(c.env, tenantId).getPickupQueue();
+  if (!res.ok) return fail(c, "linkInvalid", 404);
+  const view = (list: typeof res.value.ready) =>
+    list
+      .filter((o) => o.type !== "tisch")
+      .map((o) => ({ id: o.id, number: o.pickupNumber ? String(o.pickupNumber) : o.orderNumber.replace(/^BON-/, ""), name: (o.customerName ?? "").split(" ")[0] ?? "" }));
+  const { company } = await publicCompany(c.env, tenantId);
+  c.header("Cache-Control", "no-store");
+  return c.json({ company: { name: company.name }, queue: { preparing: view(res.value.preparing), ready: view(res.value.ready) } });
 });

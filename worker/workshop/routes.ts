@@ -3,6 +3,8 @@ import type { Env } from "../index";
 import { tenantStub, type ModuleResult } from "../tenant";
 import type { WorkshopStore } from "./store";
 import { fail } from "../errors";
+import { publicCompany, publicTenant } from "../public";
+import type { WorkshopOrder } from "../../shared/workshop";
 
 interface User {
   id: string;
@@ -43,42 +45,6 @@ async function readBody(c: Ctx): Promise<Record<string, unknown>> {
 }
 
 export const workshopRoutes = new Hono<WorkshopEnv>();
-
-// Öffentliche Kunden-Statusabfrage ohne Login
-workshopRoutes.get("/public/:tenantId/status/:token", async (c) => {
-  const tenantId = c.req.param("tenantId");
-  const token = c.req.param("token");
-
-  const res = await store(c.env, tenantId).getOrderByStatusToken(token);
-  if (!res.ok) return moduleError(c, res.code);
-
-  const company = await tenantStub(c.env, tenantId).getCompany();
-
-  return c.json({
-    order: res.value,
-    company: company || {
-      name: "Kfz-Meisterbetrieb",
-      phone: "+49 40 12345678",
-      email: "service@werkstatt.de",
-      street: "Werkstattstraße 1",
-      postalCode: "20095",
-      city: "Hamburg",
-    },
-  });
-});
-
-// Öffentliche KVA-Online-Freigabe durch Kunden
-workshopRoutes.post("/public/:tenantId/approve-estimate/:token", async (c) => {
-  const tenantId = c.req.param("tenantId");
-  const token = c.req.param("token");
-  const body = await readBody(c);
-  const positionIds = Array.isArray(body.approvedPositionIds) ? (body.approvedPositionIds as string[]) : undefined;
-
-  const res = await store(c.env, tenantId).approveEstimateByToken(token, positionIds);
-  if (!res.ok) return moduleError(c, res.code);
-
-  return c.json({ ok: true, order: res.value });
-});
 
 // App-Buchung prüfen für interne Routen
 workshopRoutes.use("*", async (c, next) => {
@@ -249,4 +215,43 @@ workshopRoutes.delete("/tires/:id", async (c) => {
   const res = await store(c.env, user.tenantId).deleteTireStorage(c.req.param("id"));
   if (!res.ok) return moduleError(c, res.code);
   return c.json(res.value);
+});
+
+// ---------- Statusseite und Freigabe des Kostenvoranschlags für Kunden (ohne Anmeldung) ----------
+// Wird in worker/index.ts vor der Anmeldung eingehängt.
+
+export const workshopPublicRoutes = new Hono<{ Bindings: Env }>();
+
+const TOKEN = /^[a-z0-9-]{8,64}$/;
+
+/** Nur was der Kunde sehen soll: keine Telefonnummer, keine E-Mail, keine Zahlungsdaten. */
+const publicOrder = (o: WorkshopOrder) => ({
+  orderNumber: o.orderNumber, licensePlate: o.licensePlate, vehicleInfo: o.vehicleInfo, mileage: o.mileage,
+  customerName: o.customerName.split(" ")[0] ?? "", status: o.status, issueDescription: o.issueDescription, diagnosticNotes: o.diagnosticNotes ?? "",
+  positions: o.positions.map(({ id, name, quantity, unit, unitPriceNet, taxRate, approvedByCustomer }) => ({ id, name, quantity, unit, unitPriceNet, taxRate, approvedByCustomer })),
+  estimateStatus: o.estimateStatus, paid: o.paymentStatus === "bezahlt",
+  totalNet: o.totalNet, totalTax: o.totalTax, totalGross: o.totalGross, createdAt: o.createdAt, updatedAt: o.updatedAt,
+});
+
+async function orderFor(env: Env, tenantId: string, token: string) {
+  if (!TOKEN.test(token) || !(await publicTenant(env, tenantId, "werkstatt"))) return null;
+  const res = await store(env, tenantId).getOrderByStatusToken(token);
+  return res.ok ? res.value : null;
+}
+
+workshopPublicRoutes.get("/:tenantId/status/:token", async (c) => {
+  const tenantId = c.req.param("tenantId");
+  const order = await orderFor(c.env, tenantId, c.req.param("token"));
+  if (!order) return fail(c, "linkInvalid", 404);
+  c.header("Cache-Control", "no-store");
+  return c.json({ ...(await publicCompany(c.env, tenantId)), order: publicOrder(order) });
+});
+
+workshopPublicRoutes.post("/:tenantId/approve-estimate/:token", async (c) => {
+  const tenantId = c.req.param("tenantId");
+  const token = c.req.param("token");
+  if (!(await orderFor(c.env, tenantId, token))) return fail(c, "linkInvalid", 404);
+  const res = await store(c.env, tenantId).approveEstimateByToken(token);
+  if (!res.ok) return c.json({ code: `workshop.${res.code}`, error: res.code }, 409);
+  return c.json({ ok: true, order: publicOrder(res.value) });
 });

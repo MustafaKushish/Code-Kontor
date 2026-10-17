@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Utensils, Clock, CheckCircle2, Maximize, Minimize } from "lucide-react";
-import type { RestaurantOrder } from "../../../shared/restaurant";
+
+/** Was die Anzeige vom Server bekommt: nur Nummer und Vorname. */
+interface Called { id: string; number: string; name: string }
 import "./restaurant.css";
 
 interface PickupDisplayProps {
@@ -8,7 +10,7 @@ interface PickupDisplayProps {
 }
 
 export default function PickupDisplayPage({ tenantId }: PickupDisplayProps) {
-  const [queue, setQueue] = useState<{ preparing: RestaurantOrder[]; ready: RestaurantOrder[] }>({
+  const [queue, setQueue] = useState<{ preparing: Called[]; ready: Called[] }>({
     preparing: [],
     ready: [],
   });
@@ -87,8 +89,8 @@ export default function PickupDisplayPage({ tenantId }: PickupDisplayProps) {
             ) : (
               queue.preparing.map((order) => (
                 <div key={order.id} className="restaurant-display-number">
-                  <strong>#{order.pickupNumber || order.orderNumber.replace("BON-", "")}</strong>
-                  {order.customerName && <small>{order.customerName}</small>}
+                  <strong>#{order.number}</strong>
+                  {order.name && <small>{order.name}</small>}
                 </div>
               ))
             )}
@@ -110,8 +112,8 @@ export default function PickupDisplayPage({ tenantId }: PickupDisplayProps) {
             ) : (
               queue.ready.map((order) => (
                 <div key={order.id} className="restaurant-display-number">
-                  <strong>#{order.pickupNumber || order.orderNumber.replace("BON-", "")}</strong>
-                  {order.customerName && <small>{order.customerName}</small>}
+                  <strong>#{order.number}</strong>
+                  {order.name && <small>{order.name}</small>}
                 </div>
               ))
             )}

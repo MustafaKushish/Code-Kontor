@@ -1,26 +1,39 @@
 import { useEffect, useState } from "react";
 import { Scissors, Clock, CheckCircle2, ArrowRight, ArrowLeft, Sparkles } from "lucide-react";
-import { api } from "../../api";
+import { api, ApiError } from "../../api";
 import { Field } from "../../components";
 import type { SalonService, SalonSettings, SalonStaff } from "../../../shared/salon";
+
+type PublicService = Pick<SalonService, "id" | "name" | "category" | "description" | "durationMinutes" | "priceCents">;
+type PublicStaff = Pick<SalonStaff, "id" | "name" | "title" | "colorHex">;
+interface Info {
+  company: { name: string; phone: string };
+  currency: string;
+  today: string;
+  lastDay: string;
+  settings: Pick<SalonSettings, "salonName" | "openDays" | "openTime" | "closeTime" | "bookingAdvanceDays" | "cancellationHours" | "noticeText">;
+  services: PublicService[];
+  staff: PublicStaff[];
+}
 import { useSalonI18n } from "./i18n";
 import "./salon.css";
 
 export default function PublicBookingPage({ tenantId }: { tenantId: string }) {
-  const { s, euro, day: formatDay } = useSalonI18n();
-  const [settings, setSettings] = useState<SalonSettings | null>(null);
-  const [services, setServices] = useState<SalonService[]>([]);
-  const [staff, setStaff] = useState<SalonStaff[]>([]);
+  const { euro: money, day: formatDay, errorText } = useSalonI18n();
+  const [info, setInfo] = useState<Info | null>(null);
+  const [invalid, setInvalid] = useState(false);
   const [loading, setLoading] = useState(true);
+  const settings = info?.settings;
+  const services = info?.services ?? [];
+  const staff = info?.staff ?? [];
+  const euro = (cents: number) => money(cents, info?.currency);
 
   // Buchungsschritte: 1 = Services, 2 = Stylist, 3 = Datum & Slot, 4 = Kontaktdaten, 5 = Bestätigt
   const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1);
 
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
   const [selectedStaffId, setSelectedStaffId] = useState<string>("");
-  const [selectedDate, setSelectedDate] = useState<string>(
-    new Date(Date.now() + 86_400_000).toISOString().slice(0, 10)
-  );
+  const [selectedDate, setSelectedDate] = useState<string>("");
   const [freeSlots, setFreeSlots] = useState<{ time: string; staffId: string; staffName: string }[]>([]);
   const [selectedSlot, setSelectedSlot] = useState<{ time: string; staffId: string; staffName: string } | null>(null);
 
@@ -31,19 +44,15 @@ export default function PublicBookingPage({ tenantId }: { tenantId: string }) {
 
   const [bookingLoading, setBookingLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [website, setWebsite] = useState("");
 
   useEffect(() => {
-    api<{ settings: SalonSettings; services: SalonService[]; staff: SalonStaff[] }>(
-      `/salon/public/${tenantId}/info`
-    )
+    api<Info>(`/salon/public/${tenantId}/info`)
       .then((d) => {
-        setSettings(d.settings);
-        setServices(d.services);
-        setStaff(d.staff);
+        setInfo(d);
+        setSelectedDate(d.today);
       })
-      .catch((err) => {
-        console.error(err);
-      })
+      .catch(() => setInvalid(true))
       .finally(() => setLoading(false));
   }, [tenantId]);
 
@@ -61,7 +70,7 @@ export default function PublicBookingPage({ tenantId }: { tenantId: string }) {
         .then((res) => setFreeSlots(res.slots))
         .catch(() => setFreeSlots([]));
     }
-  }, [step, selectedDate, selectedStaffId, totalDuration]);
+  }, [step, selectedDate, selectedStaffId, totalDuration, tenantId]);
 
   const handleBook = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,19 +87,21 @@ export default function PublicBookingPage({ tenantId }: { tenantId: string }) {
           clientPhone: clientPhone.trim(),
           clientEmail: clientEmail.trim(),
           staffId: selectedSlot.staffId,
-          staffName: selectedSlot.staffName,
           serviceIds: chosenServices.map((s) => s.id),
-          serviceNames: chosenServices.map((s) => s.name),
           day: selectedDate,
           startTime: selectedSlot.time,
-          durationMinutes: totalDuration,
-          totalCents,
           notes,
+          website,
         },
       });
       setStep(5);
-    } catch (err: any) {
-      setErrorMsg(err?.message || "Fehler beim Buchen des Termins");
+    } catch (err) {
+      // Zeit inzwischen vergeben: zurück zur Auswahl mit frischen Zeiten
+      if (err instanceof ApiError && err.code === "salon.slotTaken") {
+        setSelectedSlot(null);
+        setStep(3);
+      }
+      setErrorMsg(errorText(err));
     } finally {
       setBookingLoading(false);
     }
@@ -104,12 +115,20 @@ export default function PublicBookingPage({ tenantId }: { tenantId: string }) {
     );
   }
 
+  if (invalid || !info) {
+    return (
+      <div className="splash">
+        <p className="muted">Die Online-Terminbuchung ist zurzeit nicht verfügbar. Bitte rufen Sie uns an.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="salon-public">
       {/* Salon Kopfzeile */}
       <header className="salon-public-brand">
         <Scissors size={22} />
-        <strong>{settings?.salonName || "Salon & Beauty Studio"}</strong>
+        <strong>{info.company.name || settings?.salonName}</strong>
       </header>
 
       <main className="stack">
@@ -233,7 +252,8 @@ export default function PublicBookingPage({ tenantId }: { tenantId: string }) {
             <Field label="Tag auswählen">
               <input
                 type="date"
-                min={new Date().toISOString().slice(0, 10)}
+                min={info.today}
+                max={info.lastDay}
                 value={selectedDate}
                 onChange={(e) => {
                   setSelectedDate(e.target.value);
@@ -243,6 +263,8 @@ export default function PublicBookingPage({ tenantId }: { tenantId: string }) {
             </Field>
 
             <small className="muted">Freie Termine am {formatDay(selectedDate)}:</small>
+
+            {errorMsg && <p className="error" role="alert">{errorMsg}</p>}
 
             {freeSlots.length === 0 ? (
               <p className="notice">
@@ -300,6 +322,8 @@ export default function PublicBookingPage({ tenantId }: { tenantId: string }) {
             {errorMsg && <p className="error" role="alert">{errorMsg}</p>}
 
             <form onSubmit={handleBook} className="stack">
+              {/* Unsichtbar für Menschen, nur Bots füllen es aus */}
+              <input type="text" name="website" value={website} onChange={(e) => setWebsite(e.target.value)} tabIndex={-1} autoComplete="off" aria-hidden style={{ position: "absolute", left: "-9999px" }} />
               <div className="grid form-grid">
                 <Field label="Ihr vollständiger Name" required wide>
                   <input type="text" required placeholder="Vor- und Nachname" value={clientName} onChange={(e) => setClientName(e.target.value)} autoComplete="name" />
@@ -352,7 +376,7 @@ export default function PublicBookingPage({ tenantId }: { tenantId: string }) {
               </dl>
             </div>
 
-            <p className="small muted">Wir freuen uns auf Ihren Besuch im {settings?.salonName || "Salon"}!</p>
+            <p className="small muted">Wir freuen uns auf Ihren Besuch bei {info.company.name || settings?.salonName}!</p>
           </section>
         )}
       </main>

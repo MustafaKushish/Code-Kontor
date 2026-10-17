@@ -1,4 +1,6 @@
 import { useI18n } from "../../i18n";
+import { formatMoney } from "../../money";
+import { ApiError } from "../../api";
 
 const DE: Record<string, string> = {
   "tabs.calendar": "Kalender",
@@ -55,6 +57,11 @@ const DE: Record<string, string> = {
   "settings.publicLink": "Ihr Buchungs-Link für Kunden",
   "settings.hours": "Salon-Öffnungszeiten",
   "settings.saveSuccess": "Einstellungen erfolgreich gespeichert",
+
+  "errors.slotTaken": "Diese Zeit ist gerade vergeben worden. Bitte eine andere Zeit wählen.",
+  "errors.bookingDisabled": "Die Online-Terminbuchung ist zurzeit ausgeschaltet.",
+  "errors.serviceNotFound": "Diese Dienstleistung gibt es nicht mehr. Bitte die Seite neu laden.",
+  "errors.dayNotAllowed": "An diesem Tag kann nicht online gebucht werden.",
 };
 
 const EN: Record<string, string> = {
@@ -112,25 +119,27 @@ const EN: Record<string, string> = {
   "settings.publicLink": "Your Customer Booking Link",
   "settings.hours": "Salon Opening Hours",
   "settings.saveSuccess": "Settings saved successfully",
+
+  "errors.slotTaken": "This time was just taken. Please choose another time.",
+  "errors.bookingDisabled": "Online booking is currently switched off.",
+  "errors.serviceNotFound": "This service no longer exists. Please reload the page.",
+  "errors.dayNotAllowed": "Online booking is not possible on this day.",
 };
 
 export function useSalonI18n() {
-  const { lang, appText } = useI18n();
+  const { lang, appText, errorText: coreError } = useI18n();
   const dict = lang === "en" ? EN : DE;
 
   const s = (key: string): string => dict[key] ?? key;
 
-  const euro = (cents: number): string =>
-    new Intl.NumberFormat(lang === "en" ? "en-US" : "de-DE", {
-      style: "currency",
-      currency: "EUR",
-    }).format(cents / 100);
+  // Währung der Firma; die öffentliche Buchungsseite gibt sie mit, weil dort niemand angemeldet ist
+  const euro = (cents: number, code?: string): string => formatMoney(cents, lang, code);
 
   const day = (isoDate: string): string => {
     if (!isoDate) return "";
     try {
       const d = new Date(isoDate.length === 10 ? isoDate + "T12:00:00" : isoDate);
-      return new Intl.DateTimeFormat(lang === "en" ? "en-US" : "de-DE", {
+      return new Intl.DateTimeFormat(lang, {
         weekday: "short",
         day: "2-digit",
         month: "2-digit",
@@ -143,5 +152,10 @@ export function useSalonI18n() {
 
   const time = (timeStr: string): string => timeStr || "";
 
-  return { s, euro, day, time, lang, appText };
+  const errorText = (error: unknown): string => {
+    if (error instanceof ApiError && error.code?.startsWith("salon.") && dict[`errors.${error.code.slice(6)}`]) return dict[`errors.${error.code.slice(6)}`]!;
+    return coreError(error);
+  };
+
+  return { s, euro, day, time, lang, appText, errorText };
 }

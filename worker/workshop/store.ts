@@ -620,7 +620,7 @@ export class WorkshopStore {
         updated_at: string;
         completed_at: string | null;
       }>("SELECT * FROM workshop_orders WHERE id = ?", id)
-      .one();
+      .toArray()[0];
 
     if (!r) throw new WorkshopError("orderNotFound");
     return this.mapOrder(r);
@@ -657,7 +657,7 @@ export class WorkshopStore {
         updated_at: string;
         completed_at: string | null;
       }>("SELECT * FROM workshop_orders WHERE status_token = ?", token)
-      .one();
+      .toArray()[0];
 
     if (!r) throw new WorkshopError("orderNotFound");
     return this.mapOrder(r);
@@ -723,7 +723,8 @@ export class WorkshopStore {
       const orderNum = `WO-${new Date().getFullYear()}-${String(count + 43).padStart(4, "0")}`;
 
       const id = crypto.randomUUID();
-      const statusToken = `kfz-${cleanPlate.toLowerCase().replace(/[^a-z0-9]/g, "")}-${crypto.randomUUID().slice(0, 8)}`;
+      // Nicht erratbar: kein Kennzeichen im Link, 32 Zeichen Zufall
+      const statusToken = crypto.randomUUID().replace(/-/g, "");
 
       const positions = data.positions ?? [];
       const totalNet = positions.reduce((s, p) => s + p.quantity * p.unitPriceNet, 0);
@@ -792,14 +793,15 @@ export class WorkshopStore {
          WHERE id = ?`,
         updated.status,
         updated.liftBay,
-        updated.mechanicName,
+        updated.mechanicName ?? "",
         updated.issueDescription,
-        updated.diagnosticNotes,
+        updated.diagnosticNotes ?? "",
         JSON.stringify(updated.positions),
         JSON.stringify(updated.checklist || []),
         updated.estimateStatus,
         updated.totalGross,
-        updated.paymentMethod,
+        // Offene Aufträge haben keine Zahlart; undefined nimmt SQLite nicht an
+        updated.paymentMethod ?? null,
         updated.paymentStatus,
         updated.totalNet,
         updated.totalTax,
@@ -822,6 +824,9 @@ export class WorkshopStore {
   approveEstimateByToken(token: string, approvedPositionIds?: string[]): WorkshopOrder {
     return this.tx(() => {
       const order = this.getOrderByStatusToken(token);
+      // Bezahlte oder schon entschiedene Aufträge ändert der Kunde nicht mehr
+      if (order.status === "abgerechnet" || order.paymentStatus === "bezahlt") throw new WorkshopError("orderClosed");
+      if (order.estimateStatus === "approved" || order.estimateStatus === "rejected") throw new WorkshopError("estimateDecided");
       let positions = order.positions;
 
       if (approvedPositionIds && approvedPositionIds.length > 0) {
